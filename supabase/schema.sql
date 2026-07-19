@@ -57,13 +57,19 @@ create table if not exists public.divorce_details (
 alter table public.divorce_details enable row level security;
 
 -- ── Starter content (matches the approved mockup) ─────────────────────────────
-insert into public.debts (name, balance, monthly, paid_pct, apr, min_payment, sort) values
+-- Each block only fills a table if it's still empty, so this whole file is safe
+-- to paste and run again anytime without creating duplicates.
+insert into public.debts (name, balance, monthly, paid_pct, apr, min_payment, sort)
+select * from (values
   ('Credit card', 5800, 150, 38, 22.9, 150, 1),
   ('Car loan', 6500, 320, 55, 7.5, 320, 2),
-  ('Loan from friend', 2000, 100, 20, 0, 100, 3);
+  ('Loan from friend', 2000, 100, 20, 0, 100, 3)
+) as v(name, balance, monthly, paid_pct, apr, min_payment, sort)
+where not exists (select 1 from public.debts);
 
 -- Preloaded bills Jamie can edit, delete, or add to.
-insert into public.bills (name, amount, due_day, sort) values
+insert into public.bills (name, amount, due_day, sort)
+select * from (values
   ('Rent', 1200, 1, 1),
   ('Car payment', 320, 5, 2),
   ('Car insurance', 140, 10, 3),
@@ -71,15 +77,18 @@ insert into public.bills (name, amount, due_day, sort) values
   ('Internet', 60, 15, 5),
   ('Utilities', 180, 18, 6),
   ('Groceries', 400, 0, 7),
-  ('Subscriptions', 45, 20, 8);
+  ('Subscriptions', 45, 20, 8)
+) as v(name, amount, due_day, sort)
+where not exists (select 1 from public.bills);
 
 insert into public.settings (key, value) values ('weekly_income', '900')
   on conflict (key) do nothing;
 
 insert into public.divorce_details
   (support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, key_dates)
-values (
+select * from (values (
   900, 'Aug 1', true, 3200, 4,
   '[{"item":"House","note":"50 / 50"},{"item":"Savings","note":"50 / 50"},{"item":"Car","note":"Yours"}]'::jsonb,
   '[{"label":"Court date","date":"Sep 12"},{"label":"Papers due","date":"Aug 20"}]'::jsonb
-);
+)) as v(support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, key_dates)
+where not exists (select 1 from public.divorce_details);
