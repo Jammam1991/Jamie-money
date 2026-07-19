@@ -1,8 +1,12 @@
 import { Check, CalendarDays, Folder } from "lucide-react";
 import { Card, PageTitle } from "@/components/ui";
-import { divorce, money } from "@/lib/data";
+import { money } from "@/lib/data";
+import { getDivorce } from "@/lib/store";
 
-export default function DivorcePage() {
+export const dynamic = "force-dynamic";
+
+export default async function DivorcePage() {
+  const divorce = await getDivorce();
   return (
     <div>
       <PageTitle>Divorce</PageTitle>

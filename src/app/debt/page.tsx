@@ -1,8 +1,12 @@
 import { Flag } from "lucide-react";
 import { Card, Bar, PageTitle } from "@/components/ui";
-import { debts, debtFreeBy, money } from "@/lib/data";
+import { debtFreeBy, money } from "@/lib/data";
+import { getDebts } from "@/lib/store";
 
-export default function DebtPage() {
+export const dynamic = "force-dynamic";
+
+export default async function DebtPage() {
+  const debts = await getDebts();
   const total = debts.reduce((sum, d) => sum + d.balance, 0);
 
   return (
