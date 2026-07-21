@@ -43,8 +43,25 @@ export default function BillsClient({
   const [incomeDraft, setIncomeDraft] = useState<string>(String(initialIncome));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
+
+  // Run a save action and show whether it worked, so failures aren't silent.
+  function run(
+    label: string,
+    action: () => Promise<{ ok: boolean; error?: string }>
+  ) {
+    setStatus(null);
+    startTransition(async () => {
+      const res = await action();
+      setStatus(
+        res.ok
+          ? { ok: true, msg: `${label} saved.` }
+          : { ok: false, msg: res.error ?? "Couldn't save." }
+      );
+    });
+  }
 
   const monthName = useMemo(
     () => new Date().toLocaleDateString("en-US", { month: "long" }),
@@ -60,37 +77,42 @@ export default function BillsClient({
     const value = Math.max(0, Math.round(Number(incomeDraft) || 0));
     setIncome(value);
     setIncomeDraft(String(value));
-    startTransition(() => {
-      setWeeklyIncome(value);
-    });
+    run("Income", () => setWeeklyIncome(value));
   }
 
   function handleAdd(bill: Omit<Bill, "id">) {
     const id = String(tempId.current--);
     setBills((b) => [...b, { ...bill, id }]);
     setAdding(false);
-    startTransition(() => {
-      addBill(bill);
-    });
+    run("Bill", () => addBill(bill));
   }
 
   function handleUpdate(bill: Bill) {
     setBills((b) => b.map((x) => (x.id === bill.id ? bill : x)));
     setEditingId(null);
-    startTransition(() => {
-      updateBill(bill);
-    });
+    run("Bill", () => updateBill(bill));
   }
 
   function handleDelete(id: string) {
     setBills((b) => b.filter((x) => x.id !== id));
-    startTransition(() => {
-      deleteBill(id);
-    });
+    run("Bill", () => deleteBill(id));
   }
 
   return (
     <div className="space-y-4">
+      {status && (
+        <div
+          className="rounded-xl px-3 py-2 text-[13px]"
+          style={{
+            background: status.ok ? "var(--good-bg)" : "var(--warn-bg)",
+            color: status.ok ? "var(--good)" : "var(--warn)",
+          }}
+        >
+          {status.ok ? "✓ " : "⚠ "}
+          {status.msg}
+        </div>
+      )}
+
       {/* Headline: what he needs per week */}
       <div
         className="rounded-2xl p-4"
