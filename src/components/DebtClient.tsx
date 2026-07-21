@@ -32,7 +32,13 @@ const inputClass =
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
-export default function DebtClient({ initialDebts }: { initialDebts: Debt[] }) {
+export default function DebtClient({
+  initialDebts,
+  admin,
+}: {
+  initialDebts: Debt[];
+  admin: boolean;
+}) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -106,20 +112,21 @@ export default function DebtClient({ initialDebts }: { initialDebts: Debt[] }) {
       </div>
 
       {/* Import from credit report */}
-      {importing ? (
-        <ImportPanel
-          onCancel={() => setImporting(false)}
-          onImport={handleImport}
-        />
-      ) : (
-        <button
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 text-sm font-medium"
-          onClick={() => setImporting(true)}
-        >
-          <Upload size={17} />
-          Import from a credit report
-        </button>
-      )}
+      {admin &&
+        (importing ? (
+          <ImportPanel
+            onCancel={() => setImporting(false)}
+            onImport={handleImport}
+          />
+        ) : (
+          <button
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 text-sm font-medium"
+            onClick={() => setImporting(true)}
+          >
+            <Upload size={17} />
+            Import from a credit report
+          </button>
+        ))}
 
       {/* Payoff what-if calculator */}
       {debts.length > 0 && (
@@ -149,20 +156,24 @@ export default function DebtClient({ initialDebts }: { initialDebts: Debt[] }) {
                   <span className="truncate">{d.name}</span>
                   <span className="flex items-center gap-3">
                     {money(d.balance)}
-                    <button
-                      aria-label="Edit"
-                      className="text-muted"
-                      onClick={() => setEditingId(d.id)}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      aria-label="Delete"
-                      className="text-muted"
-                      onClick={() => handleDelete(d.id)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    {admin && (
+                      <>
+                        <button
+                          aria-label="Edit"
+                          className="text-muted"
+                          onClick={() => setEditingId(d.id)}
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          aria-label="Delete"
+                          className="text-muted"
+                          onClick={() => handleDelete(d.id)}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </>
+                    )}
                   </span>
                 </div>
                 <p className="mb-2 mt-1 text-xs text-muted">
@@ -174,19 +185,20 @@ export default function DebtClient({ initialDebts }: { initialDebts: Debt[] }) {
           )}
         </div>
 
-        {adding ? (
-          <div className="mt-3">
-            <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
-          </div>
-        ) : (
-          <button
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-            onClick={() => setAdding(true)}
-          >
-            <Plus size={16} />
-            Add a debt
-          </button>
-        )}
+        {admin &&
+          (adding ? (
+            <div className="mt-3">
+              <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
+            </div>
+          ) : (
+            <button
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={16} />
+              Add a debt
+            </button>
+          ))}
       </Card>
     </div>
   );
