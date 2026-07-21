@@ -9,7 +9,10 @@ export default async function DivorcePage() {
   const divorce = await getDivorce();
   return (
     <div>
-      <PageTitle>Divorce</PageTitle>
+      <div className="mb-4">
+        <PageTitle>Divorce</PageTitle>
+        <p className="text-[13px] text-muted">(Under Construction — estimates only)</p>
+      </div>
 
       <div className="space-y-3">
         <Card>
@@ -28,10 +31,18 @@ export default async function DivorcePage() {
           )}
         </Card>
 
-        <Card>
-          <p className="text-[13px] text-muted">Lawyer costs so far</p>
-          <p className="text-xl font-medium">{money(divorce.lawyerCostsSoFar)}</p>
-        </Card>
+        <div className="grid grid-cols-2 gap-3">
+          <Card>
+            <p className="text-[13px] text-muted">Contested</p>
+            <p className="text-sm font-medium">$10K – $30K</p>
+            <p className="text-xs text-muted mt-1">per person</p>
+          </Card>
+          <Card>
+            <p className="text-[13px] text-muted">Uncontested</p>
+            <p className="text-sm font-medium">$2K – $10K</p>
+            <p className="text-xs text-muted mt-1">per person</p>
+          </Card>
+        </div>
 
         <Card>
           <p className="mb-1.5 text-[13px] text-muted">What&apos;s being split</p>

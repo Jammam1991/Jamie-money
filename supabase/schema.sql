@@ -16,13 +16,25 @@ create table if not exists public.debts (
 
 alter table public.debts enable row level security;
 
+-- ── Bills (recurring payments) ───────────────────────────────────────────────
+create table if not exists public.bills (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  amount numeric(12,2) not null default 0,
+  frequency text not null,
+  due_date text,
+  sort integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.bills enable row level security;
+
 -- ── Divorce details (a single row) ────────────────────────────────────────────
 create table if not exists public.divorce_details (
   id uuid primary key default gen_random_uuid(),
   support_amount numeric(12,2) not null default 0,
   support_next_date text,
   support_paid_this_month boolean not null default false,
-  lawyer_costs numeric(12,2) not null default 0,
   documents_count integer not null default 0,
   split jsonb not null default '[]'::jsonb,
   key_dates jsonb not null default '[]'::jsonb,
@@ -37,10 +49,15 @@ insert into public.debts (name, balance, monthly, paid_pct, sort) values
   ('Car loan', 6500, 320, 55, 2),
   ('Loan from friend', 2000, 100, 20, 3);
 
+insert into public.bills (name, amount, frequency, due_date, sort) values
+  ('Electric', 120, 'monthly', '1st', 1),
+  ('Internet', 85, 'monthly', '5th', 2),
+  ('Streaming', 18, 'monthly', '15th', 3);
+
 insert into public.divorce_details
-  (support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, key_dates)
+  (support_amount, support_next_date, support_paid_this_month, documents_count, split, key_dates)
 values (
-  900, 'Aug 1', true, 3200, 4,
+  900, 'Aug 1', true, 4,
   '[{"item":"House","note":"50 / 50"},{"item":"Savings","note":"50 / 50"},{"item":"Car","note":"Yours"}]'::jsonb,
-  '[{"label":"Court date","date":"Sep 12"},{"label":"Papers due","date":"Aug 20"}]'::jsonb
+  '[{"label":"Tentative divorce initiation","date":"Aug 15"},{"label":"Court date (tentative)","date":"Jan 15"}]'::jsonb
 );

@@ -28,9 +28,16 @@ export type Debt = {
   paidPct: number; // 0-100
 };
 
+export type Bill = {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: "weekly" | "monthly" | "yearly";
+  dueDate?: string;
+};
+
 export type Divorce = {
   support: { amount: number; nextDate: string; paidThisMonth: boolean };
-  lawyerCostsSoFar: number;
   split: { item: string; note: string }[];
   keyDates: { label: string; date: string }[];
   documentsCount: number;
@@ -58,17 +65,22 @@ export const debts: Debt[] = [
 
 export const debtFreeBy = "early 2028";
 
+export const bills: Bill[] = [
+  { id: "1", name: "Electric", amount: 120, frequency: "monthly", dueDate: "1st" },
+  { id: "2", name: "Internet", amount: 85, frequency: "monthly", dueDate: "5th" },
+  { id: "3", name: "Streaming", amount: 18, frequency: "monthly", dueDate: "15th" },
+];
+
 export const divorce: Divorce = {
   support: { amount: 900, nextDate: "Aug 1", paidThisMonth: true },
-  lawyerCostsSoFar: 3200,
   split: [
     { item: "House", note: "50 / 50" },
     { item: "Savings", note: "50 / 50" },
     { item: "Car", note: "Yours" },
   ],
   keyDates: [
-    { label: "Court date", date: "Sep 12" },
-    { label: "Papers due", date: "Aug 20" },
+    { label: "Tentative divorce initiation", date: "Aug 15" },
+    { label: "Court date (tentative)", date: "Jan 15" },
   ],
   documentsCount: 4,
 };
