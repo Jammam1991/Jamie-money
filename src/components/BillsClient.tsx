@@ -261,35 +261,39 @@ function BillForm({
   }
 
   return (
-    <div className="space-y-2 py-3">
-      <input
-        className={inputClass}
-        placeholder="Bill name (e.g. Rent)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-            $
-          </span>
+    <div className="space-y-3 py-3">
+      <div>
+        <label className="mb-1 block text-[13px] text-muted">Bill name</label>
+        <input
+          className={inputClass}
+          placeholder="e.g. Rent"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <label className="mb-1 block text-[13px] text-muted">Amount ($)</label>
           <input
             type="number"
             inputMode="numeric"
-            className={inputClass + " pl-7"}
-            placeholder="Amount"
+            className={inputClass}
+            placeholder="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
         </div>
-        <input
-          type="number"
-          inputMode="numeric"
-          className={inputClass + " w-24"}
-          placeholder="Due day"
-          value={dueDay}
-          onChange={(e) => setDueDay(e.target.value)}
-        />
+        <div className="w-28">
+          <label className="mb-1 block text-[13px] text-muted">Due day</label>
+          <input
+            type="number"
+            inputMode="numeric"
+            className={inputClass}
+            placeholder="1–31"
+            value={dueDay}
+            onChange={(e) => setDueDay(e.target.value)}
+          />
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <button className="rounded-lg px-3 py-2 text-sm text-muted" onClick={onCancel}>
