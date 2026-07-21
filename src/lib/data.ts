@@ -41,6 +41,7 @@ export type Bill = {
 export type Divorce = {
   support: { amount: number; nextDate: string; paidThisMonth: boolean };
   split: { item: string; note: string }[];
+  benefits: string[];
   keyDates: { label: string; date: string }[];
   documentsCount: number;
 };
@@ -94,6 +95,12 @@ export const divorce: Divorce = {
     { item: "Auto Loans", note: "$112,833 — TBD" },
     { item: "Beacon HELOC", note: "$199,368 — TBD" },
     { item: "Other Debt", note: "$22,330 — TBD" },
+  ],
+  benefits: [
+    "Joint tax discount",
+    "Health benefits",
+    "$250K life insurance",
+    "Special programs",
   ],
   keyDates: [
     { label: "Tentative divorce initiation", date: "Aug 15" },

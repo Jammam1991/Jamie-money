@@ -85,8 +85,8 @@ export async function getDivorce(): Promise<Divorce> {
       nextDate: data.support_next_date ?? "",
       paidThisMonth: Boolean(data.support_paid_this_month),
     },
-    lawyerCostsSoFar: Number(data.lawyer_costs),
     split: Array.isArray(data.split) ? data.split : [],
+    benefits: Array.isArray(data.benefits) ? data.benefits : [],
     keyDates: Array.isArray(data.key_dates) ? data.key_dates : [],
     documentsCount: Number(data.documents_count),
   };

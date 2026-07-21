@@ -224,6 +224,7 @@ export async function updateDivorce(input: {
   supportPaidThisMonth: boolean;
   documentsCount: number;
   split: { item: string; note: string }[];
+  benefits: string[];
   keyDates: { label: string; date: string }[];
 }): Promise<ActionResult> {
   const denied = await guard();
@@ -237,6 +238,7 @@ export async function updateDivorce(input: {
     support_paid_this_month: input.supportPaidThisMonth,
     documents_count: input.documentsCount,
     split: input.split,
+    benefits: input.benefits,
     key_dates: input.keyDates,
     updated_at: new Date().toISOString(),
   };

@@ -79,6 +79,19 @@ export default function DivorceClient({
         ))}
       </Card>
 
+      <Card className="bg-gradient-to-br from-good-bg to-card border-l-4" style={{ borderLeftColor: "var(--good)" }}>
+        <p className="mb-2 flex items-center gap-2 text-[13px] font-medium" style={{ color: "var(--good)" }}>
+          <Check size={16} />
+          Benefits of staying married
+        </p>
+        {data.benefits.map((benefit, i) => (
+          <div key={i} className="flex items-center gap-2 py-1.5 text-[14px]">
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "var(--good)" }} />
+            {benefit}
+          </div>
+        ))}
+      </Card>
+
       <Card>
         <p className="mb-1.5 text-[13px] text-muted">Key dates</p>
         {data.keyDates.map((d, i) => (
@@ -120,6 +133,7 @@ function DivorceForm({
   const [paid, setPaid] = useState(initial.support.paidThisMonth);
   const [docs, setDocs] = useState(String(initial.documentsCount));
   const [split, setSplit] = useState(initial.split);
+  const [benefits, setBenefits] = useState(initial.benefits);
   const [keyDates, setKeyDates] = useState(initial.keyDates);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -133,6 +147,7 @@ function DivorceForm({
       },
       documentsCount: Math.max(0, Math.round(Number(docs) || 0)),
       split: split.filter((s) => s.item.trim()),
+      benefits: benefits.filter((b) => b.trim()),
       keyDates: keyDates.filter((d) => d.label.trim()),
     };
     setError(null);
@@ -143,6 +158,7 @@ function DivorceForm({
         supportPaidThisMonth: next.support.paidThisMonth,
         documentsCount: next.documentsCount,
         split: next.split,
+        benefits: next.benefits,
         keyDates: next.keyDates,
       });
       if (res.ok) onSaved(next);
@@ -199,6 +215,36 @@ function DivorceForm({
         placeholders={["Item (e.g. House)", "Note (e.g. 50 / 50)"]}
         onChange={setSplit}
       />
+
+      <Card>
+        <p className="mb-2 text-[13px] text-muted">Benefits of staying married</p>
+        <div className="space-y-2">
+          {benefits.map((b, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                className={smallInput}
+                placeholder="Benefit"
+                value={b}
+                onChange={(e) => setBenefits(benefits.map((v, idx) => (idx === i ? e.target.value : v)))}
+              />
+              <button
+                aria-label="Remove"
+                className="text-muted"
+                onClick={() => setBenefits(benefits.filter((_, idx) => idx !== i))}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
+          onClick={() => setBenefits([...benefits, ""])}
+        >
+          <Plus size={16} />
+          Add benefit
+        </button>
+      </Card>
 
       <ListEditor
         title="Key dates"
