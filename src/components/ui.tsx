@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 // A plain white rounded card — the basic building block for every tile.
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = "", style }: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
-    <div className={`rounded-2xl border border-border bg-card p-4 ${className}`}>{children}</div>
+    <div className={`rounded-2xl border border-border bg-card p-4 ${className}`} style={style}>{children}</div>
   );
 }
 
