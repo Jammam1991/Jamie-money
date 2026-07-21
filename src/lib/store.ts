@@ -3,10 +3,13 @@ import {
   bills as sampleBills,
   debts as sampleDebts,
   divorce as sampleDivorce,
+  summary as sampleSummary,
   weeklyIncome as sampleIncome,
   type Bill,
   type Debt,
   type Divorce,
+  type Summary,
+  type Txn,
 } from "./data";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
@@ -41,6 +44,28 @@ export async function getDebts(): Promise<Debt[]> {
     apr: Number(row.apr ?? 0),
     minPayment: Number(row.min_payment ?? row.monthly ?? 0),
   }));
+}
+
+// The Home page's headline numbers. Falls back to the sample until Chris
+// saves real ones (or, later, the bank feed fills them in).
+export async function getSummary(): Promise<Summary> {
+  const c = client();
+  if (!c) return sampleSummary;
+  const { data, error } = await c
+    .from("home_summary")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return sampleSummary;
+  return {
+    statusLabel: data.status_label || sampleSummary.statusLabel,
+    statusNote: data.status_note ?? "",
+    netWorth: Number(data.net_worth),
+    netWorthChange: Number(data.net_worth_change),
+    moneyIn: Number(data.money_in),
+    moneyOut: Number(data.money_out),
+    recent: Array.isArray(data.recent) ? (data.recent as Txn[]) : [],
+  };
 }
 
 // Has Jamie linked at least one bank for the debts feed?

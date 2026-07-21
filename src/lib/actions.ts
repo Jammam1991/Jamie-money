@@ -217,6 +217,47 @@ export async function importDebts(
   return { ok: true };
 }
 
+// ── Home summary ──────────────────────────────────────────────────────────────
+export async function updateSummary(input: {
+  statusLabel: string;
+  statusNote: string;
+  netWorth: number;
+  netWorthChange: number;
+  moneyIn: number;
+  moneyOut: number;
+  recent: { id: string; name: string; kind: string; amount: number }[];
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const row = {
+    status_label: input.statusLabel,
+    status_note: input.statusNote,
+    net_worth: input.netWorth,
+    net_worth_change: input.netWorthChange,
+    money_in: input.moneyIn,
+    money_out: input.moneyOut,
+    recent: input.recent,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Home numbers live in a single row: update it if present, else add it.
+  const { data: existing } = await c
+    .from("home_summary")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+  const { error } = existing
+    ? await c.from("home_summary").update(row).eq("id", existing.id)
+    : await c.from("home_summary").insert(row);
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return { ok: true };
+}
+
 // ── Divorce ───────────────────────────────────────────────────────────────────
 export async function updateDivorce(input: {
   supportAmount: number;
