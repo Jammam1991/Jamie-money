@@ -43,6 +43,16 @@ export async function getDebts(): Promise<Debt[]> {
   }));
 }
 
+// Has Jamie linked at least one bank for the debts feed?
+export async function hasPlaidItems(): Promise<boolean> {
+  const c = client();
+  if (!c) return false;
+  const { count } = await c
+    .from("plaid_items")
+    .select("id", { count: "exact", head: true });
+  return (count ?? 0) > 0;
+}
+
 export async function getBills(): Promise<Bill[]> {
   const c = client();
   if (!c) return sampleBills;

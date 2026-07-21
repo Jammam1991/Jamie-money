@@ -20,6 +20,7 @@ import {
   yearlyInterest,
 } from "@/lib/payoff";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
+import PlaidConnect from "@/components/PlaidConnect";
 import {
   addDebt,
   deleteDebt,
@@ -35,9 +36,11 @@ const primaryBtn =
 export default function DebtClient({
   initialDebts,
   admin,
+  hasBank,
 }: {
   initialDebts: Debt[];
   admin: boolean;
+  hasBank: boolean;
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -111,7 +114,7 @@ export default function DebtClient({
         )}
       </div>
 
-      {/* Import from credit report */}
+      {/* Pull debts straight from the bank (primary), with paste-a-report as backup */}
       {admin &&
         (importing ? (
           <ImportPanel
@@ -119,13 +122,16 @@ export default function DebtClient({
             onImport={handleImport}
           />
         ) : (
-          <button
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card py-3 text-sm font-medium"
-            onClick={() => setImporting(true)}
-          >
-            <Upload size={17} />
-            Import from a credit report
-          </button>
+          <div className="space-y-2">
+            <PlaidConnect hasBank={hasBank} />
+            <button
+              className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
+              onClick={() => setImporting(true)}
+            >
+              <Upload size={13} />
+              or paste a credit report instead
+            </button>
+          </div>
         ))}
 
       {/* Payoff what-if calculator */}
