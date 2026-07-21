@@ -81,10 +81,20 @@ export default function BillsClient({
   }
 
   function handleAdd(bill: Omit<Bill, "id">) {
-    const id = String(tempId.current--);
-    setBills((b) => [...b, { ...bill, id }]);
+    const tid = String(tempId.current--);
+    setBills((b) => [...b, { ...bill, id: tid }]);
     setAdding(false);
-    run("Bill", () => addBill(bill));
+    run("Bill", async () => {
+      const res = await addBill(bill);
+      // Swap the temporary id for the real database id so a later edit/delete
+      // doesn't send "-4" to a uuid column. Drop the row if the save failed.
+      if (res.ok && res.id) {
+        setBills((b) => b.map((x) => (x.id === tid ? { ...x, id: res.id! } : x)));
+      } else if (!res.ok) {
+        setBills((b) => b.filter((x) => x.id !== tid));
+      }
+      return res;
+    });
   }
 
   function handleUpdate(bill: Bill) {

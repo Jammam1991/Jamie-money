@@ -55,11 +55,17 @@ export default function DebtClient({
   const minTotal = totalMinimum(debts);
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
-    const id = String(tempId.current--);
-    setDebts((d) => [...d, { ...data, id, monthly: data.minPayment, paidPct: 0 }]);
+    const tid = String(tempId.current--);
+    setDebts((d) => [...d, { ...data, id: tid, monthly: data.minPayment, paidPct: 0 }]);
     setAdding(false);
-    startTransition(() => {
-      addDebt(data);
+    startTransition(async () => {
+      // Swap the temp id for the real DB id so a later edit/delete works.
+      const res = await addDebt(data);
+      if (res.ok && res.id) {
+        setDebts((d) => d.map((x) => (x.id === tid ? { ...x, id: res.id! } : x)));
+      } else if (!res.ok) {
+        setDebts((d) => d.filter((x) => x.id !== tid));
+      }
     });
   }
 
@@ -85,8 +91,9 @@ export default function DebtClient({
   }
 
   function handleImport(rows: ParsedDebt[]) {
-    const added: Debt[] = rows.map((r) => ({
-      id: String(tempId.current--),
+    const tids = rows.map(() => String(tempId.current--));
+    const added: Debt[] = rows.map((r, i) => ({
+      id: tids[i],
       name: r.name,
       balance: r.balance,
       apr: r.apr,
@@ -96,8 +103,19 @@ export default function DebtClient({
     }));
     setDebts((d) => [...d, ...added]);
     setImporting(false);
-    startTransition(() => {
-      importDebts(rows);
+    startTransition(async () => {
+      // Line up the real DB ids (returned in input order) with our temp rows.
+      const res = await importDebts(rows);
+      if (res.ok && res.ids) {
+        setDebts((d) =>
+          d.map((x) => {
+            const idx = tids.indexOf(x.id);
+            return idx >= 0 && res.ids![idx] ? { ...x, id: res.ids![idx] } : x;
+          })
+        );
+      } else if (!res.ok) {
+        setDebts((d) => d.filter((x) => !tids.includes(x.id)));
+      }
     });
   }
 

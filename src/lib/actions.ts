@@ -6,7 +6,12 @@ import { redirect } from "next/navigation";
 import { client } from "./store";
 import { ADMIN_COOKIE, adminToken, isAdmin } from "./auth";
 
-export type ActionResult = { ok: boolean; error?: string };
+export type ActionResult = {
+  ok: boolean;
+  error?: string;
+  id?: string; // real DB id of a just-inserted row (add actions)
+  ids?: string[]; // real DB ids of just-inserted rows (bulk import), in input order
+};
 
 const NOT_CONNECTED: ActionResult = {
   ok: false,
@@ -88,15 +93,19 @@ export async function addBill(input: {
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
-  const { error } = await c.from("bills").insert({
-    name: input.name,
-    amount: input.amount,
-    due_day: input.dueDay,
-    sort: nextSort(),
-  });
+  const { data, error } = await c
+    .from("bills")
+    .insert({
+      name: input.name,
+      amount: input.amount,
+      due_day: input.dueDay,
+      sort: nextSort(),
+    })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
   revalidatePath("/bills");
-  return { ok: true };
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
 }
 
 export async function updateBill(input: {
@@ -140,18 +149,22 @@ export async function addDebt(input: {
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
-  const { error } = await c.from("debts").insert({
-    name: input.name,
-    balance: input.balance,
-    monthly: input.minPayment,
-    min_payment: input.minPayment,
-    apr: input.apr,
-    paid_pct: 0,
-    sort: nextSort(),
-  });
+  const { data, error } = await c
+    .from("debts")
+    .insert({
+      name: input.name,
+      balance: input.balance,
+      monthly: input.minPayment,
+      min_payment: input.minPayment,
+      apr: input.apr,
+      paid_pct: 0,
+      sort: nextSort(),
+    })
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
-  return { ok: true };
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
 }
 
 export async function updateDebt(input: {
@@ -201,20 +214,25 @@ export async function importDebts(
   if (!c) return NOT_CONNECTED;
   if (rows.length === 0) return { ok: false, error: "Nothing to import." };
   const base = nextSort();
-  const { error } = await c.from("debts").insert(
-    rows.map((r, i) => ({
-      name: r.name,
-      balance: r.balance,
-      monthly: r.minPayment,
-      min_payment: r.minPayment,
-      apr: r.apr,
-      paid_pct: 0,
-      sort: base + i,
-    }))
-  );
+  const { data, error } = await c
+    .from("debts")
+    .insert(
+      rows.map((r, i) => ({
+        name: r.name,
+        balance: r.balance,
+        monthly: r.minPayment,
+        min_payment: r.minPayment,
+        apr: r.apr,
+        paid_pct: 0,
+        sort: base + i,
+      }))
+    )
+    .select("id");
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
-  return { ok: true };
+  // Postgres returns inserted rows in input order — line them up with the
+  // client's optimistic rows so their temp ids can be swapped for real ones.
+  return { ok: true, ids: (data ?? []).map((d) => String(d.id)) };
 }
 
 // ── Home summary ──────────────────────────────────────────────────────────────
