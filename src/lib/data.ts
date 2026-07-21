@@ -90,9 +90,10 @@ export const WEEKS_PER_MONTH = 4.33;
 export const divorce: Divorce = {
   support: { amount: 900, nextDate: "Aug 1", paidThisMonth: true },
   split: [
-    { item: "House", note: "50 / 50" },
-    { item: "Savings", note: "50 / 50" },
-    { item: "Car", note: "Yours" },
+    { item: "Loans", note: "$37,046 — TBD" },
+    { item: "Auto Loans", note: "$112,833 — TBD" },
+    { item: "Beacon HELOC", note: "$199,368 — TBD" },
+    { item: "Other Debt", note: "$22,330 — TBD" },
   ],
   keyDates: [
     { label: "Tentative divorce initiation", date: "Aug 15" },

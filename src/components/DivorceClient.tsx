@@ -72,9 +72,9 @@ export default function DivorceClient({
       <Card>
         <p className="mb-1.5 text-[13px] text-muted">What&apos;s being split</p>
         {data.split.map((s, i) => (
-          <div key={i} className="flex justify-between py-1 text-[15px]">
-            <span>{s.item}</span>
-            <span className="text-muted">{s.note}</span>
+          <div key={i} className="flex flex-col gap-1 py-2 border-b border-border last:border-b-0">
+            <p className="font-medium text-[15px]">{s.item}</p>
+            <p className="text-[13px] text-muted">{s.note}</p>
           </div>
         ))}
       </Card>
