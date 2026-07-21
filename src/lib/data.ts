@@ -40,7 +40,6 @@ export type Bill = {
 
 export type Divorce = {
   support: { amount: number; nextDate: string; paidThisMonth: boolean };
-  lawyerCostsSoFar: number;
   split: { item: string; note: string }[];
   keyDates: { label: string; date: string }[];
   documentsCount: number;
@@ -90,15 +89,14 @@ export const WEEKS_PER_MONTH = 4.33;
 
 export const divorce: Divorce = {
   support: { amount: 900, nextDate: "Aug 1", paidThisMonth: true },
-  lawyerCostsSoFar: 3200,
   split: [
     { item: "House", note: "50 / 50" },
     { item: "Savings", note: "50 / 50" },
     { item: "Car", note: "Yours" },
   ],
   keyDates: [
-    { label: "Court date", date: "Sep 12" },
-    { label: "Papers due", date: "Aug 20" },
+    { label: "Tentative divorce initiation", date: "Aug 15" },
+    { label: "Court date (tentative)", date: "Jan 15" },
   ],
   documentsCount: 4,
 };

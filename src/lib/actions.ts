@@ -222,7 +222,6 @@ export async function updateDivorce(input: {
   supportAmount: number;
   supportNextDate: string;
   supportPaidThisMonth: boolean;
-  lawyerCosts: number;
   documentsCount: number;
   split: { item: string; note: string }[];
   keyDates: { label: string; date: string }[];
@@ -236,7 +235,6 @@ export async function updateDivorce(input: {
     support_amount: input.supportAmount,
     support_next_date: input.supportNextDate,
     support_paid_this_month: input.supportPaidThisMonth,
-    lawyer_costs: input.lawyerCosts,
     documents_count: input.documentsCount,
     split: input.split,
     key_dates: input.keyDates,

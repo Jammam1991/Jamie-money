@@ -131,7 +131,6 @@ function DivorceForm({
   const [amount, setAmount] = useState(String(initial.support.amount));
   const [nextDate, setNextDate] = useState(initial.support.nextDate);
   const [paid, setPaid] = useState(initial.support.paidThisMonth);
-  const [lawyer, setLawyer] = useState(String(initial.lawyerCostsSoFar));
   const [docs, setDocs] = useState(String(initial.documentsCount));
   const [split, setSplit] = useState(initial.split);
   const [keyDates, setKeyDates] = useState(initial.keyDates);
@@ -145,7 +144,6 @@ function DivorceForm({
         nextDate: nextDate.trim(),
         paidThisMonth: paid,
       },
-      lawyerCostsSoFar: Math.max(0, Math.round(Number(lawyer) || 0)),
       documentsCount: Math.max(0, Math.round(Number(docs) || 0)),
       split: split.filter((s) => s.item.trim()),
       keyDates: keyDates.filter((d) => d.label.trim()),
@@ -156,7 +154,6 @@ function DivorceForm({
         supportAmount: next.support.amount,
         supportNextDate: next.support.nextDate,
         supportPaidThisMonth: next.support.paidThisMonth,
-        lawyerCosts: next.lawyerCostsSoFar,
         documentsCount: next.documentsCount,
         split: next.split,
         keyDates: next.keyDates,
@@ -198,17 +195,7 @@ function DivorceForm({
       </Card>
 
       <Card>
-        <label className="text-[13px] text-muted">Lawyer costs so far ($)</label>
-        <input
-          type="number"
-          inputMode="numeric"
-          className={inputClass + " mt-1"}
-          value={lawyer}
-          onChange={(e) => setLawyer(e.target.value)}
-        />
-        <label className="mt-3 block text-[13px] text-muted">
-          Number of documents
-        </label>
+        <label className="text-[13px] text-muted">Number of documents</label>
         <input
           type="number"
           inputMode="numeric"
