@@ -32,9 +32,11 @@ function dueLabel(day: number): string {
 export default function BillsClient({
   initialBills,
   initialIncome,
+  admin,
 }: {
   initialBills: Bill[];
   initialIncome: number;
+  admin: boolean;
 }) {
   const [bills, setBills] = useState<Bill[]>(initialBills);
   const [income, setIncome] = useState<number>(initialIncome);
@@ -112,27 +114,31 @@ export default function BillsClient({
       {/* Weekly income from massage */}
       <Card>
         <p className="text-[13px] text-muted">Your weekly massage income</p>
-        <div className="mt-2 flex items-center gap-2">
-          <div className="relative flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-              $
-            </span>
-            <input
-              type="number"
-              inputMode="numeric"
-              className={inputClass + " pl-7"}
-              value={incomeDraft}
-              onChange={(e) => setIncomeDraft(e.target.value)}
-            />
+        {admin ? (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
+                $
+              </span>
+              <input
+                type="number"
+                inputMode="numeric"
+                className={inputClass + " pl-7"}
+                value={incomeDraft}
+                onChange={(e) => setIncomeDraft(e.target.value)}
+              />
+            </div>
+            <button
+              className={primaryBtn}
+              style={{ background: "var(--good)" }}
+              onClick={saveIncome}
+            >
+              Save
+            </button>
           </div>
-          <button
-            className={primaryBtn}
-            style={{ background: "var(--good)" }}
-            onClick={saveIncome}
-          >
-            Save
-          </button>
-        </div>
+        ) : (
+          <p className="mt-1 text-2xl font-medium">{money(income)}/week</p>
+        )}
         <p className="mt-2 text-xs text-muted">
           About {money(income * WEEKS_PER_MONTH)}/month coming in.
         </p>
@@ -165,39 +171,44 @@ export default function BillsClient({
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[15px]">{money(b.amount)}</span>
-                  <button
-                    aria-label="Edit"
-                    className="text-muted"
-                    onClick={() => setEditingId(b.id)}
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    aria-label="Delete"
-                    className="text-muted"
-                    onClick={() => handleDelete(b.id)}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  {admin && (
+                    <>
+                      <button
+                        aria-label="Edit"
+                        className="text-muted"
+                        onClick={() => setEditingId(b.id)}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
+                        aria-label="Delete"
+                        className="text-muted"
+                        onClick={() => handleDelete(b.id)}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )
           )}
         </div>
 
-        {adding ? (
-          <div className="pt-2">
-            <BillForm onCancel={() => setAdding(false)} onSave={handleAdd} />
-          </div>
-        ) : (
-          <button
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-            onClick={() => setAdding(true)}
-          >
-            <Plus size={16} />
-            Add a bill
-          </button>
-        )}
+        {admin &&
+          (adding ? (
+            <div className="pt-2">
+              <BillForm onCancel={() => setAdding(false)} onSave={handleAdd} />
+            </div>
+          ) : (
+            <button
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={16} />
+              Add a bill
+            </button>
+          ))}
       </Card>
     </div>
   );

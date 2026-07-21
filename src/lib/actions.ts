@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { client } from "./store";
+import { ADMIN_COOKIE, adminToken, isAdmin } from "./auth";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -9,6 +12,52 @@ const NOT_CONNECTED: ActionResult = {
   ok: false,
   error: "Not saved — the online database isn't connected yet.",
 };
+
+const NOT_ALLOWED: ActionResult = {
+  ok: false,
+  error: "Not saved — please log in first.",
+};
+
+// Every write goes through this so a logged-out visitor (or a direct POST)
+// can never change Jamie's data.
+async function guard(): Promise<ActionResult | null> {
+  return (await isAdmin()) ? null : NOT_ALLOWED;
+}
+
+// ── Login / logout ────────────────────────────────────────────────────────────
+export async function login(
+  _prev: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  const pw = String(formData.get("password") ?? "");
+  const expected = process.env.ADMIN_PASSWORD;
+  if (!expected) {
+    return {
+      ok: false,
+      error: "No password is set up yet. Add ADMIN_PASSWORD in Vercel.",
+    };
+  }
+  const a = Buffer.from(pw);
+  const b = Buffer.from(expected);
+  const match = a.length === b.length && a.equals(b);
+  if (!match) return { ok: false, error: "Wrong password." };
+
+  const store = await cookies();
+  store.set(ADMIN_COOKIE, adminToken()!, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+  });
+  redirect("/");
+}
+
+export async function logout(): Promise<void> {
+  const store = await cookies();
+  store.delete(ADMIN_COOKIE);
+  redirect("/");
+}
 
 // A sort value that keeps newly added rows in the order they were created.
 // Seconds fit inside Postgres' integer column; milliseconds would overflow.
@@ -18,6 +67,8 @@ function nextSort(): number {
 
 // ── Bills ─────────────────────────────────────────────────────────────────────
 export async function setWeeklyIncome(value: number): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c
@@ -33,6 +84,8 @@ export async function addBill(input: {
   amount: number;
   dueDay: number;
 }): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c.from("bills").insert({
@@ -52,6 +105,8 @@ export async function updateBill(input: {
   amount: number;
   dueDay: number;
 }): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c
@@ -64,6 +119,8 @@ export async function updateBill(input: {
 }
 
 export async function deleteBill(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c.from("bills").delete().eq("id", id);
@@ -79,6 +136,8 @@ export async function addDebt(input: {
   apr: number;
   minPayment: number;
 }): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c.from("debts").insert({
@@ -102,6 +161,8 @@ export async function updateDebt(input: {
   apr: number;
   minPayment: number;
 }): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c
@@ -120,6 +181,8 @@ export async function updateDebt(input: {
 }
 
 export async function deleteDebt(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c.from("debts").delete().eq("id", id);
@@ -132,6 +195,8 @@ export async function deleteDebt(id: string): Promise<ActionResult> {
 export async function importDebts(
   rows: { name: string; balance: number; apr: number; minPayment: number }[]
 ): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   if (rows.length === 0) return { ok: false, error: "Nothing to import." };
@@ -149,5 +214,46 @@ export async function importDebts(
   );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
+  return { ok: true };
+}
+
+// ── Divorce ───────────────────────────────────────────────────────────────────
+export async function updateDivorce(input: {
+  supportAmount: number;
+  supportNextDate: string;
+  supportPaidThisMonth: boolean;
+  lawyerCosts: number;
+  documentsCount: number;
+  split: { item: string; note: string }[];
+  keyDates: { label: string; date: string }[];
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const row = {
+    support_amount: input.supportAmount,
+    support_next_date: input.supportNextDate,
+    support_paid_this_month: input.supportPaidThisMonth,
+    lawyer_costs: input.lawyerCosts,
+    documents_count: input.documentsCount,
+    split: input.split,
+    key_dates: input.keyDates,
+    updated_at: new Date().toISOString(),
+  };
+
+  // The divorce details live in a single row; update it if present, else add it.
+  const { data: existing } = await c
+    .from("divorce_details")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+  const { error } = existing
+    ? await c.from("divorce_details").update(row).eq("id", existing.id)
+    : await c.from("divorce_details").insert(row);
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/divorce");
   return { ok: true };
 }
