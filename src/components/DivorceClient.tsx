@@ -69,19 +69,6 @@ export default function DivorceClient({
           )}
         </Card>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Card>
-            <p className="text-[13px] text-muted">Contested</p>
-            <p className="text-sm font-medium">$10K – $30K</p>
-            <p className="text-xs text-muted mt-1">per person</p>
-          </Card>
-          <Card>
-            <p className="text-[13px] text-muted">Uncontested</p>
-            <p className="text-sm font-medium">$2K – $10K</p>
-            <p className="text-xs text-muted mt-1">per person</p>
-          </Card>
-        </div>
-
       <Card>
         <p className="mb-1.5 text-[13px] text-muted">What&apos;s being split</p>
         {data.split.map((s, i) => (
