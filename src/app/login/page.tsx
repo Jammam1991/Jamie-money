@@ -1,99 +1,44 @@
-"use client";
+import Link from "next/link";
+import { PageTitle, Card } from "@/components/ui";
+import LoginForm from "@/components/LoginForm";
+import { isAdmin, adminConfigured } from "@/lib/auth";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/auth";
+export const dynamic = "force-dynamic";
 
-if (!supabase) {
-  throw new Error("Supabase configuration missing. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-}
-
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const router = useRouter();
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    try {
-      if (isSignUp) {
-        const { error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        if (signUpError) throw signUpError;
-        setError("Check your email to confirm your account");
-      } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (signInError) throw signInError;
-        router.push("/");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
-    } finally {
-      setLoading(false);
-    }
-  }
+export default async function LoginPage() {
+  const admin = await isAdmin();
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-medium mb-1">Jamie's Money</h1>
-        <p className="text-muted mb-6">Sign in or create an account</p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="w-full px-4 py-2 border border-border rounded-lg"
-              required
-            />
+    <div>
+      <PageTitle>Manage</PageTitle>
+      <Card>
+        {admin ? (
+          <div className="space-y-1">
+            <p className="text-[15px] font-medium">You&apos;re logged in.</p>
+            <p className="text-[13px] text-muted">
+              You can edit bills, income, debts, and divorce details. Head to any
+              tab to make changes.
+            </p>
+            <Link
+              href="/"
+              className="mt-2 inline-block text-[13px]"
+              style={{ color: "var(--good)" }}
+            >
+              Go to app →
+            </Link>
           </div>
+        ) : (
+          <LoginForm />
+        )}
+      </Card>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-4 py-2 border border-border rounded-lg"
-              required
-            />
-          </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-text text-card rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
-          >
-            {loading ? "Loading..." : isSignUp ? "Sign Up" : "Sign In"}
-          </button>
-        </form>
-
-        <button
-          type="button"
-          onClick={() => setIsSignUp(!isSignUp)}
-          className="w-full mt-4 text-center text-sm text-muted hover:text-text transition-colors"
-        >
-          {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
-        </button>
-      </div>
+      {!adminConfigured() && (
+        <p className="mt-3 text-xs text-muted">
+          Heads up: no password has been set yet. Add an{" "}
+          <code>ADMIN_PASSWORD</code> environment variable in Vercel, then log in
+          here.
+        </p>
+      )}
     </div>
   );
 }

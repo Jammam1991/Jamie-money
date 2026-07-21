@@ -1,19 +1,28 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  bills as sampleBills,
   debts as sampleDebts,
   divorce as sampleDivorce,
-  bills as sampleBills,
+  weeklyIncome as sampleIncome,
+  type Bill,
   type Debt,
   type Divorce,
-  type Bill,
 } from "./data";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
 // live site keeps working.
-function client() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+//
+// We accept whichever standard names Supabase's Vercel integration provides.
+// For the server key we prefer the new-style secret key (`sb_secret_…`, added
+// automatically by the integration) and fall back to a classic service-role
+// key. Both have full database access; anon/publishable keys are never used
+// here because row-level security would block writes.
+export function client(): SupabaseClient | null {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
@@ -29,6 +38,8 @@ export async function getDebts(): Promise<Debt[]> {
     balance: Number(row.balance),
     monthly: Number(row.monthly),
     paidPct: Number(row.paid_pct),
+    apr: Number(row.apr ?? 0),
+    minPayment: Number(row.min_payment ?? row.monthly ?? 0),
   }));
 }
 
@@ -41,9 +52,22 @@ export async function getBills(): Promise<Bill[]> {
     id: String(row.id),
     name: row.name,
     amount: Number(row.amount),
-    frequency: row.frequency,
-    dueDate: row.due_date,
+    dueDay: Number(row.due_day ?? 0),
   }));
+}
+
+// Jamie's weekly massage income, stored as a single named setting.
+export async function getWeeklyIncome(): Promise<number> {
+  const c = client();
+  if (!c) return sampleIncome;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", "weekly_income")
+    .maybeSingle();
+  if (error || !data) return sampleIncome;
+  const n = Number(data.value);
+  return Number.isFinite(n) ? n : sampleIncome;
 }
 
 export async function getDivorce(): Promise<Divorce> {
@@ -61,6 +85,7 @@ export async function getDivorce(): Promise<Divorce> {
       nextDate: data.support_next_date ?? "",
       paidThisMonth: Boolean(data.support_paid_this_month),
     },
+    lawyerCostsSoFar: Number(data.lawyer_costs),
     split: Array.isArray(data.split) ? data.split : [],
     keyDates: Array.isArray(data.key_dates) ? data.key_dates : [],
     documentsCount: Number(data.documents_count),

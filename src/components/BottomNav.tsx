@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Scale, CreditCard, Receipt } from "lucide-react";
+import { Home, Receipt, Scale, CreditCard } from "lucide-react";
 
 const tabs = [
   { href: "/", label: "Home", Icon: Home },

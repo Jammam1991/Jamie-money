@@ -24,20 +24,23 @@ export type Debt = {
   id: string;
   name: string;
   balance: number;
-  monthly: number;
+  monthly: number; // kept for the existing monthly-payment display
   paidPct: number; // 0-100
+  apr: number; // yearly interest rate as a percent, e.g. 22.9
+  minPayment: number; // smallest payment allowed each month
 };
 
+// A single recurring bill Jamie owes (rent, phone, etc.).
 export type Bill = {
   id: string;
   name: string;
-  amount: number;
-  frequency: "weekly" | "monthly" | "yearly";
-  dueDate?: string;
+  amount: number; // dollars per month
+  dueDay: number; // day of the month it's due (1-31), 0 = no set day
 };
 
 export type Divorce = {
   support: { amount: number; nextDate: string; paidThisMonth: boolean };
+  lawyerCostsSoFar: number;
   split: { item: string; note: string }[];
   keyDates: { label: string; date: string }[];
   documentsCount: number;
@@ -58,29 +61,44 @@ export const summary: Summary = {
 };
 
 export const debts: Debt[] = [
-  { id: "1", name: "Credit card", balance: 5800, monthly: 150, paidPct: 38 },
-  { id: "2", name: "Car loan", balance: 6500, monthly: 320, paidPct: 55 },
-  { id: "3", name: "Loan from friend", balance: 2000, monthly: 100, paidPct: 20 },
+  { id: "1", name: "Credit card", balance: 5800, monthly: 150, paidPct: 38, apr: 22.9, minPayment: 150 },
+  { id: "2", name: "Car loan", balance: 6500, monthly: 320, paidPct: 55, apr: 7.5, minPayment: 320 },
+  { id: "3", name: "Loan from friend", balance: 2000, monthly: 100, paidPct: 20, apr: 0, minPayment: 100 },
 ];
 
 export const debtFreeBy = "early 2028";
 
+// Common monthly bills, preloaded so the Bills page has something to show.
+// Jamie can edit, delete, or add to these.
 export const bills: Bill[] = [
-  { id: "1", name: "Electric", amount: 120, frequency: "monthly", dueDate: "1st" },
-  { id: "2", name: "Internet", amount: 85, frequency: "monthly", dueDate: "5th" },
-  { id: "3", name: "Streaming", amount: 18, frequency: "monthly", dueDate: "15th" },
+  { id: "1", name: "Rent", amount: 1200, dueDay: 1 },
+  { id: "2", name: "Car payment", amount: 320, dueDay: 5 },
+  { id: "3", name: "Car insurance", amount: 140, dueDay: 10 },
+  { id: "4", name: "Phone", amount: 70, dueDay: 12 },
+  { id: "5", name: "Internet", amount: 60, dueDay: 15 },
+  { id: "6", name: "Utilities", amount: 180, dueDay: 18 },
+  { id: "7", name: "Groceries", amount: 400, dueDay: 0 },
+  { id: "8", name: "Subscriptions", amount: 45, dueDay: 20 },
 ];
+
+// Jamie's typical weekly take-home from massage work (starter value).
+export const weeklyIncome = 900;
+
+// Average number of weeks in a month — used to turn a monthly total into a
+// weekly target.
+export const WEEKS_PER_MONTH = 4.33;
 
 export const divorce: Divorce = {
   support: { amount: 900, nextDate: "Aug 1", paidThisMonth: true },
+  lawyerCostsSoFar: 3200,
   split: [
     { item: "House", note: "50 / 50" },
     { item: "Savings", note: "50 / 50" },
     { item: "Car", note: "Yours" },
   ],
   keyDates: [
-    { label: "Tentative divorce initiation", date: "Aug 15" },
-    { label: "Court date (tentative)", date: "Jan 15" },
+    { label: "Court date", date: "Sep 12" },
+    { label: "Papers due", date: "Aug 20" },
   ],
   documentsCount: 4,
 };
