@@ -12,9 +12,17 @@ import {
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
 // live site keeps working.
+//
+// We accept whichever standard names Supabase's Vercel integration provides.
+// For the server key we prefer the new-style secret key (`sb_secret_…`, added
+// automatically by the integration) and fall back to a classic service-role
+// key. Both have full database access; anon/publishable keys are never used
+// here because row-level security would block writes.
 export function client(): SupabaseClient | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key =
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
