@@ -8,6 +8,8 @@ import {
   Pencil,
   Upload,
   TrendingDown,
+  ChevronDown,
+  Gauge,
   X,
 } from "lucide-react";
 import { Card, Bar } from "@/components/ui";
@@ -21,12 +23,21 @@ import {
 } from "@/lib/payoff";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import PlaidConnect from "@/components/PlaidConnect";
+import MoneyAppConnect from "@/components/MoneyAppConnect";
 import {
   addDebt,
   deleteDebt,
   importDebts,
   updateDebt,
 } from "@/lib/actions";
+
+function ficoLabel(score: number): string {
+  if (score >= 800) return "Exceptional";
+  if (score >= 740) return "Very good";
+  if (score >= 670) return "Good";
+  if (score >= 580) return "Fair";
+  return "Needs work";
+}
 
 const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
@@ -37,10 +48,12 @@ export default function DebtClient({
   initialDebts,
   admin,
   hasBank,
+  fico,
 }: {
   initialDebts: Debt[];
   admin: boolean;
   hasBank: boolean;
+  fico: { score: number; date: string } | null;
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -132,7 +145,24 @@ export default function DebtClient({
         )}
       </div>
 
-      {/* Pull debts straight from the bank (primary), with paste-a-report as backup */}
+      {/* Credit score, last pulled from Money App */}
+      {fico && (
+        <Card>
+          <p className="flex items-center gap-1.5 text-[13px] text-muted">
+            <Gauge size={15} />
+            Credit score
+          </p>
+          <div className="mt-2 flex items-baseline justify-between">
+            <span className="text-3xl font-medium">{fico.score}</span>
+            <span className="text-[13px] text-muted">{ficoLabel(fico.score)}</span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            From Money App, updated {fico.date}.
+          </p>
+        </Card>
+      )}
+
+      {/* Pull debts straight from the bank or Money App (primary), with paste-a-report as backup */}
       {admin &&
         (importing ? (
           <ImportPanel
@@ -142,6 +172,7 @@ export default function DebtClient({
         ) : (
           <div className="space-y-2">
             <PlaidConnect hasBank={hasBank} />
+            <MoneyAppConnect />
             <button
               className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
               onClick={() => setImporting(true)}
@@ -240,6 +271,7 @@ function PayoffCalculator({
   extra: number;
   setExtra: (n: number) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const base = simulate(debts, minTotal);
   const fast = simulate(debts, minTotal + extra);
   const monthsSaved = Math.max(0, base.months - fast.months);
@@ -247,52 +279,66 @@ function PayoffCalculator({
 
   return (
     <Card>
-      <p className="flex items-center gap-1.5 text-[13px] text-muted">
-        <TrendingDown size={15} />
-        What if you pay extra?
-      </p>
+      <button
+        className="flex w-full items-center justify-between"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-1.5 text-[13px] text-muted">
+          <TrendingDown size={15} />
+          What if you pay extra?
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
 
-      <div className="mt-3 flex items-baseline justify-between">
-        <span className="text-[15px]">Extra per month</span>
-        <span className="text-lg font-medium">{money(extra)}</span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={1000}
-        step={25}
-        value={extra}
-        onChange={(e) => setExtra(Number(e.target.value))}
-        className="mt-2 w-full accent-[var(--good)]"
-      />
-      <p className="mt-1 text-xs text-muted">
-        Paying {money(minTotal + extra)}/month in total.
-      </p>
+      {open && (
+        <>
+          <div className="mt-3 flex items-baseline justify-between">
+            <span className="text-[15px]">Extra per month</span>
+            <span className="text-lg font-medium">{money(extra)}</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={1000}
+            step={25}
+            value={extra}
+            onChange={(e) => setExtra(Number(e.target.value))}
+            className="mt-2 w-full accent-[var(--good)]"
+          />
+          <p className="mt-1 text-xs text-muted">
+            Paying {money(minTotal + extra)}/month in total.
+          </p>
 
-      <div className="mt-4 rounded-xl bg-good-bg p-3 text-center">
-        <p className="text-[13px] text-good">Debt-free in</p>
-        <p className="text-2xl font-medium text-good">
-          {duration(fast.months)}
-        </p>
-        <p className="text-xs text-good">
-          vs {duration(base.months)} paying just the minimums
-        </p>
-      </div>
+          <div className="mt-4 rounded-xl bg-good-bg p-3 text-center">
+            <p className="text-[13px] text-good">Debt-free in</p>
+            <p className="text-2xl font-medium text-good">
+              {duration(fast.months)}
+            </p>
+            <p className="text-xs text-good">
+              vs {duration(base.months)} paying just the minimums
+            </p>
+          </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div className="rounded-xl bg-tint p-3">
-          <p className="text-xs text-muted">Sooner by</p>
-          <p className="text-lg font-medium">{duration(monthsSaved)}</p>
-        </div>
-        <div className="rounded-xl bg-tint p-3">
-          <p className="text-xs text-muted">Interest saved</p>
-          <p className="text-lg font-medium">{money(interestSaved)}</p>
-        </div>
-      </div>
-      <p className="mt-3 text-xs text-muted">
-        An estimate. Extra money goes at your highest-interest debt first — the
-        fastest way out.
-      </p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-tint p-3">
+              <p className="text-xs text-muted">Sooner by</p>
+              <p className="text-lg font-medium">{duration(monthsSaved)}</p>
+            </div>
+            <div className="rounded-xl bg-tint p-3">
+              <p className="text-xs text-muted">Interest saved</p>
+              <p className="text-lg font-medium">{money(interestSaved)}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted">
+            An estimate. Extra money goes at your highest-interest debt first —
+            the fastest way out.
+          </p>
+        </>
+      )}
     </Card>
   );
 }

@@ -81,6 +81,27 @@ export async function hasPlaidItems(): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
+// Jamie's latest credit score, last pulled from Money App.
+export async function getMoneyAppFico(): Promise<{ score: number; date: string } | null> {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", "moneyapp_fico")
+    .maybeSingle();
+  if (error || !data) return null;
+  try {
+    const parsed = JSON.parse(data.value);
+    if (typeof parsed.score === "number" && typeof parsed.date === "string") {
+      return { score: parsed.score, date: parsed.date };
+    }
+  } catch {
+    // ignore malformed value
+  }
+  return null;
+}
+
 export async function getBills(): Promise<Bill[]> {
   const c = client();
   if (!c) return sampleBills;
