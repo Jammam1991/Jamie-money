@@ -38,6 +38,25 @@ export type Bill = {
   dueDay: number; // day of the month it's due (1-31), 0 = no set day
 };
 
+// A single manually-logged payment against a bill.
+export type BillPayment = {
+  id: string;
+  billId: string;
+  amount: number;
+  paidDate: string; // ISO date, e.g. "2026-07-01"
+  note?: string;
+};
+
+// A stored file (lease/agreement PDF) attached to a bill. `url` is a
+// short-lived signed download link generated at read time, not persisted.
+export type BillDocument = {
+  id: string;
+  billId: string;
+  fileName: string;
+  uploadedAt: string; // ISO datetime
+  url: string | null;
+};
+
 export type Divorce = {
   support: { amount: number; nextDate: string; paidThisMonth: boolean };
   split: { item: string; note: string }[];
@@ -80,6 +99,14 @@ export const bills: Bill[] = [
   { id: "7", name: "Groceries", amount: 400, dueDay: 0 },
   { id: "8", name: "Subscriptions", amount: 45, dueDay: 20 },
 ];
+
+// A couple of sample payments so demo/disconnected mode isn't a blank state.
+export const samplePayments: Record<string, BillPayment[]> = {
+  "1": [
+    { id: "1", billId: "1", amount: 1200, paidDate: "2026-06-01" },
+    { id: "2", billId: "1", amount: 1200, paidDate: "2026-05-01" },
+  ],
+};
 
 // Jamie's typical weekly take-home from massage work (starter value).
 export const weeklyIncome = 900;

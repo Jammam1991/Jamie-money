@@ -3,9 +3,12 @@ import {
   bills as sampleBills,
   debts as sampleDebts,
   divorce as sampleDivorce,
+  samplePayments,
   summary as sampleSummary,
   weeklyIncome as sampleIncome,
   type Bill,
+  type BillDocument,
+  type BillPayment,
   type Debt,
   type Divorce,
   type Summary,
@@ -89,6 +92,54 @@ export async function getBills(): Promise<Bill[]> {
     amount: Number(row.amount),
     dueDay: Number(row.due_day ?? 0),
   }));
+}
+
+// The manual payment log for one bill. Unlike getBills, an empty result here
+// is a legitimate state (no payments logged yet) — only fall back to sample
+// data when the app isn't connected to a database at all.
+export async function getBillPayments(billId: string): Promise<BillPayment[]> {
+  const c = client();
+  if (!c) return samplePayments[billId] ?? [];
+  const { data, error } = await c
+    .from("bill_payments")
+    .select("*")
+    .eq("bill_id", billId)
+    .order("paid_date", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    billId: String(row.bill_id),
+    amount: Number(row.amount),
+    paidDate: row.paid_date,
+    note: row.note ?? undefined,
+  }));
+}
+
+// The lease/agreement documents attached to one bill, each with a short-lived
+// signed download link generated on the fly (the bucket is private).
+export async function getBillDocuments(billId: string): Promise<BillDocument[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("bill_documents")
+    .select("*")
+    .eq("bill_id", billId)
+    .order("uploaded_at", { ascending: false });
+  if (error || !data) return [];
+  return Promise.all(
+    data.map(async (row) => {
+      const { data: signed } = await c.storage
+        .from("bill-documents")
+        .createSignedUrl(row.storage_path, 3600);
+      return {
+        id: String(row.id),
+        billId: String(row.bill_id),
+        fileName: row.file_name,
+        uploadedAt: row.uploaded_at,
+        url: signed?.signedUrl ?? null,
+      };
+    })
+  );
 }
 
 // Jamie's weekly massage income, stored as a single named setting.
