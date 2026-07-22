@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { client } from "./store";
+import crypto from "node:crypto";
+import { client, getBillDocuments, getBillPayments } from "./store";
 import { ADMIN_COOKIE, adminToken, isAdmin } from "./auth";
+import type { BillDocument, BillPayment } from "./data";
 
 export type ActionResult = {
   ok: boolean;
@@ -132,7 +134,141 @@ export async function deleteBill(id: string): Promise<ActionResult> {
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
+  // Deleting a bill cascades to its payments/documents rows, but Postgres
+  // can't reach into Storage — clean up the actual files first.
+  const { data: docs } = await c
+    .from("bill_documents")
+    .select("storage_path")
+    .eq("bill_id", id);
+  if (docs && docs.length > 0) {
+    await c.storage
+      .from("bill-documents")
+      .remove(docs.map((d) => d.storage_path));
+  }
   const { error } = await c.from("bills").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
+// ── Bill payments & documents ────────────────────────────────────────────────
+export async function getBillDetail(billId: string): Promise<
+  ActionResult & { payments?: BillPayment[]; documents?: BillDocument[] }
+> {
+  const [payments, documents] = await Promise.all([
+    getBillPayments(billId),
+    getBillDocuments(billId),
+  ]);
+  return { ok: true, payments, documents };
+}
+
+export async function addBillPayment(input: {
+  billId: string;
+  amount: number;
+  paidDate: string;
+  note?: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("bill_payments")
+    .insert({
+      bill_id: input.billId,
+      amount: input.amount,
+      paid_date: input.paidDate,
+      note: input.note || null,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
+}
+
+export async function updateBillPayment(input: {
+  id: string;
+  amount: number;
+  paidDate: string;
+  note?: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c
+    .from("bill_payments")
+    .update({
+      amount: input.amount,
+      paid_date: input.paidDate,
+      note: input.note || null,
+    })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
+export async function deleteBillPayment(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("bill_payments").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
+// Takes FormData (rather than a plain object) because it carries a File.
+export async function uploadBillDocument(formData: FormData): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const billId = String(formData.get("billId") ?? "");
+  const file = formData.get("file");
+  if (!billId || !(file instanceof File)) {
+    return { ok: false, error: "Missing file or bill." };
+  }
+  if (file.type !== "application/pdf") {
+    return { ok: false, error: "Only PDF files are supported." };
+  }
+
+  const path = `${billId}/${crypto.randomUUID()}.pdf`;
+  const { error: uploadError } = await c.storage
+    .from("bill-documents")
+    .upload(path, file, { contentType: "application/pdf" });
+  if (uploadError) return { ok: false, error: uploadError.message };
+
+  const { data, error } = await c
+    .from("bill_documents")
+    .insert({ bill_id: billId, file_name: file.name, storage_path: path })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/bills");
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
+}
+
+export async function deleteBillDocument(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const { data: row } = await c
+    .from("bill_documents")
+    .select("storage_path")
+    .eq("id", id)
+    .maybeSingle();
+  if (row?.storage_path) {
+    await c.storage.from("bill-documents").remove([row.storage_path]);
+  }
+  const { error } = await c.from("bill_documents").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/bills");
   return { ok: true };
