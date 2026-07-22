@@ -3,7 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
 import AdminBar from "@/components/AdminBar";
-import { isAdmin } from "@/lib/auth";
+import { getRole } from "@/lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,12 +37,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const admin = await isAdmin();
+  const role = await getRole();
   return (
     <html lang="en" className={`${geistSans.variable} antialiased`}>
       <body>
         <main className="mx-auto min-h-screen max-w-md px-4 pt-6 pb-24">
-          <AdminBar admin={admin} />
+          <AdminBar admin={role === "admin"} loggedIn={role !== null} />
           {children}
         </main>
         <BottomNav />

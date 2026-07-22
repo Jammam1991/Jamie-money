@@ -41,6 +41,14 @@ create table if not exists public.settings (
 
 alter table public.settings enable row level security;
 
+-- ── Login log (one row each time Jamie logs in) ───────────────────────────────
+create table if not exists public.logins (
+  id uuid primary key default gen_random_uuid(),
+  at timestamptz not null default now()
+);
+
+alter table public.logins enable row level security;
+
 -- ── Divorce details (a single row) ────────────────────────────────────────────
 create table if not exists public.divorce_details (
   id uuid primary key default gen_random_uuid(),

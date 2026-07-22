@@ -10,7 +10,7 @@ export default function LoginForm() {
   return (
     <form action={action} className="space-y-3">
       <label className="block text-[13px] text-muted" htmlFor="password">
-        Enter your password to make changes
+        Enter your password to continue
       </label>
       <input
         id="password"
