@@ -38,6 +38,16 @@ export type Bill = {
   dueDay: number; // day of the month it's due (1-31), 0 = no set day
 };
 
+// One entry in the ledger of money you've fronted for Jamie's bills (or that
+// he's paid back). "covered" adds to what he owes you; "repaid" subtracts.
+export type Advance = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  note: string; // what it was for, e.g. "Rent — he didn't have it"
+  amount: number; // always positive; `kind` decides the direction
+  kind: "covered" | "repaid";
+};
+
 export type Divorce = {
   support: { amount: number; nextDate: string; paidThisMonth: boolean };
   split: { item: string; note: string }[];
@@ -83,6 +93,21 @@ export const bills: Bill[] = [
 
 // Jamie's typical weekly take-home from massage work (starter value).
 export const weeklyIncome = 900;
+
+// Starter ledger — empty, since this is a fresh tracker.
+export const advances: Advance[] = [];
+
+// The most you're willing to lend him before you have to stop covering his
+// bills and let him default instead of you (starter value).
+export const defaultLimit = 2000;
+
+// Net amount Jamie currently owes you (covered minus repaid).
+export function advanceTotal(entries: Advance[]): number {
+  return entries.reduce(
+    (sum, a) => sum + (a.kind === "repaid" ? -a.amount : a.amount),
+    0
+  );
+}
 
 // Average number of weeks in a month — used to turn a monthly total into a
 // weekly target.

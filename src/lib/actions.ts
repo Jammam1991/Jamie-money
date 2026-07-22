@@ -138,6 +138,82 @@ export async function deleteBill(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+// ── Advances (covering Jamie's missed bills, and paybacks) ────────────────────
+export async function setDefaultLimit(value: number): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: "default_limit", value: String(value) }, { onConflict: "key" });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
+export async function addAdvance(input: {
+  date: string;
+  note: string;
+  amount: number;
+  kind: "covered" | "repaid";
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("advances")
+    .insert({
+      date: input.date,
+      note: input.note,
+      amount: input.amount,
+      kind: input.kind,
+      sort: nextSort(),
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
+}
+
+export async function updateAdvance(input: {
+  id: string;
+  date: string;
+  note: string;
+  amount: number;
+  kind: "covered" | "repaid";
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c
+    .from("advances")
+    .update({
+      date: input.date,
+      note: input.note,
+      amount: input.amount,
+      kind: input.kind,
+    })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
+export async function deleteAdvance(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("advances").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
 // ── Debts ─────────────────────────────────────────────────────────────────────
 export async function addDebt(input: {
   name: string;

@@ -12,6 +12,8 @@
   --good-bg: #e4f4ec;
   --warn: #9a6212;
   --warn-bg: #f9edd7;
+  --danger: #b3261e;
+  --danger-bg: #fbe4e2;
 }
 
 @theme inline {
@@ -25,6 +27,8 @@
   --color-good-bg: var(--good-bg);
   --color-warn: var(--warn);
   --color-warn-bg: var(--warn-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
   --font-sans: var(--font-geist-sans);
 }
 

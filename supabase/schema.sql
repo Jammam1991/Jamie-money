@@ -32,6 +32,23 @@ create table if not exists public.bills (
 
 alter table public.bills enable row level security;
 
+-- ── Advances (money you've covered for Jamie's bills, and paybacks) ──────────
+-- A running ledger: each row is either you covering a bill he didn't pay
+-- ('covered', adds to what he owes you) or him paying you back ('repaid',
+-- subtracts). The running total, compared against a limit in `settings`,
+-- is the "how much am I lending him before I have to stop" tracker.
+create table if not exists public.advances (
+  id uuid primary key default gen_random_uuid(),
+  date text not null,
+  note text not null,
+  amount numeric(12,2) not null default 0,
+  kind text not null default 'covered',
+  sort integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.advances enable row level security;
+
 -- ── Settings (simple key/value, e.g. weekly income) ───────────────────────────
 create table if not exists public.settings (
   key text primary key,
@@ -82,6 +99,11 @@ select * from (values
 where not exists (select 1 from public.bills);
 
 insert into public.settings (key, value) values ('weekly_income', '900')
+  on conflict (key) do nothing;
+
+-- The most you're willing to lend him before you have to stop covering his
+-- bills and let him default instead of you.
+insert into public.settings (key, value) values ('default_limit', '2000')
   on conflict (key) do nothing;
 
 insert into public.divorce_details

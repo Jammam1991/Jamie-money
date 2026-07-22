@@ -1,10 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
+  advances as sampleAdvances,
   bills as sampleBills,
   debts as sampleDebts,
+  defaultLimit as sampleDefaultLimit,
   divorce as sampleDivorce,
   summary as sampleSummary,
   weeklyIncome as sampleIncome,
+  type Advance,
   type Bill,
   type Debt,
   type Divorce,
@@ -103,6 +106,42 @@ export async function getWeeklyIncome(): Promise<number> {
   if (error || !data) return sampleIncome;
   const n = Number(data.value);
   return Number.isFinite(n) ? n : sampleIncome;
+}
+
+// The ledger of money you've covered for Jamie's bills (and paybacks). Unlike
+// bills/debts, an empty result here is a real state (nothing owed right now),
+// not a sign the table is unset — so only an actual query error falls back to
+// the sample data.
+export async function getAdvances(): Promise<Advance[]> {
+  const c = client();
+  if (!c) return sampleAdvances;
+  const { data, error } = await c
+    .from("advances")
+    .select("*")
+    .order("date", { ascending: false })
+    .order("sort", { ascending: false });
+  if (error || !data) return sampleAdvances;
+  return data.map((row) => ({
+    id: String(row.id),
+    date: row.date,
+    note: row.note,
+    amount: Number(row.amount),
+    kind: row.kind === "repaid" ? "repaid" : "covered",
+  }));
+}
+
+// The most Chris is willing to lend Jamie before he must stop covering him.
+export async function getDefaultLimit(): Promise<number> {
+  const c = client();
+  if (!c) return sampleDefaultLimit;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", "default_limit")
+    .maybeSingle();
+  if (error || !data) return sampleDefaultLimit;
+  const n = Number(data.value);
+  return Number.isFinite(n) ? n : sampleDefaultLimit;
 }
 
 export async function getDivorce(): Promise<Divorce> {
