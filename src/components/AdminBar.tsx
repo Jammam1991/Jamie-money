@@ -1,13 +1,28 @@
 import Link from "next/link";
-import { Lock, LogOut } from "lucide-react";
+import { Lock, LogOut, Activity } from "lucide-react";
 import { logout } from "@/lib/actions";
 
-// A small control in the top-right corner: a lock to log in, or a log-out
-// button once you're in. Kept subtle so Jamie's view stays clean.
-export default function AdminBar({ admin }: { admin: boolean }) {
+// A small control in the top-right corner. Once logged in, everyone gets a
+// log-out button; the admin also gets a link to Jamie's login activity.
+export default function AdminBar({
+  admin,
+  loggedIn,
+}: {
+  admin: boolean;
+  loggedIn: boolean;
+}) {
   return (
-    <div className="mb-1 flex justify-end">
-      {admin ? (
+    <div className="mb-1 flex justify-end gap-4">
+      {admin && (
+        <Link
+          href="/activity"
+          className="flex items-center gap-1 text-[12px] text-muted"
+        >
+          <Activity size={13} />
+          Activity
+        </Link>
+      )}
+      {loggedIn ? (
         <form action={logout}>
           <button
             type="submit"
@@ -20,7 +35,7 @@ export default function AdminBar({ admin }: { admin: boolean }) {
       ) : (
         <Link
           href="/login"
-          aria-label="Log in to edit"
+          aria-label="Log in"
           className="flex items-center gap-1 text-[12px] text-muted"
         >
           <Lock size={13} />

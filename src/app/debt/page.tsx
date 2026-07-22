@@ -1,14 +1,16 @@
+import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import DebtClient from "@/components/DebtClient";
 import { getDebts, getMoneyAppFico, hasPlaidItems } from "@/lib/store";
-import { isAdmin } from "@/lib/auth";
+import { getRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function DebtPage() {
-  const [debts, admin, hasBank, fico] = await Promise.all([
+  const role = await getRole();
+  if (!role) redirect("/login");
+  const [debts, hasBank, fico] = await Promise.all([
     getDebts(),
-    isAdmin(),
     hasPlaidItems(),
     getMoneyAppFico(),
   ]);
@@ -16,7 +18,12 @@ export default async function DebtPage() {
   return (
     <div>
       <PageTitle>Debt</PageTitle>
-      <DebtClient initialDebts={debts} admin={admin} hasBank={hasBank} fico={fico} />
+      <DebtClient
+        initialDebts={debts}
+        admin={role === "admin"}
+        hasBank={hasBank}
+        fico={fico}
+      />
     </div>
   );
 }

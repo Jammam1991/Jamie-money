@@ -1,10 +1,13 @@
+import { redirect } from "next/navigation";
 import HomeClient from "@/components/HomeClient";
 import { getSummary } from "@/lib/store";
-import { isAdmin } from "@/lib/auth";
+import { getRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [summary, admin] = await Promise.all([getSummary(), isAdmin()]);
-  return <HomeClient initial={summary} admin={admin} />;
+  const role = await getRole();
+  if (!role) redirect("/login");
+  const summary = await getSummary();
+  return <HomeClient initial={summary} admin={role === "admin"} />;
 }

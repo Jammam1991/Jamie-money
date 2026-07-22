@@ -1,38 +1,59 @@
 import { cookies } from "next/headers";
 import crypto from "node:crypto";
 
-// ── Simple single-password admin gate ─────────────────────────────────────────
-// Only Chris (who knows ADMIN_PASSWORD) can edit. Everyone else sees a
-// read-only app. There is no database or user table involved: the password
-// lives in an environment variable, and a signed cookie proves you logged in.
-//
-// The cookie never contains the password — it holds an HMAC derived from it, so
-// it can't be forged without knowing the password, and changing the password
-// automatically logs old sessions out.
+// ── Two-password gate ─────────────────────────────────────────────────────────
+// Jamie logs in with JAMIE_PASSWORD to VIEW the app. Chris logs in with
+// ADMIN_PASSWORD to view AND edit. Each password maps to an HMAC token kept in a
+// cookie — no user table, no stored passwords. Jamie's logins are recorded so
+// Chris can see how often he checks in.
 
-export const ADMIN_COOKIE = "jm_admin";
+export const AUTH_COOKIE = "jm_admin"; // kept the same name so old sessions survive
+export type Role = "admin" | "viewer";
 
-// The exact cookie value a logged-in admin should have, or null if no password
-// has been configured yet.
-export function adminToken(): string | null {
-  const pw = process.env.ADMIN_PASSWORD;
-  if (!pw) return null;
-  return crypto.createHmac("sha256", pw).update("jamie-admin-v1").digest("hex");
+function hmac(pw: string, salt: string): string {
+  return crypto.createHmac("sha256", pw).update(salt).digest("hex");
 }
 
-// Has Chris set up a password at all?
+export function adminToken(): string | null {
+  const pw = process.env.ADMIN_PASSWORD;
+  return pw ? hmac(pw, "jamie-admin-v1") : null;
+}
+
+export function viewerToken(): string | null {
+  const pw = process.env.JAMIE_PASSWORD;
+  return pw ? hmac(pw, "jamie-viewer-v1") : null;
+}
+
 export function adminConfigured(): boolean {
   return Boolean(process.env.ADMIN_PASSWORD);
 }
 
-// Is the current visitor logged in as admin?
-export async function isAdmin(): Promise<boolean> {
-  const expected = adminToken();
-  if (!expected) return false;
+export function viewerConfigured(): boolean {
+  return Boolean(process.env.JAMIE_PASSWORD);
+}
+
+function eq(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+
+// Which role is the current visitor, if any.
+export async function getRole(): Promise<Role | null> {
   const store = await cookies();
-  const value = store.get(ADMIN_COOKIE)?.value;
-  if (!value) return false;
-  const a = Buffer.from(value);
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  const value = store.get(AUTH_COOKIE)?.value;
+  if (!value) return null;
+  const at = adminToken();
+  if (at && eq(value, at)) return "admin";
+  const vt = viewerToken();
+  if (vt && eq(value, vt)) return "viewer";
+  return null;
+}
+
+export async function isAdmin(): Promise<boolean> {
+  return (await getRole()) === "admin";
+}
+
+export async function isLoggedIn(): Promise<boolean> {
+  return (await getRole()) !== null;
 }

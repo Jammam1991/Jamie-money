@@ -198,3 +198,28 @@ export async function getDivorce(): Promise<Divorce> {
     documentsCount: Number(data.documents_count),
   };
 }
+
+// ── Jamie's login log ─────────────────────────────────────────────────────────
+// Record one row each time Jamie logs in, and read back the count + recent times
+// for the admin-only Activity screen.
+export async function recordLogin(): Promise<void> {
+  const c = client();
+  if (!c) return;
+  await c.from("logins").insert({ at: new Date().toISOString() });
+}
+
+export type LoginLog = { count: number; recent: string[] };
+
+export async function getLogins(): Promise<LoginLog> {
+  const c = client();
+  if (!c) return { count: 0, recent: [] };
+  const { count } = await c
+    .from("logins")
+    .select("*", { count: "exact", head: true });
+  const { data } = await c
+    .from("logins")
+    .select("at")
+    .order("at", { ascending: false })
+    .limit(15);
+  return { count: count ?? 0, recent: (data ?? []).map((r) => String(r.at)) };
+}

@@ -4,8 +4,13 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "node:crypto";
-import { client, getBillDocuments, getBillPayments } from "./store";
-import { ADMIN_COOKIE, adminToken, isAdmin } from "./auth";
+import {
+  client,
+  getBillDocuments,
+  getBillPayments,
+  recordLogin,
+} from "./store";
+import { AUTH_COOKIE, adminToken, viewerToken, isAdmin } from "./auth";
 import type { BillDocument, BillPayment } from "./data";
 
 export type ActionResult = {
@@ -37,32 +42,52 @@ export async function login(
   formData: FormData
 ): Promise<ActionResult> {
   const pw = String(formData.get("password") ?? "");
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) {
-    return {
-      ok: false,
-      error: "No password is set up yet. Add ADMIN_PASSWORD in Vercel.",
-    };
+  const adminPw = process.env.ADMIN_PASSWORD;
+  const jamiePw = process.env.JAMIE_PASSWORD;
+
+  const same = (a: string, b: string) =>
+    Buffer.from(a).length === Buffer.from(b).length &&
+    Buffer.from(a).equals(Buffer.from(b));
+
+  let token: string | null = null;
+  let role: "admin" | "viewer" | null = null;
+  if (adminPw && same(pw, adminPw)) {
+    role = "admin";
+    token = adminToken();
+  } else if (jamiePw && same(pw, jamiePw)) {
+    role = "viewer";
+    token = viewerToken();
   }
-  const a = Buffer.from(pw);
-  const b = Buffer.from(expected);
-  const match = a.length === b.length && a.equals(b);
-  if (!match) return { ok: false, error: "Wrong password." };
+
+  if (!token || !role) {
+    if (!adminPw && !jamiePw) {
+      return {
+        ok: false,
+        error:
+          "No passwords set up yet. Add ADMIN_PASSWORD and JAMIE_PASSWORD in Vercel.",
+      };
+    }
+    return { ok: false, error: "Wrong password." };
+  }
 
   const store = await cookies();
-  store.set(ADMIN_COOKIE, adminToken()!, {
+  store.set(AUTH_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 30, // 30 days
   });
+
+  // Record Jamie's visit so Chris can see the login log.
+  if (role === "viewer") await recordLogin();
+
   redirect("/");
 }
 
 export async function logout(): Promise<void> {
   const store = await cookies();
-  store.delete(ADMIN_COOKIE);
+  store.delete(AUTH_COOKIE);
   redirect("/");
 }
 
