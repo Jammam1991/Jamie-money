@@ -54,6 +54,9 @@ create table if not exists public.divorce_details (
   updated_at timestamptz not null default now()
 );
 
+-- Benefits of staying married list (added later — safe to run on an existing db).
+alter table public.divorce_details add column if not exists benefits jsonb not null default '[]'::jsonb;
+
 alter table public.divorce_details enable row level security;
 
 -- ── Starter content (matches the approved mockup) ─────────────────────────────
@@ -85,10 +88,11 @@ insert into public.settings (key, value) values ('weekly_income', '900')
   on conflict (key) do nothing;
 
 insert into public.divorce_details
-  (support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, key_dates)
+  (support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, benefits, key_dates)
 select * from (values (
   900, 'Aug 1', true, 3200, 4,
   '[{"item":"House","note":"50 / 50"},{"item":"Savings","note":"50 / 50"},{"item":"Car","note":"Yours"}]'::jsonb,
+  '["Tax Discount (Joint Savings)","Health Insurance Cheaper","Life Insurance (200-300K)"]'::jsonb,
   '[{"label":"Court date","date":"Sep 12"},{"label":"Papers due","date":"Aug 20"}]'::jsonb
-)) as v(support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, key_dates)
+)) as v(support_amount, support_next_date, support_paid_this_month, lawyer_costs, documents_count, split, benefits, key_dates)
 where not exists (select 1 from public.divorce_details);
