@@ -3,6 +3,7 @@ import {
   bills as sampleBills,
   debts as sampleDebts,
   divorce as sampleDivorce,
+  owesChris as sampleOwesChris,
   samplePayments,
   summary as sampleSummary,
   weeklyIncome as sampleIncome,
@@ -11,6 +12,7 @@ import {
   type BillPayment,
   type Debt,
   type Divorce,
+  type OwesCharge,
   type Summary,
   type Txn,
 } from "./data";
@@ -222,4 +224,21 @@ export async function getLogins(): Promise<LoginLog> {
     .order("at", { ascending: false })
     .limit(15);
   return { count: count ?? 0, recent: (data ?? []).map((r) => String(r.at)) };
+}
+
+export async function getOwesCharges(): Promise<OwesCharge[]> {
+  const c = client();
+  if (!c) return sampleOwesChris;
+  const { data, error } = await c
+    .from("owes_charges")
+    .select("*")
+    .order("date", { ascending: false });
+  if (error || !data || data.length === 0) return sampleOwesChris;
+  return data.map((row) => ({
+    id: String(row.id),
+    description: row.description,
+    amount: Number(row.amount),
+    date: row.date,
+    paid: Boolean(row.paid),
+  }));
 }

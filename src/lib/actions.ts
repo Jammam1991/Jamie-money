@@ -477,3 +477,65 @@ export async function updateDivorce(input: {
   revalidatePath("/divorce");
   return { ok: true };
 }
+
+// ── Owes Chris ────────────────────────────────────────────────────────────────
+export async function addOwesCharge(input: {
+  description: string;
+  amount: number;
+  date: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("owes_charges")
+    .insert({
+      description: input.description,
+      amount: input.amount,
+      date: input.date,
+      paid: false,
+      sort: nextSort(),
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/owes");
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
+}
+
+export async function updateOwesCharge(input: {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  paid: boolean;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c
+    .from("owes_charges")
+    .update({
+      description: input.description,
+      amount: input.amount,
+      date: input.date,
+      paid: input.paid,
+    })
+    .eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/owes");
+  return { ok: true };
+}
+
+export async function deleteOwesCharge(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("owes_charges").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/owes");
+  return { ok: true };
+}

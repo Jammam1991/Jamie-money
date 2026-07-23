@@ -65,6 +65,14 @@ export type Divorce = {
   documentsCount: number;
 };
 
+export type OwesCharge = {
+  id: string;
+  description: string;
+  amount: number;
+  date: string; // ISO date, e.g. "2026-07-01"
+  paid: boolean;
+};
+
 export const summary: Summary = {
   statusLabel: "You're doing okay",
   statusNote: "You spent a little less than usual this week.",
@@ -147,3 +155,9 @@ export function moneyCents(n: number): string {
     Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   );
 }
+
+export const owesChris: OwesCharge[] = [
+  { id: "1", description: "SoCal Gas", amount: 25, date: "2026-07-15", paid: false },
+  { id: "2", description: "Car Insurance", amount: 275, date: "2026-07-10", paid: false },
+  { id: "3", description: "Health Benefits (July)", amount: 200, date: "2026-07-01", paid: false },
+];

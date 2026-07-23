@@ -26,3 +26,49 @@ export function Bar({ pct }: { pct: number }) {
 export function PageTitle({ children }: { children: ReactNode }) {
   return <h1 className="mb-4 text-xl font-medium">{children}</h1>;
 }
+
+// A thermometer gauge that fills up and changes color based on percentage.
+export function Thermometer({ current, max }: { current: number; max: number }) {
+  const pct = Math.min(100, (current / max) * 100);
+  let color = "var(--good)"; // green
+  let label = "Safe";
+
+  if (pct >= 80) {
+    color = "#dc2626"; // red
+    label = "Critical";
+  } else if (pct >= 60) {
+    color = "#ff6b35"; // orange
+    label = "Hot";
+  } else if (pct >= 40) {
+    color = "#fbbf24"; // yellow
+    label = "Warming";
+  }
+
+  return (
+    <div className="mb-6">
+      <div className="mb-4 flex items-end justify-between">
+        <div>
+          <div className="text-sm text-muted">Debt Level</div>
+          <div className="text-3xl font-bold">${current.toLocaleString("en-US", { maximumFractionDigits: 0 })}</div>
+          <div className="text-xs text-muted">of ${max.toLocaleString("en-US")} max</div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-medium" style={{ color }}>{label}</div>
+          <div className="text-2xl font-bold">{Math.round(pct)}%</div>
+        </div>
+      </div>
+
+      <div className="relative h-32 w-full rounded-lg border-2 border-border bg-tint p-2">
+        <div
+          className="absolute inset-x-2 bottom-2 rounded-md transition-all"
+          style={{
+            height: `${pct}%`,
+            backgroundColor: color,
+            opacity: 0.8,
+          }}
+        />
+        <div className="absolute inset-x-2 h-px bg-muted/30 top-1/2 transform -translate-y-1/2" />
+      </div>
+    </div>
+  );
+}
