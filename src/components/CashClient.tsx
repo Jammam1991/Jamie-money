@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
 import { Check, ChevronRight, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui";
@@ -22,6 +22,26 @@ function todayIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
   ).padStart(2, "0")}`;
+}
+
+// Tiny store for the Sunday nudge so the banner can live-update when it's
+// dismissed (localStorage alone doesn't notify the same tab).
+let nudgeListeners: (() => void)[] = [];
+function subscribeNudge(cb: () => void) {
+  nudgeListeners.push(cb);
+  return () => {
+    nudgeListeners = nudgeListeners.filter((l) => l !== cb);
+  };
+}
+function sundayNudgeVisible(): boolean {
+  return (
+    new Date().getDay() === 0 &&
+    !localStorage.getItem(`jm-sunday-nudge-${todayIso()}`)
+  );
+}
+function dismissSundayNudge() {
+  localStorage.setItem(`jm-sunday-nudge-${todayIso()}`, "seen");
+  nudgeListeners.forEach((l) => l());
 }
 
 function dayLabel(iso: string): string {
@@ -57,6 +77,16 @@ export default function CashClient({
   } | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  // Sunday pop-up: the week ends today, so remind Jamie to get everything
+  // logged. Decided on the phone's own clock (the server may be in another
+  // timezone — the server snapshot is always false), and once dismissed it
+  // stays hidden for the rest of the day.
+  const showSundayNudge = useSyncExternalStore(
+    subscribeNudge,
+    sundayNudgeVisible,
+    () => false
+  );
 
   const balance = cashBalance(entries);
   const shown = showAll ? entries : entries.slice(0, 6);
@@ -113,6 +143,27 @@ export default function CashClient({
 
   return (
     <div className="space-y-4">
+      {/* Sunday pop-up: last call to log the week. */}
+      {showSundayNudge && (
+        <div
+          className="flex items-start justify-between gap-3 rounded-2xl p-4"
+          style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
+        >
+          <p className="text-[15px]">
+            ⏰ <span className="font-semibold">It&apos;s Sunday!</span> The week
+            ends today — make sure every massage and every bit of cash from
+            this week is logged below.
+          </p>
+          <button
+            aria-label="Dismiss reminder"
+            className="shrink-0"
+            onClick={dismissSundayNudge}
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* The one number that matters: cash in his pocket right now. */}
       <div className="rounded-2xl bg-good-bg p-5 text-center">
         <p className="text-[15px] font-medium text-good">
