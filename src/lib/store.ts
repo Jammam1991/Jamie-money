@@ -4,17 +4,17 @@ import {
   debts as sampleDebts,
   divorce as sampleDivorce,
   owesChris as sampleOwesChris,
+  sampleCashLog,
   samplePayments,
-  summary as sampleSummary,
   weeklyIncome as sampleIncome,
   type Bill,
   type BillDocument,
   type BillPayment,
+  type CashEntry,
+  type CashKind,
   type Debt,
   type Divorce,
   type OwesCharge,
-  type Summary,
-  type Txn,
 } from "./data";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
@@ -51,26 +51,23 @@ export async function getDebts(): Promise<Debt[]> {
   }));
 }
 
-// The Home page's headline numbers. Falls back to the sample until Chris
-// saves real ones (or, later, the bank feed fills them in).
-export async function getSummary(): Promise<Summary> {
+// The Home page's cash log, newest first. An empty list is a legitimate state
+// (nothing logged yet) — only fall back to the sample when there's no database.
+export async function getCashLog(): Promise<CashEntry[]> {
   const c = client();
-  if (!c) return sampleSummary;
+  if (!c) return sampleCashLog;
   const { data, error } = await c
-    .from("home_summary")
+    .from("cash_log")
     .select("*")
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return sampleSummary;
-  return {
-    statusLabel: data.status_label || sampleSummary.statusLabel,
-    statusNote: data.status_note ?? "",
-    netWorth: Number(data.net_worth),
-    netWorthChange: Number(data.net_worth_change),
-    moneyIn: Number(data.money_in),
-    moneyOut: Number(data.money_out),
-    recent: Array.isArray(data.recent) ? (data.recent as Txn[]) : [],
-  };
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    kind: row.kind as CashKind,
+    amount: Number(row.amount),
+    happenedOn: row.happened_on,
+    note: row.note ?? undefined,
+  }));
 }
 
 // Has Jamie linked at least one bank for the debts feed?
@@ -115,6 +112,25 @@ export async function getBills(): Promise<Bill[]> {
     amount: Number(row.amount),
     dueDay: Number(row.due_day ?? 0),
   }));
+}
+
+// Which bills already have a payment logged this calendar month? Used to show
+// the big "Paid" checkmarks and the "left to pay" headline on the Bills page.
+export async function getPaidBillIdsThisMonth(): Promise<string[]> {
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const c = client();
+  if (!c) {
+    return Object.keys(samplePayments).filter((billId) =>
+      samplePayments[billId].some((p) => p.paidDate >= monthStart)
+    );
+  }
+  const { data, error } = await c
+    .from("bill_payments")
+    .select("bill_id")
+    .gte("paid_date", monthStart);
+  if (error || !data) return [];
+  return [...new Set(data.map((row) => String(row.bill_id)))];
 }
 
 // The manual payment log for one bill. Unlike getBills, an empty result here

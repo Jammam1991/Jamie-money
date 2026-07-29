@@ -3,22 +3,36 @@
 // Later, these values get filled from Jamie's real bank feed (Plaid) and his
 // Supabase database — the shape stays the same, only the source changes.
 
-export type Txn = {
+// One line in Jamie's cash log — the heart of the simple home screen.
+// 'massage' puts cash IN his pocket; the other three take cash OUT.
+export type CashKind = "massage" | "to_chris" | "deposit" | "spent";
+
+export type CashEntry = {
   id: string;
-  name: string;
-  kind: "coffee" | "groceries" | "pay" | "bill" | "other";
-  amount: number; // negative = money out, positive = money in
+  kind: CashKind;
+  amount: number; // always positive; `kind` decides in vs out
+  happenedOn: string; // ISO date, e.g. "2026-07-29"
+  note?: string;
 };
 
-export type Summary = {
-  statusLabel: string;
-  statusNote: string;
-  netWorth: number;
-  netWorthChange: number; // this month, + or -
-  moneyIn: number;
-  moneyOut: number;
-  recent: Txn[];
+// How each kind shows up on screen. `direction` is +1 (cash in) or -1 (cash out).
+export const CASH_KINDS: Record<
+  CashKind,
+  { emoji: string; label: string; doneLabel: string; direction: 1 | -1 }
+> = {
+  massage: { emoji: "💆", label: "I did a massage", doneLabel: "Massage", direction: 1 },
+  to_chris: { emoji: "🤝", label: "Gave cash to Chris", doneLabel: "Gave to Chris", direction: -1 },
+  deposit: { emoji: "🏦", label: "Put cash in the bank", doneLabel: "Put in bank", direction: -1 },
+  spent: { emoji: "🛒", label: "Spent some cash", doneLabel: "Spent", direction: -1 },
 };
+
+// The running balance: massages add, everything else subtracts.
+export function cashBalance(entries: CashEntry[]): number {
+  return entries.reduce(
+    (sum, e) => sum + CASH_KINDS[e.kind].direction * e.amount,
+    0
+  );
+}
 
 export type Debt = {
   id: string;
@@ -73,19 +87,13 @@ export type OwesCharge = {
   paid: boolean;
 };
 
-export const summary: Summary = {
-  statusLabel: "You're doing okay",
-  statusNote: "You spent a little less than usual this week.",
-  netWorth: 48200,
-  netWorthChange: 600,
-  moneyIn: 3100,
-  moneyOut: 2540,
-  recent: [
-    { id: "1", name: "Pay", kind: "pay", amount: 1550 },
-    { id: "2", name: "Groceries", kind: "groceries", amount: -62.1 },
-    { id: "3", name: "Coffee", kind: "coffee", amount: -4.5 },
-  ],
-};
+// A few sample cash-log lines so demo/disconnected mode isn't a blank state.
+export const sampleCashLog: CashEntry[] = [
+  { id: "1", kind: "massage", amount: 80, happenedOn: "2026-07-28" },
+  { id: "2", kind: "massage", amount: 100, happenedOn: "2026-07-27" },
+  { id: "3", kind: "to_chris", amount: 60, happenedOn: "2026-07-26" },
+  { id: "4", kind: "massage", amount: 80, happenedOn: "2026-07-25" },
+];
 
 export const debts: Debt[] = [
   { id: "1", name: "Credit card", balance: 5800, monthly: 150, paidPct: 38, apr: 22.9, minPayment: 150 },
@@ -147,13 +155,6 @@ export const divorce: Divorce = {
 export function money(n: number): string {
   const rounded = Math.round(n);
   return "$" + rounded.toLocaleString("en-US");
-}
-
-export function moneyCents(n: number): string {
-  return (
-    (n < 0 ? "-$" : "+$") +
-    Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  );
 }
 
 export const owesChris: OwesCharge[] = [

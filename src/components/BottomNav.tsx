@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import { Home, Receipt, Scale, CreditCard, AlertCircle } from "lucide-react";
 
 const tabs = [
-  { href: "/", label: "Home", Icon: Home },
+  { href: "/", label: "My Cash", Icon: Home },
   { href: "/bills", label: "Bills", Icon: Receipt },
-  { href: "/divorce", label: "Divorce", Icon: Scale },
-  { href: "/debt", label: "Debt", Icon: CreditCard },
   { href: "/owes", label: "Owes Chris", Icon: AlertCircle },
+  { href: "/debt", label: "Debt", Icon: CreditCard },
+  { href: "/divorce", label: "Divorce", Icon: Scale },
 ];
 
 export default function BottomNav() {
