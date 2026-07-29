@@ -133,6 +133,44 @@ export async function getPaidBillIdsThisMonth(): Promise<string[]> {
   return [...new Set(data.map((row) => String(row.bill_id)))];
 }
 
+// Bills that were NOT paid last month (and existed back then). After the 1st,
+// these roll over into the Bills page as "left over from last month" and get
+// added to the amount still owed.
+export async function getRolloverBillIds(): Promise<string[]> {
+  const c = client();
+  if (!c) return [];
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const firstOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
+  // Date() handles the January → December year wrap for us.
+  const prevStart = firstOf(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const monthStart = firstOf(new Date(now.getFullYear(), now.getMonth(), 1));
+
+  // Don't invent debt for months before payment tracking started: if the
+  // earliest payment ever recorded is within the current month (or there are
+  // none at all), last month wasn't being tracked yet — no rollover.
+  const { data: earliest } = await c
+    .from("bill_payments")
+    .select("paid_date")
+    .order("paid_date", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!earliest || earliest.paid_date >= monthStart) return [];
+
+  const [{ data: pays }, { data: bills }] = await Promise.all([
+    c
+      .from("bill_payments")
+      .select("bill_id")
+      .gte("paid_date", prevStart)
+      .lt("paid_date", monthStart),
+    c.from("bills").select("id, created_at").lt("created_at", monthStart),
+  ]);
+  const paid = new Set((pays ?? []).map((p) => String(p.bill_id)));
+  return (bills ?? [])
+    .map((b) => String(b.id))
+    .filter((id) => !paid.has(id));
+}
+
 // The manual payment log for one bill. Unlike getBills, an empty result here
 // is a legitimate state (no payments logged yet) — only fall back to sample
 // data when the app isn't connected to a database at all.
