@@ -1,7 +1,12 @@
 import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import BillsClient from "@/components/BillsClient";
-import { getBills, getPaidBillIdsThisMonth, getWeeklyIncome } from "@/lib/store";
+import {
+  getBills,
+  getPaidBillIdsThisMonth,
+  getRolloverBillIds,
+  getWeeklyIncome,
+} from "@/lib/store";
 import { getRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +14,11 @@ export const dynamic = "force-dynamic";
 export default async function BillsPage() {
   const role = await getRole();
   if (!role) redirect("/login");
-  const [bills, income, paidIds] = await Promise.all([
+  const [bills, income, paidIds, rolloverIds] = await Promise.all([
     getBills(),
     getWeeklyIncome(),
     getPaidBillIdsThisMonth(),
+    getRolloverBillIds(),
   ]);
 
   return (
@@ -22,6 +28,7 @@ export default async function BillsPage() {
         initialBills={bills}
         initialIncome={income}
         initialPaidIds={paidIds}
+        initialRolloverIds={rolloverIds}
         admin={role === "admin"}
       />
     </div>

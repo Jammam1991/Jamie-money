@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronRight, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui";
 import {
   CASH_KINDS,
@@ -37,9 +38,13 @@ function dayLabel(iso: string): string {
 export default function CashClient({
   initialEntries,
   admin,
+  nextMonthName,
+  nextMonthTotal,
 }: {
   initialEntries: CashEntry[];
   admin: boolean;
+  nextMonthName: string;
+  nextMonthTotal: number;
 }) {
   const [entries, setEntries] = useState<CashEntry[]>(initialEntries);
   const [picked, setPicked] = useState<CashKind | null>(null);
@@ -241,6 +246,34 @@ export default function CashClient({
             </button>
           </div>
         </Card>
+      )}
+
+      {/* Saving goal: what next month's bills will cost. Tap to see the bills. */}
+      {nextMonthTotal > 0 && (
+        <Link
+          href="/bills"
+          className="flex items-center justify-between rounded-2xl p-4"
+          style={
+            balance >= nextMonthTotal
+              ? { background: "var(--good-bg)", color: "var(--good)" }
+              : { background: "var(--warn-bg)", color: "var(--warn)" }
+          }
+        >
+          <span className="text-[15px]">
+            {balance >= nextMonthTotal ? (
+              <>🎉 You have enough for {nextMonthName}&apos;s bills!</>
+            ) : (
+              <>
+                🗓️{" "}
+                <span className="font-semibold">
+                  {money(nextMonthTotal - balance)}
+                </span>{" "}
+                more needed for {nextMonthName} bills
+              </>
+            )}
+          </span>
+          <ChevronRight size={18} className="shrink-0" />
+        </Link>
       )}
 
       {/* The story so far — tap "Show everything" to dig in. */}

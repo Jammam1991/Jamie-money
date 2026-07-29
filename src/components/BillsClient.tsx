@@ -40,15 +40,20 @@ export default function BillsClient({
   initialBills,
   initialIncome,
   initialPaidIds,
+  initialRolloverIds,
   admin,
 }: {
   initialBills: Bill[];
   initialIncome: number;
   initialPaidIds: string[];
+  initialRolloverIds: string[];
   admin: boolean;
 }) {
   const [bills, setBills] = useState<Bill[]>(initialBills);
   const [paidIds, setPaidIds] = useState<Set<string>>(new Set(initialPaidIds));
+  const [rolloverIds, setRolloverIds] = useState<Set<string>>(
+    new Set(initialRolloverIds)
+  );
   const [income, setIncome] = useState<number>(initialIncome);
   const [incomeDraft, setIncomeDraft] = useState<string>(String(initialIncome));
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -109,13 +114,25 @@ export default function BillsClient({
     () => new Date().toLocaleDateString("en-US", { month: "long" }),
     []
   );
+  const prevMonthName = useMemo(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() - 1, 1).toLocaleDateString(
+      "en-US",
+      { month: "long" }
+    );
+  }, []);
 
   const monthlyTotal = bills.reduce((s, b) => s + b.amount, 0);
   const paidTotal = bills.reduce(
     (s, b) => s + (paidIds.has(b.id) ? b.amount : 0),
     0
   );
-  const leftToPay = monthlyTotal - paidTotal;
+  // Anything not paid last month rolls over and is still owed on top of
+  // this month's bills.
+  const rolloverBills = bills.filter((b) => rolloverIds.has(b.id));
+  const rolloverTotal = rolloverBills.reduce((s, b) => s + b.amount, 0);
+  const owedTotal = monthlyTotal + rolloverTotal;
+  const leftToPay = monthlyTotal - paidTotal + rolloverTotal;
   const allPaid = leftToPay <= 0;
   const weeklyTarget = monthlyTotal / WEEKS_PER_MONTH;
 
@@ -177,6 +194,36 @@ export default function BillsClient({
     });
   }
 
+  // Settle a bill left over from last month: the payment is dated the last
+  // day of that month (so it counts for the month it covers), and the note
+  // records the day it was actually paid.
+  function handleMarkRolloverPaid(bill: Bill) {
+    setRolloverIds((r) => {
+      const next = new Set(r);
+      next.delete(bill.id);
+      return next;
+    });
+    run("Bill", async () => {
+      const now = new Date();
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      const endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+        end.getDate()
+      ).padStart(2, "0")}`;
+      const res = await addBillPayment({
+        billId: bill.id,
+        amount: bill.amount,
+        paidDate: endIso,
+        note: `Paid late (${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`,
+      });
+      if (!res.ok) {
+        setRolloverIds((r) => new Set(r).add(bill.id));
+      } else if (details[bill.id]) {
+        refreshDetail(bill.id);
+      }
+      return res;
+    });
+  }
+
   function handleUnmarkPaid(bill: Bill) {
     setPaidIds((p) => {
       const next = new Set(p);
@@ -228,11 +275,47 @@ export default function BillsClient({
             <p className="text-[15px] font-medium">Still left to pay in {monthName}</p>
             <p className="mt-1 text-5xl font-bold">{money(leftToPay)}</p>
             <p className="mt-1 text-[13px]">
-              {money(paidTotal)} of {money(monthlyTotal)} is already paid.
+              {money(paidTotal)} of {money(owedTotal)} is already paid.
+              {rolloverTotal > 0 &&
+                ` Includes ${money(rolloverTotal)} left over from ${prevMonthName}.`}
             </p>
           </>
         )}
       </div>
+
+      {/* Bills that didn't get paid last month — they roll over and stay
+          owed until they're settled. */}
+      {rolloverBills.length > 0 && (
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[13px] font-medium text-warn">
+              ⏰ Left over from {prevMonthName}
+            </p>
+            <p className="text-[13px] font-medium">{money(rolloverTotal)}</p>
+          </div>
+          <div className="divide-y divide-border">
+            {rolloverBills.map((b) => (
+              <div
+                key={b.id}
+                className="flex items-center justify-between gap-2 py-3"
+              >
+                <span className="min-w-0">
+                  <p className="truncate text-[16px]">{b.name}</p>
+                  <p className="text-xs text-muted">
+                    {money(b.amount)} · from {prevMonthName}
+                  </p>
+                </span>
+                <PaidPill
+                  paid={false}
+                  onToggle={
+                    admin ? () => handleMarkRolloverPaid(b) : undefined
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Weekly income from massage — Chris-only detail, hidden from Jamie
           so the page stays about one thing: are the bills paid? */}
