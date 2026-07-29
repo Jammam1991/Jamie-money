@@ -13,7 +13,7 @@ export default async function OwesPage() {
 
   return (
     <div>
-      <PageTitle>Short-Term Debt</PageTitle>
+      <PageTitle>What I Owe Chris</PageTitle>
       <OwesChrisClient initialCharges={charges} admin={admin} />
     </div>
   );

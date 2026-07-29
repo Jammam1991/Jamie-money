@@ -20,7 +20,6 @@ export default function OwesChrisClient({
 }) {
   const [charges, setCharges] = useState<OwesCharge[]>(initialCharges);
   const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [, startTransition] = useTransition();
 

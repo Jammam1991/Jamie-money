@@ -12,6 +12,7 @@ import {
   deleteBillPayment,
   getBillDetail,
   setWeeklyIncome,
+  unmarkBillPaid,
   updateBill,
   updateBillPayment,
   uploadBillDocument,
@@ -38,13 +39,16 @@ function dueLabel(day: number): string {
 export default function BillsClient({
   initialBills,
   initialIncome,
+  initialPaidIds,
   admin,
 }: {
   initialBills: Bill[];
   initialIncome: number;
+  initialPaidIds: string[];
   admin: boolean;
 }) {
   const [bills, setBills] = useState<Bill[]>(initialBills);
+  const [paidIds, setPaidIds] = useState<Set<string>>(new Set(initialPaidIds));
   const [income, setIncome] = useState<number>(initialIncome);
   const [incomeDraft, setIncomeDraft] = useState<string>(String(initialIncome));
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -107,9 +111,13 @@ export default function BillsClient({
   );
 
   const monthlyTotal = bills.reduce((s, b) => s + b.amount, 0);
+  const paidTotal = bills.reduce(
+    (s, b) => s + (paidIds.has(b.id) ? b.amount : 0),
+    0
+  );
+  const leftToPay = monthlyTotal - paidTotal;
+  const allPaid = leftToPay <= 0;
   const weeklyTarget = monthlyTotal / WEEKS_PER_MONTH;
-  const gap = income - weeklyTarget; // + = spare, - = short
-  const covered = gap >= 0;
 
   function saveIncome() {
     const value = Math.max(0, Math.round(Number(incomeDraft) || 0));
@@ -146,6 +154,46 @@ export default function BillsClient({
     run("Bill", () => deleteBill(id));
   }
 
+  // One-tap paid/unpaid flips for Chris. Marking logs a real payment row for
+  // today; unmarking removes this month's newest one.
+  function handleMarkPaid(bill: Bill) {
+    setPaidIds((p) => new Set(p).add(bill.id));
+    run("Bill", async () => {
+      const res = await addBillPayment({
+        billId: bill.id,
+        amount: bill.amount,
+        paidDate: todayIso(),
+      });
+      if (!res.ok) {
+        setPaidIds((p) => {
+          const next = new Set(p);
+          next.delete(bill.id);
+          return next;
+        });
+      } else if (details[bill.id]) {
+        refreshDetail(bill.id);
+      }
+      return res;
+    });
+  }
+
+  function handleUnmarkPaid(bill: Bill) {
+    setPaidIds((p) => {
+      const next = new Set(p);
+      next.delete(bill.id);
+      return next;
+    });
+    run("Bill", async () => {
+      const res = await unmarkBillPaid(bill.id);
+      if (!res.ok) {
+        setPaidIds((p) => new Set(p).add(bill.id));
+      } else if (details[bill.id]) {
+        refreshDetail(bill.id);
+      }
+      return res;
+    });
+  }
+
   return (
     <div className="space-y-4">
       {status && (
@@ -161,30 +209,36 @@ export default function BillsClient({
         </div>
       )}
 
-      {/* Headline: what he needs per week */}
+      {/* Headline: what's still left to pay this month */}
       <div
-        className="rounded-2xl p-4"
+        className="rounded-2xl p-5 text-center"
         style={{
-          background: covered ? "var(--good-bg)" : "var(--warn-bg)",
-          color: covered ? "var(--good)" : "var(--warn)",
+          background: allPaid ? "var(--good-bg)" : "var(--warn-bg)",
+          color: allPaid ? "var(--good)" : "var(--warn)",
         }}
       >
-        <p className="text-[13px]">To cover {monthName}&apos;s bills, you need</p>
-        <p className="text-3xl font-medium">
-          {money(weeklyTarget)}
-          <span className="text-[13px] font-normal">/week</span>
-        </p>
-        <p className="mt-1 text-[13px]">
-          {covered
-            ? `You're on track — about ${money(gap)}/week to spare.`
-            : `You're about ${money(-gap)}/week short right now.`}
-        </p>
+        {allPaid ? (
+          <>
+            <p className="text-[15px] font-medium">🎉 All {monthName} bills are paid!</p>
+            <p className="mt-1 text-5xl font-bold">{money(0)}</p>
+            <p className="mt-1 text-[13px]">Nothing left to pay this month.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-[15px] font-medium">Still left to pay in {monthName}</p>
+            <p className="mt-1 text-5xl font-bold">{money(leftToPay)}</p>
+            <p className="mt-1 text-[13px]">
+              {money(paidTotal)} of {money(monthlyTotal)} is already paid.
+            </p>
+          </>
+        )}
       </div>
 
-      {/* Weekly income from massage */}
-      <Card>
-        <p className="text-[13px] text-muted">Your weekly massage income</p>
-        {admin ? (
+      {/* Weekly income from massage — Chris-only detail, hidden from Jamie
+          so the page stays about one thing: are the bills paid? */}
+      {admin && (
+        <Card>
+          <p className="text-[13px] text-muted">Jamie&apos;s weekly massage income</p>
           <div className="mt-2 flex items-center gap-2">
             <div className="relative flex-1">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
@@ -206,13 +260,12 @@ export default function BillsClient({
               Save
             </button>
           </div>
-        ) : (
-          <p className="mt-1 text-2xl font-medium">{money(income)}/week</p>
-        )}
-        <p className="mt-2 text-xs text-muted">
-          About {money(income * WEEKS_PER_MONTH)}/month coming in.
-        </p>
-      </Card>
+          <p className="mt-2 text-xs text-muted">
+            About {money(income * WEEKS_PER_MONTH)}/month coming in — bills need
+            about {money(weeklyTarget)}/week.
+          </p>
+        </Card>
+      )}
 
       {/* Bills list */}
       <Card>
@@ -231,8 +284,8 @@ export default function BillsClient({
                 onSave={(data) => handleUpdate({ ...data, id: b.id })}
               />
             ) : (
-              <div key={b.id} className="py-2.5">
-                <div className="flex items-center justify-between">
+              <div key={b.id} className="py-3">
+                <div className="flex items-center justify-between gap-2">
                   <button
                     className="flex min-w-0 items-center gap-1.5 text-left"
                     onClick={() => toggleExpand(b.id)}
@@ -245,12 +298,24 @@ export default function BillsClient({
                       }}
                     />
                     <span className="min-w-0">
-                      <p className="truncate text-[15px]">{b.name}</p>
-                      <p className="text-xs text-muted">{dueLabel(b.dueDay)}</p>
+                      <p className="truncate text-[16px]">{b.name}</p>
+                      <p className="text-xs text-muted">
+                        {money(b.amount)} · {dueLabel(b.dueDay)}
+                      </p>
                     </span>
                   </button>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[15px]">{money(b.amount)}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <PaidPill
+                      paid={paidIds.has(b.id)}
+                      onToggle={
+                        admin
+                          ? () =>
+                              paidIds.has(b.id)
+                                ? handleUnmarkPaid(b)
+                                : handleMarkPaid(b)
+                          : undefined
+                      }
+                    />
                     {admin && (
                       <>
                         <button
@@ -302,6 +367,32 @@ export default function BillsClient({
           ))}
       </Card>
     </div>
+  );
+}
+
+// The big green "Paid" / gray "Not yet" badge on each bill. For Chris it's a
+// button that flips the state; for Jamie it's just a label.
+function PaidPill({ paid, onToggle }: { paid: boolean; onToggle?: () => void }) {
+  const style = paid
+    ? { background: "var(--good-bg)", color: "var(--good)" }
+    : { background: "var(--tint)", color: "var(--muted)" };
+  const label = paid ? "✓ Paid" : "Not yet";
+  if (!onToggle) {
+    return (
+      <span className="rounded-full px-3 py-1.5 text-[13px] font-semibold" style={style}>
+        {label}
+      </span>
+    );
+  }
+  return (
+    <button
+      className="rounded-full px-3 py-1.5 text-[13px] font-semibold active:scale-95"
+      style={style}
+      onClick={onToggle}
+      title={paid ? "Unmark paid" : "Mark paid"}
+    >
+      {label}
+    </button>
   );
 }
 

@@ -10,8 +10,8 @@ import {
   getBillPayments,
   recordLogin,
 } from "./store";
-import { AUTH_COOKIE, adminToken, viewerToken, isAdmin } from "./auth";
-import type { BillDocument, BillPayment } from "./data";
+import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
+import type { BillDocument, BillPayment, CashKind } from "./data";
 
 export type ActionResult = {
   ok: boolean;
@@ -34,6 +34,12 @@ const NOT_ALLOWED: ActionResult = {
 // can never change Jamie's data.
 async function guard(): Promise<ActionResult | null> {
   return (await isAdmin()) ? null : NOT_ALLOWED;
+}
+
+// The cash log is the one place Jamie himself writes, so it only needs a
+// login (either password), not the admin one.
+async function guardLoggedIn(): Promise<ActionResult | null> {
+  return (await isLoggedIn()) ? null : NOT_ALLOWED;
 }
 
 // ── Login / logout ────────────────────────────────────────────────────────────
@@ -246,6 +252,31 @@ export async function deleteBillPayment(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+// One-tap "unmark paid" for Chris: remove the newest payment logged this
+// month for a bill, so the big checkmark flips back to "Not yet".
+export async function unmarkBillPaid(billId: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const { data: row } = await c
+    .from("bill_payments")
+    .select("id")
+    .eq("bill_id", billId)
+    .gte("paid_date", monthStart)
+    .order("paid_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!row) return { ok: true };
+  const { error } = await c.from("bill_payments").delete().eq("id", row.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bills");
+  return { ok: true };
+}
+
 // Takes FormData (rather than a plain object) because it carries a File.
 export async function uploadBillDocument(formData: FormData): Promise<ActionResult> {
   const denied = await guard();
@@ -396,42 +427,38 @@ export async function importDebts(
   return { ok: true, ids: (data ?? []).map((d) => String(d.id)) };
 }
 
-// ── Home summary ──────────────────────────────────────────────────────────────
-export async function updateSummary(input: {
-  statusLabel: string;
-  statusNote: string;
-  netWorth: number;
-  netWorthChange: number;
-  moneyIn: number;
-  moneyOut: number;
-  recent: { id: string; name: string; kind: string; amount: number }[];
+// ── Cash log (the simple home screen) ─────────────────────────────────────────
+// Jamie taps a big button, picks an amount, and one of these rows is written.
+export async function addCashEntry(input: {
+  kind: CashKind;
+  amount: number;
 }): Promise<ActionResult> {
-  const denied = await guard();
+  const denied = await guardLoggedIn();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
-
-  const row = {
-    status_label: input.statusLabel,
-    status_note: input.statusNote,
-    net_worth: input.netWorth,
-    net_worth_change: input.netWorthChange,
-    money_in: input.moneyIn,
-    money_out: input.moneyOut,
-    recent: input.recent,
-    updated_at: new Date().toISOString(),
-  };
-
-  // Home numbers live in a single row: update it if present, else add it.
-  const { data: existing } = await c
-    .from("home_summary")
+  if (!(input.amount > 0)) return { ok: false, error: "Pick an amount first." };
+  const { data, error } = await c
+    .from("cash_log")
+    .insert({
+      kind: input.kind,
+      amount: input.amount,
+      happened_on: new Date().toISOString().split("T")[0],
+    })
     .select("id")
-    .limit(1)
-    .maybeSingle();
-  const { error } = existing
-    ? await c.from("home_summary").update(row).eq("id", existing.id)
-    : await c.from("home_summary").insert(row);
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return { ok: true, id: data?.id ? String(data.id) : undefined };
+}
 
+// Undo for a mis-tap (Jamie) or cleanup (Chris).
+export async function deleteCashEntry(id: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("cash_log").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
   return { ok: true };
