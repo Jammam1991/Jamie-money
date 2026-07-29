@@ -13,7 +13,7 @@ import {
 import { addCashEntry, deleteCashEntry } from "@/lib/actions";
 
 // Quick-tap amounts so Jamie almost never has to type a number.
-const MASSAGE_AMOUNTS = [60, 80, 100, 120];
+const MASSAGE_AMOUNTS = [100, 150, 200, 250, 300];
 const OUT_AMOUNTS = [20, 40, 60, 100];
 
 function todayIso(): string {
@@ -44,6 +44,7 @@ export default function CashClient({
   const [entries, setEntries] = useState<CashEntry[]>(initialEntries);
   const [picked, setPicked] = useState<CashKind | null>(null);
   const [amountDraft, setAmountDraft] = useState("");
+  const [dateDraft, setDateDraft] = useState(todayIso());
   const [status, setStatus] = useState<{
     ok: boolean;
     msg: string;
@@ -58,16 +59,18 @@ export default function CashClient({
   function openPicker(kind: CashKind) {
     setPicked(kind);
     setAmountDraft("");
+    setDateDraft(todayIso());
     setStatus(null);
   }
 
   function save(amount: number) {
     if (!picked || !(amount > 0) || pending) return;
     const kind = picked;
+    const happenedOn = dateDraft || todayIso();
     setPicked(null);
     setStatus(null);
     startTransition(async () => {
-      const res = await addCashEntry({ kind, amount });
+      const res = await addCashEntry({ kind, amount, happenedOn });
       if (!res.ok) {
         setStatus({ ok: false, msg: res.error ?? "Couldn't save." });
         return;
@@ -76,7 +79,7 @@ export default function CashClient({
         id: res.id ?? "tmp-" + Date.now(),
         kind,
         amount,
-        happenedOn: todayIso(),
+        happenedOn,
       };
       setEntries((e) => [entry, ...e]);
       setStatus({
@@ -175,11 +178,28 @@ export default function CashClient({
               <X size={20} />
             </button>
           </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[15px] text-muted">
+              When? {dateDraft === todayIso() ? "(today)" : ""}
+            </span>
+            <input
+              type="date"
+              className="rounded-xl border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]"
+              value={dateDraft}
+              max={todayIso()}
+              onChange={(e) => setDateDraft(e.target.value)}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            {chips.map((a) => (
+            {chips.map((a, i) => (
               <button
                 key={a}
-                className="rounded-xl border border-border bg-tint py-4 text-xl font-semibold active:scale-[0.98]"
+                className={
+                  "rounded-xl border border-border bg-tint py-4 text-xl font-semibold active:scale-[0.98]" +
+                  (i === chips.length - 1 && chips.length % 2 === 1
+                    ? " col-span-2"
+                    : "")
+                }
                 onClick={() => save(a)}
                 disabled={pending}
               >

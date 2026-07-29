@@ -432,18 +432,22 @@ export async function importDebts(
 export async function addCashEntry(input: {
   kind: CashKind;
   amount: number;
+  happenedOn?: string; // ISO date; defaults to today
 }): Promise<ActionResult> {
   const denied = await guardLoggedIn();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
   if (!(input.amount > 0)) return { ok: false, error: "Pick an amount first." };
+  const happenedOn = /^\d{4}-\d{2}-\d{2}$/.test(input.happenedOn ?? "")
+    ? input.happenedOn!
+    : new Date().toISOString().split("T")[0];
   const { data, error } = await c
     .from("cash_log")
     .insert({
       kind: input.kind,
       amount: input.amount,
-      happened_on: new Date().toISOString().split("T")[0],
+      happened_on: happenedOn,
     })
     .select("id")
     .single();
