@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, Check, Plus } from "lucide-react";
+import Link from "next/link";
+import { Trash2, Check, ChevronRight, Plus } from "lucide-react";
 import { Card, Thermometer } from "@/components/ui";
-import { money, type OwesCharge } from "@/lib/data";
+import { money, type CashEntry, type OwesCharge } from "@/lib/data";
 import { addOwesCharge, deleteOwesCharge, updateOwesCharge } from "@/lib/actions";
 
 const inputClass =
@@ -11,11 +12,22 @@ const inputClass =
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
+function formatGivenDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 export default function OwesChrisClient({
   initialCharges,
+  givenEntries,
   admin,
 }: {
   initialCharges: OwesCharge[];
+  givenEntries: CashEntry[]; // "Gave cash to Chris" taps from the home screen
   admin: boolean;
 }) {
   const [charges, setCharges] = useState<OwesCharge[]>(initialCharges);
@@ -27,7 +39,15 @@ export default function OwesChrisClient({
   const [newAmount, setNewAmount] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
 
-  const total = charges.reduce((sum, c) => sum + (c.paid ? 0 : c.amount), 0);
+  // What Chris covered (unpaid charges) minus every "Gave cash to Chris"
+  // Jamie logged on the home screen. The same numbers show on both pages.
+  const chargesTotal = charges.reduce(
+    (sum, c) => sum + (c.paid ? 0 : c.amount),
+    0
+  );
+  const givenTotal = givenEntries.reduce((sum, e) => sum + e.amount, 0);
+  const total = Math.max(0, chargesTotal - givenTotal);
+  const ahead = givenTotal - chargesTotal; // > 0 = Jamie has overpaid
   const maxThermometer = 3000;
 
   function run(
@@ -103,11 +123,47 @@ export default function OwesChrisClient({
       <Thermometer current={total} max={maxThermometer} />
 
       <Card className="mb-4">
-        <div className="flex items-baseline justify-between">
-          <div className="text-sm text-muted">Total Owed</div>
-          <div className="text-3xl font-bold">{money(total)}</div>
+        <div className="flex items-baseline justify-between text-[15px]">
+          <span className="text-muted">What Chris covered</span>
+          <span>{money(chargesTotal)}</span>
         </div>
+        <div className="flex items-baseline justify-between text-[15px]">
+          <span className="text-muted">Cash you gave him</span>
+          <span style={{ color: "var(--good)" }}>−{money(givenTotal)}</span>
+        </div>
+        <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
+          <span className="text-sm text-muted">Still owed</span>
+          <span className="text-3xl font-bold">{money(total)}</span>
+        </div>
+        {ahead > 0 && (
+          <p className="mt-1 text-[13px]" style={{ color: "var(--good)" }}>
+            🎉 You&apos;re ahead by {money(ahead)}.
+          </p>
+        )}
       </Card>
+
+      {/* The hand-overs logged on the home screen — proof the balance moved. */}
+      {givenEntries.length > 0 && (
+        <Card className="mb-4">
+          <p className="mb-1 text-[13px] text-muted">🤝 Cash you gave Chris</p>
+          {givenEntries.slice(0, 5).map((e) => (
+            <div
+              key={e.id}
+              className="flex items-center justify-between border-t border-border py-2 text-[15px] first:border-t-0"
+            >
+              <span className="text-muted">{formatGivenDate(e.happenedOn)}</span>
+              <span style={{ color: "var(--good)" }}>−{money(e.amount)}</span>
+            </div>
+          ))}
+          <Link
+            href="/"
+            className="mt-2 flex items-center justify-center gap-1 rounded-lg border border-border py-2 text-sm text-muted"
+          >
+            See the full log
+            <ChevronRight size={15} />
+          </Link>
+        </Card>
+      )}
 
       {status && (
         <div
