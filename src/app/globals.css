@@ -12,6 +12,14 @@
   --good-bg: #e4f4ec;
   --warn: #9a6212;
   --warn-bg: #f9edd7;
+
+  /* Bill groups: credit cards (score-moving) vs everyday bills */
+  --fico: #6d28d9;
+  --fico-bg: #f2ecff;
+  --fico-line: #ded0ff;
+  --reg: #0e6f8a;
+  --reg-bg: #e4f3f8;
+  --reg-line: #c8e6ef;
 }
 
 @theme inline {

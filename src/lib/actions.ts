@@ -145,6 +145,7 @@ export async function addBill(input: {
   name: string;
   amount: number;
   dueDay: number;
+  fico: boolean;
 }): Promise<ActionResult> {
   const denied = await guard();
   if (denied) return denied;
@@ -156,6 +157,7 @@ export async function addBill(input: {
       name: input.name,
       amount: input.amount,
       due_day: input.dueDay,
+      fico: input.fico,
       sort: nextSort(),
     })
     .select("id")
@@ -170,6 +172,7 @@ export async function updateBill(input: {
   name: string;
   amount: number;
   dueDay: number;
+  fico: boolean;
 }): Promise<ActionResult> {
   const denied = await guard();
   if (denied) return denied;
@@ -177,7 +180,12 @@ export async function updateBill(input: {
   if (!c) return NOT_CONNECTED;
   const { error } = await c
     .from("bills")
-    .update({ name: input.name, amount: input.amount, due_day: input.dueDay })
+    .update({
+      name: input.name,
+      amount: input.amount,
+      due_day: input.dueDay,
+      fico: input.fico,
+    })
     .eq("id", input.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/bills");

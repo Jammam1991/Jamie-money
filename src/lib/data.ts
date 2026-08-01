@@ -50,6 +50,7 @@ export type Bill = {
   name: string;
   amount: number; // dollars per month
   dueDay: number; // day of the month it's due (1-31), 0 = no set day
+  fico: boolean; // true = a credit card, so paying it moves his credit score
 };
 
 // A single manually-logged payment against a bill.
@@ -106,14 +107,14 @@ export const debtFreeBy = "early 2028";
 // Common monthly bills, preloaded so the Bills page has something to show.
 // Jamie can edit, delete, or add to these.
 export const bills: Bill[] = [
-  { id: "1", name: "Rent", amount: 1200, dueDay: 1 },
-  { id: "2", name: "Car payment", amount: 320, dueDay: 5 },
-  { id: "3", name: "Car insurance", amount: 140, dueDay: 10 },
-  { id: "4", name: "Phone", amount: 70, dueDay: 12 },
-  { id: "5", name: "Internet", amount: 60, dueDay: 15 },
-  { id: "6", name: "Utilities", amount: 180, dueDay: 18 },
-  { id: "7", name: "Groceries", amount: 400, dueDay: 0 },
-  { id: "8", name: "Subscriptions", amount: 45, dueDay: 20 },
+  { id: "1", name: "Rent", amount: 1200, dueDay: 1, fico: false },
+  { id: "2", name: "Car payment", amount: 320, dueDay: 5, fico: true },
+  { id: "3", name: "Car insurance", amount: 140, dueDay: 10, fico: false },
+  { id: "4", name: "Phone", amount: 70, dueDay: 12, fico: false },
+  { id: "5", name: "Internet", amount: 60, dueDay: 15, fico: false },
+  { id: "6", name: "Utilities", amount: 180, dueDay: 18, fico: false },
+  { id: "7", name: "Groceries", amount: 400, dueDay: 0, fico: false },
+  { id: "8", name: "Subscriptions", amount: 45, dueDay: 20, fico: false },
 ];
 
 // A couple of sample payments so demo/disconnected mode isn't a blank state.
