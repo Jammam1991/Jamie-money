@@ -300,11 +300,24 @@ export default function JobVsBusinessClient({
             Pop your numbers in below and we&apos;ll show you who&apos;s ahead. 👇
           </p>
         ) : winner === null ? (
-          <p className="text-[15px]">🤝 Dead heat — the money comes out the same.</p>
+          <p className="text-[15px] leading-snug">
+            🤝 At the current pace of the gym, it&apos;s a dead heat — the money
+            comes out the same.
+          </p>
         ) : (
           <>
+            {/* Leads with "right now" so this reads as today's scoreboard, not
+                a verdict that's already been handed down. */}
             <p className="text-[15px] leading-snug">
-              {SIDES[winner].emoji} <b>{SIDES[winner].label}</b> puts{" "}
+              {winner === "job" ? (
+                <>
+                  At the current pace of the gym, 💼 <b>this job</b> puts{" "}
+                </>
+              ) : (
+                <>
+                  At its current pace, 🚀 <b>the gym</b> puts{" "}
+                </>
+              )}
               <b style={{ color: "var(--good)" }}>{money(Math.abs(gap))}</b> more
               in your pocket every month.
             </p>
