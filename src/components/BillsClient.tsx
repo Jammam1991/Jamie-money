@@ -20,6 +20,8 @@ import {
 
 const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
+const dateInputClass =
+  "rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
@@ -218,15 +220,16 @@ export default function BillsClient({
     run("Bill", () => deleteBill(id));
   }
 
-  // One-tap paid/unpaid flips for Chris. Marking logs a real payment row for
-  // today; unmarking removes this month's newest one.
-  function handleMarkPaid(bill: Bill) {
+  // Tap "Not yet" to pick a date, then confirm to log a real payment row for
+  // that date. Unmarking removes this month's newest payment. Open to Jamie
+  // and Chris alike — either of them might be the one who actually paid it.
+  function handleMarkPaid(bill: Bill, paidDate: string) {
     setPaidIds((p) => new Set(p).add(bill.id));
     run("Bill", async () => {
       const res = await addBillPayment({
         billId: bill.id,
         amount: bill.amount,
-        paidDate: todayIso(),
+        paidDate: paidDate || todayIso(),
       });
       if (!res.ok) {
         setPaidIds((p) => {
@@ -243,8 +246,8 @@ export default function BillsClient({
 
   // Settle a bill left over from last month: the payment is dated the last
   // day of that month (so it counts for the month it covers), and the note
-  // records the day it was actually paid.
-  function handleMarkRolloverPaid(bill: Bill) {
+  // records the actual date it was paid, picked from the date field.
+  function handleMarkRolloverPaid(bill: Bill, actualPaidDate: string) {
     setRolloverIds((r) => {
       const next = new Set(r);
       next.delete(bill.id);
@@ -256,11 +259,12 @@ export default function BillsClient({
       const endIso = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
         end.getDate()
       ).padStart(2, "0")}`;
+      const paidOn = actualPaidDate || todayIso();
       const res = await addBillPayment({
         billId: bill.id,
         amount: bill.amount,
         paidDate: endIso,
-        note: `Paid late (${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`,
+        note: `Paid late (${shortDate(paidOn)})`,
       });
       if (!res.ok) {
         setRolloverIds((r) => new Set(r).add(bill.id));
@@ -364,11 +368,8 @@ export default function BillsClient({
                 expanded={expandedId === b.id}
                 admin={admin}
                 onOpen={() => toggleExpand(b.id)}
-                onTogglePaid={
-                  admin
-                    ? () => (paidIds.has(b.id) ? handleUnmarkPaid(b) : handleMarkPaid(b))
-                    : undefined
-                }
+                onMarkPaid={(date) => handleMarkPaid(b, date)}
+                onUnmarkPaid={() => handleUnmarkPaid(b)}
                 onEdit={() => setEditingId(b.id)}
                 onDelete={() => handleDelete(b.id)}
                 detail={
@@ -473,26 +474,12 @@ export default function BillsClient({
           </div>
           <div className="space-y-2">
             {rolloverBills.map((b) => (
-              <div
+              <RolloverRow
                 key={b.id}
-                className="flex items-center justify-between gap-2 rounded-xl bg-card p-3"
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="text-xl" aria-hidden>
-                    {billEmoji(b.name, b.fico)}
-                  </span>
-                  <span className="min-w-0">
-                    <p className="truncate text-[16px] font-semibold">{b.name}</p>
-                    <p className="text-xs text-muted">
-                      {money(b.amount)} · from {prevMonthName}
-                    </p>
-                  </span>
-                </span>
-                <PaidPill
-                  paid={false}
-                  onToggle={admin ? () => handleMarkRolloverPaid(b) : undefined}
-                />
-              </div>
+                bill={b}
+                prevMonthName={prevMonthName}
+                onMarkPaid={(date) => handleMarkRolloverPaid(b, date)}
+              />
             ))}
           </div>
         </section>
@@ -538,8 +525,9 @@ export default function BillsClient({
   );
 }
 
-// One bill: a tappable card that opens its history underneath. Jamie only ever
-// taps the name; the edit/delete buttons are Chris-only.
+// One bill: a tappable card that opens its history underneath. Jamie can mark
+// bills paid and pick the date just like Chris; the edit/delete buttons stay
+// Chris-only.
 function BillRow({
   bill,
   color,
@@ -547,7 +535,8 @@ function BillRow({
   expanded,
   admin,
   onOpen,
-  onTogglePaid,
+  onMarkPaid,
+  onUnmarkPaid,
   onEdit,
   onDelete,
   detail,
@@ -558,11 +547,13 @@ function BillRow({
   expanded: boolean;
   admin: boolean;
   onOpen: () => void;
-  onTogglePaid?: () => void;
+  onMarkPaid: (date: string) => void;
+  onUnmarkPaid: () => void;
   onEdit: () => void;
   onDelete: () => void;
   detail: React.ReactNode;
 }) {
+  const [picking, setPicking] = useState(false);
   return (
     <div className="rounded-xl bg-card">
       <div className="flex items-center justify-between gap-2 p-3">
@@ -588,7 +579,11 @@ function BillRow({
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-2">
-          <PaidPill paid={paid} onToggle={onTogglePaid} />
+          <PaidPill
+            paid={paid}
+            onMarkClick={() => setPicking(true)}
+            onUnmark={onUnmarkPaid}
+          />
           {admin && (
             <>
               <button aria-label="Edit" className="text-muted" onClick={onEdit}>
@@ -601,34 +596,127 @@ function BillRow({
           )}
         </div>
       </div>
+      {picking && (
+        <div className="px-3 pb-3">
+          <MarkPaidPanel
+            color={color}
+            onConfirm={(date) => {
+              setPicking(false);
+              onMarkPaid(date);
+            }}
+            onCancel={() => setPicking(false)}
+          />
+        </div>
+      )}
       {expanded && <div className="px-3 pb-3">{detail}</div>}
     </div>
   );
 }
 
-// The big green "Paid" / gray "Not yet" badge on each bill. For Chris it's a
-// button that flips the state; for Jamie it's just a label.
-function PaidPill({ paid, onToggle }: { paid: boolean; onToggle?: () => void }) {
+// One "left over from last month" bill. Same mark-paid-with-a-date flow as a
+// regular bill; it disappears from this list once it's settled.
+function RolloverRow({
+  bill,
+  prevMonthName,
+  onMarkPaid,
+}: {
+  bill: Bill;
+  prevMonthName: string;
+  onMarkPaid: (date: string) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  return (
+    <div className="rounded-xl bg-card p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span className="text-xl" aria-hidden>
+            {billEmoji(bill.name, bill.fico)}
+          </span>
+          <span className="min-w-0">
+            <p className="truncate text-[16px] font-semibold">{bill.name}</p>
+            <p className="text-xs text-muted">
+              {money(bill.amount)} · from {prevMonthName}
+            </p>
+          </span>
+        </span>
+        <PaidPill paid={false} onMarkClick={() => setPicking(true)} onUnmark={() => {}} />
+      </div>
+      {picking && (
+        <div className="mt-2">
+          <MarkPaidPanel
+            color="var(--warn)"
+            onConfirm={(date) => {
+              setPicking(false);
+              onMarkPaid(date);
+            }}
+            onCancel={() => setPicking(false)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The "Paid" / "Not yet" badge on each bill. Anyone can tap it — marking paid
+// opens a date picker below; tapping an already-paid bill unmarks it.
+function PaidPill({
+  paid,
+  onMarkClick,
+  onUnmark,
+}: {
+  paid: boolean;
+  onMarkClick: () => void;
+  onUnmark: () => void;
+}) {
   const style = paid
     ? { background: "var(--good-bg)", color: "var(--good)" }
     : { background: "var(--warn-bg)", color: "var(--warn)" };
   const label = paid ? "✓ Paid" : "Not yet";
-  if (!onToggle) {
-    return (
-      <span className="rounded-full px-3 py-1.5 text-[13px] font-bold" style={style}>
-        {label}
-      </span>
-    );
-  }
   return (
     <button
       className="rounded-full px-3 py-1.5 text-[13px] font-bold active:scale-95"
       style={style}
-      onClick={onToggle}
+      onClick={paid ? onUnmark : onMarkClick}
       title={paid ? "Unmark paid" : "Mark paid"}
     >
       {label}
     </button>
+  );
+}
+
+// The date picker that drops down when marking a bill paid, so whoever's
+// paying it can say which day the money actually went out.
+function MarkPaidPanel({
+  color,
+  onConfirm,
+  onCancel,
+}: {
+  color: string;
+  onConfirm: (date: string) => void;
+  onCancel: () => void;
+}) {
+  const [date, setDate] = useState(todayIso());
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-tint p-2">
+      <span className="text-[13px] text-muted">Paid on</span>
+      <input
+        type="date"
+        className={dateInputClass + " flex-1 min-w-[140px]"}
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+      />
+      <button className="rounded-lg px-2 py-1.5 text-xs text-muted" onClick={onCancel}>
+        Cancel
+      </button>
+      <button
+        className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-white"
+        style={{ background: color }}
+        onClick={() => onConfirm(date || todayIso())}
+      >
+        <Check size={13} />
+        Mark paid
+      </button>
+    </div>
   );
 }
 
@@ -759,6 +847,15 @@ function formatDate(iso: string): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+}
+
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
 }
 

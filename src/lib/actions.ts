@@ -225,13 +225,15 @@ export async function getBillDetail(billId: string): Promise<
   return { ok: true, payments, documents };
 }
 
+// Marking a bill paid is open to Jamie as well as Chris — either of them
+// might be the one who actually paid it, so this only needs a login.
 export async function addBillPayment(input: {
   billId: string;
   amount: number;
   paidDate: string;
   note?: string;
 }): Promise<ActionResult> {
-  const denied = await guard();
+  const denied = await guardLoggedIn();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
@@ -284,10 +286,10 @@ export async function deleteBillPayment(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-// One-tap "unmark paid" for Chris: remove the newest payment logged this
-// month for a bill, so the big checkmark flips back to "Not yet".
+// One-tap "unmark paid" for Jamie or Chris: remove the newest payment logged
+// this month for a bill, so the big checkmark flips back to "Not yet".
 export async function unmarkBillPaid(billId: string): Promise<ActionResult> {
-  const denied = await guard();
+  const denied = await guardLoggedIn();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
