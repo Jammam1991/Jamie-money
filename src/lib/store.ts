@@ -296,3 +296,109 @@ export async function getOwesCharges(): Promise<OwesCharge[]> {
     paid: Boolean(row.paid),
   }));
 }
+
+// ── Job vs Business ──────────────────────────────────────────────────────────
+export interface JobVsBusiness {
+  id: string;
+  businessMonthlyIncome: number;
+  jobSalaryAnnual: number;
+  benefitsValue: number;
+  businessHoursPerWeek: number;
+  jobHoursPerWeek: number;
+}
+
+export async function getJobVsBusiness(): Promise<JobVsBusiness | null> {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from("job_vs_business")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    id: String(data.id),
+    businessMonthlyIncome: Number(data.business_monthly_income),
+    jobSalaryAnnual: Number(data.job_salary_annual),
+    benefitsValue: Number(data.benefits_value),
+    businessHoursPerWeek: Number(data.business_hours_per_week),
+    jobHoursPerWeek: Number(data.job_hours_per_week),
+  };
+}
+
+export interface ProCon {
+  id: string;
+  type: "business_pro" | "business_con" | "job_pro" | "job_con";
+  text: string;
+  sort: number;
+}
+
+export async function getProsCons(): Promise<ProCon[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("business_pros_cons")
+    .select("*")
+    .order("sort");
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    type: row.type as ProCon["type"],
+    text: row.text,
+    sort: Number(row.sort),
+  }));
+}
+
+export interface JobPosting {
+  id: string;
+  companyName: string;
+  roleTitle: string;
+  salary: string | null;
+  link: string | null;
+  status: "Interested" | "Applied" | "Interview" | "Offer" | "Rejected";
+  notes: string | null;
+  createdAt: string;
+}
+
+export async function getJobPostings(): Promise<JobPosting[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("job_postings")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    companyName: row.company_name,
+    roleTitle: row.role_title,
+    salary: row.salary,
+    link: row.link,
+    status: row.status as JobPosting["status"],
+    notes: row.notes,
+    createdAt: row.created_at,
+  }));
+}
+
+export interface DecisionEntry {
+  id: string;
+  entryDate: string;
+  notes: string;
+  createdAt: string;
+}
+
+export async function getDecisionJournal(): Promise<DecisionEntry[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("decision_journal")
+    .select("*")
+    .order("entry_date", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    entryDate: row.entry_date,
+    notes: row.notes,
+    createdAt: row.created_at,
+  }));
+}

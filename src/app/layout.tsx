@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
 import { getRole } from "@/lib/auth";
@@ -44,6 +45,7 @@ export default async function RootLayout({
       <body>
         <main className="mx-auto min-h-screen max-w-md px-4 pt-6 pb-24">
           <AdminBar admin={role === "admin"} loggedIn={role !== null} />
+          <Header />
           <UpdateNotice />
           {children}
         </main>
