@@ -118,6 +118,31 @@ export default function JobVsBusinessClient({
     notes: "",
   });
 
+  // A save that quietly does nothing looks identical to a broken button, so
+  // every request goes through here and any failure gets said out loud.
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const send = async (
+    url: string,
+    init: RequestInit
+  ): Promise<Record<string, unknown> | null> => {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok) {
+        setProblem(null);
+        return await res.json().catch(() => ({}));
+      }
+      setProblem(
+        res.status === 503
+          ? "Not saved — this page isn't hooked up to the database yet. Chris needs to finish the setup."
+          : "Not saved — that didn't go through. Give it another go."
+      );
+    } catch {
+      setProblem("Not saved — looks like you're offline right now.");
+    }
+    return null;
+  };
+
   // Typing updates the screen right away; the save waits for the field to lose
   // focus so we aren't firing a request on every keystroke.
   const setField = (key: keyof JobVsBusiness, value: number) =>
@@ -126,7 +151,7 @@ export default function JobVsBusinessClient({
   const saveField = async (key: keyof JobVsBusiness) => {
     const column = COLUMN[key];
     if (!column) return;
-    await fetch("/api/job-vs-business", {
+    await send("/api/job-vs-business", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [column]: comparison[key] ?? 0 }),
@@ -136,25 +161,23 @@ export default function JobVsBusinessClient({
   const addProCon = async (type: ProCon["type"], text: string) => {
     const clean = text.trim();
     if (!clean) return;
-    const res = await fetch("/api/pros-cons", {
+    const created = await send("/api/pros-cons", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, text: clean, sort: prosCons.length }),
     });
-    if (!res.ok) return;
-    const created = await res.json();
-    setProsCons((list) => [...list, created]);
+    if (created) setProsCons((list) => [...list, created as unknown as ProCon]);
   };
 
   const deleteProCon = async (id: string) => {
     setProsCons((list) => list.filter((p) => p.id !== id));
-    await fetch(`/api/pros-cons/${id}`, { method: "DELETE" });
+    await send(`/api/pros-cons/${id}`, { method: "DELETE" });
   };
 
   const addPosting = async () => {
     if (!newPostingForm.company_name.trim() || !newPostingForm.role_title.trim())
       return;
-    const res = await fetch("/api/job-postings", {
+    const created = await send("/api/job-postings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -166,8 +189,8 @@ export default function JobVsBusinessClient({
         notes: newPostingForm.notes || null,
       }),
     });
-    if (res.ok) {
-      setPostings([await res.json(), ...postings]);
+    if (created) {
+      setPostings([created as unknown as JobPosting, ...postings]);
       setNewPostingForm({
         company_name: "",
         role_title: "",
@@ -184,7 +207,7 @@ export default function JobVsBusinessClient({
     status: JobPosting["status"]
   ) => {
     setPostings(postings.map((p) => (p.id === id ? { ...p, status } : p)));
-    await fetch(`/api/job-postings/${id}`, {
+    await send(`/api/job-postings/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -193,12 +216,12 @@ export default function JobVsBusinessClient({
 
   const deletePosting = async (id: string) => {
     setPostings(postings.filter((p) => p.id !== id));
-    await fetch(`/api/job-postings/${id}`, { method: "DELETE" });
+    await send(`/api/job-postings/${id}`, { method: "DELETE" });
   };
 
   const addJournalEntry = async () => {
     if (!newJournalForm.notes.trim()) return;
-    const res = await fetch("/api/decision-journal", {
+    const created = await send("/api/decision-journal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -206,8 +229,8 @@ export default function JobVsBusinessClient({
         notes: newJournalForm.notes,
       }),
     });
-    if (res.ok) {
-      setJournal([await res.json(), ...journal]);
+    if (created) {
+      setJournal([created as unknown as DecisionEntry, ...journal]);
       setNewJournalForm({
         date: new Date().toISOString().split("T")[0],
         notes: "",
@@ -218,7 +241,7 @@ export default function JobVsBusinessClient({
 
   const deleteJournalEntry = async (id: string) => {
     setJournal(journal.filter((j) => j.id !== id));
-    await fetch(`/api/decision-journal/${id}`, { method: "DELETE" });
+    await send(`/api/decision-journal/${id}`, { method: "DELETE" });
   };
 
   // ── The math behind the face-off ───────────────────────────────────────────
@@ -242,6 +265,15 @@ export default function JobVsBusinessClient({
 
   return (
     <div className="space-y-5 pb-8">
+      {problem && (
+        <div
+          className="rounded-2xl px-4 py-3 text-[14px] leading-snug"
+          style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
+        >
+          {problem}
+        </div>
+      )}
+
       {/* ── The face-off ──────────────────────────────────────────────────── */}
       <div className="relative">
         <div className="grid grid-cols-2 gap-2.5">
@@ -809,7 +841,7 @@ function ProConList({
             <Plus size={15} /> Add your own
           </button>
 
-          {items.length === 0 && unused.length > 0 && (
+          {unused.length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {unused.slice(0, 4).map((s) => (
                 <button
