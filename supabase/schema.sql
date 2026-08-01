@@ -26,6 +26,7 @@ create table if not exists public.bills (
   name text not null,
   amount numeric(12,2) not null default 0,
   due_day integer not null default 0,
+  fico boolean not null default false, -- true = credit card (affects credit score)
   sort integer not null default 0,
   created_at timestamptz not null default now()
 );

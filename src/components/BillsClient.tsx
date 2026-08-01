@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Plus, Trash2, Check, Pencil, Upload, FileText, ChevronDown } from "lucide-react";
+import { Plus, Trash2, Check, Pencil, Upload, FileText } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money, WEEKS_PER_MONTH, type Bill, type BillDocument, type BillPayment } from "@/lib/data";
 import {
@@ -23,8 +23,51 @@ const inputClass =
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
+// The two big buckets on this page. FICO bills are the credit cards — paying
+// those on time is what moves Jamie's credit score.
+type Group = "fico" | "regular";
+
+const GROUPS: Record<
+  Group,
+  { emoji: string; title: string; blurb: string; color: string; bg: string; line: string }
+> = {
+  fico: {
+    emoji: "💳",
+    title: "FICO Bills",
+    blurb: "Credit cards — paying these on time grows your credit score.",
+    color: "var(--fico)",
+    bg: "var(--fico-bg)",
+    line: "var(--fico-line)",
+  },
+  regular: {
+    emoji: "🏠",
+    title: "Regular Bills",
+    blurb: "Everything else you pay every month.",
+    color: "var(--reg)",
+    bg: "var(--reg-bg)",
+    line: "var(--reg-line)",
+  },
+};
+
+// A friendly picture for each bill so the list can be read at a glance.
+function billEmoji(name: string, fico: boolean): string {
+  const n = name.toLowerCase();
+  if (/rent|apartment|house|home|mortgage/.test(n)) return "🏠";
+  if (/insur/.test(n)) return "🛡️";
+  if (/car|auto|truck|vehicle/.test(n)) return "🚗";
+  if (/phone|cell|mobile/.test(n)) return "📱";
+  if (/internet|wifi|cable/.test(n)) return "📶";
+  if (/util|electric|power|water|gas/.test(n)) return "💡";
+  if (/grocer|food/.test(n)) return "🛒";
+  if (/subscri|netflix|spotify|stream/.test(n)) return "📺";
+  if (/gym|fitness/.test(n)) return "🏋️";
+  if (/student|school|tuition/.test(n)) return "🎓";
+  if (fico) return "💳";
+  return "🧾";
+}
+
 function dueLabel(day: number): string {
-  if (!day) return "monthly";
+  if (!day) return "any time this month";
   const suffix =
     day % 10 === 1 && day !== 11
       ? "st"
@@ -33,7 +76,7 @@ function dueLabel(day: number): string {
         : day % 10 === 3 && day !== 13
           ? "rd"
           : "th";
-  return `due ${day}${suffix}`;
+  return `due the ${day}${suffix}`;
 }
 
 export default function BillsClient({
@@ -57,7 +100,7 @@ export default function BillsClient({
   const [income, setIncome] = useState<number>(initialIncome);
   const [incomeDraft, setIncomeDraft] = useState<string>(String(initialIncome));
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [addingIn, setAddingIn] = useState<Group | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
@@ -135,6 +178,10 @@ export default function BillsClient({
   const leftToPay = monthlyTotal - paidTotal + rolloverTotal;
   const allPaid = leftToPay <= 0;
   const weeklyTarget = monthlyTotal / WEEKS_PER_MONTH;
+  const donePct = owedTotal > 0 ? Math.round((paidTotal / owedTotal) * 100) : 100;
+
+  const ficoBills = bills.filter((b) => b.fico);
+  const regularBills = bills.filter((b) => !b.fico);
 
   function saveIncome() {
     const value = Math.max(0, Math.round(Number(incomeDraft) || 0));
@@ -146,7 +193,7 @@ export default function BillsClient({
   function handleAdd(bill: Omit<Bill, "id">) {
     const tid = String(tempId.current--);
     setBills((b) => [...b, { ...bill, id: tid }]);
-    setAdding(false);
+    setAddingIn(null);
     run("Bill", async () => {
       const res = await addBill(bill);
       // Swap the temporary id for the real database id so a later edit/delete
@@ -241,6 +288,127 @@ export default function BillsClient({
     });
   }
 
+  function renderGroup(group: Group, groupBills: Bill[]) {
+    const cfg = GROUPS[group];
+    const total = groupBills.reduce((s, b) => s + b.amount, 0);
+    const paidCount = groupBills.filter((b) => paidIds.has(b.id)).length;
+    const pct = groupBills.length
+      ? Math.round((paidCount / groupBills.length) * 100)
+      : 0;
+
+    // A group with no bills is only worth showing to Chris, who can fill it.
+    if (groupBills.length === 0 && !admin) return null;
+
+    return (
+      <section
+        className="overflow-hidden rounded-2xl border"
+        style={{ background: cfg.bg, borderColor: cfg.line }}
+      >
+        <div className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2
+                className="flex items-center gap-2 text-[19px] font-bold"
+                style={{ color: cfg.color }}
+              >
+                <span aria-hidden>{cfg.emoji}</span>
+                {cfg.title}
+              </h2>
+              <p className="mt-0.5 text-[13px] text-muted">{cfg.blurb}</p>
+            </div>
+            <p
+              className="shrink-0 text-right text-[17px] font-bold"
+              style={{ color: cfg.color }}
+            >
+              {money(total)}
+              <span className="block text-[11px] font-medium text-muted">
+                a month
+              </span>
+            </p>
+          </div>
+
+          {groupBills.length > 0 && (
+            <>
+              <div
+                className="mt-3 h-2.5 w-full overflow-hidden rounded-full"
+                style={{ background: cfg.line }}
+              >
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${pct}%`, background: cfg.color }}
+                />
+              </div>
+              <p className="mt-1.5 text-[13px] font-medium" style={{ color: cfg.color }}>
+                {paidCount} of {groupBills.length} paid this month
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="space-y-2 px-2 pb-2">
+          {groupBills.map((b) =>
+            editingId === b.id ? (
+              <div key={b.id} className="rounded-xl bg-card p-3">
+                <BillForm
+                  initial={b}
+                  onCancel={() => setEditingId(null)}
+                  onSave={(data) => handleUpdate({ ...data, id: b.id })}
+                />
+              </div>
+            ) : (
+              <BillRow
+                key={b.id}
+                bill={b}
+                color={cfg.color}
+                paid={paidIds.has(b.id)}
+                expanded={expandedId === b.id}
+                admin={admin}
+                onOpen={() => toggleExpand(b.id)}
+                onTogglePaid={
+                  admin
+                    ? () => (paidIds.has(b.id) ? handleUnmarkPaid(b) : handleMarkPaid(b))
+                    : undefined
+                }
+                onEdit={() => setEditingId(b.id)}
+                onDelete={() => handleDelete(b.id)}
+                detail={
+                  <BillDetail
+                    billId={b.id}
+                    admin={admin}
+                    loading={details[b.id]?.loading ?? true}
+                    payments={details[b.id]?.payments ?? []}
+                    documents={details[b.id]?.documents ?? []}
+                    onRefresh={() => refreshDetail(b.id)}
+                  />
+                }
+              />
+            )
+          )}
+
+          {admin &&
+            (addingIn === group ? (
+              <div className="rounded-xl bg-card p-3">
+                <BillForm
+                  defaultFico={group === "fico"}
+                  onCancel={() => setAddingIn(null)}
+                  onSave={handleAdd}
+                />
+              </div>
+            ) : (
+              <button
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed py-2.5 text-sm font-medium"
+                style={{ borderColor: cfg.color, color: cfg.color }}
+                onClick={() => setAddingIn(group)}
+              >
+                <Plus size={16} />
+                Add a {group === "fico" ? "credit card" : "bill"}
+              </button>
+            ))}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {status && (
@@ -258,23 +426,30 @@ export default function BillsClient({
 
       {/* Headline: what's still left to pay this month */}
       <div
-        className="rounded-2xl p-5 text-center"
+        className="rounded-2xl p-5 text-center text-white"
         style={{
-          background: allPaid ? "var(--good-bg)" : "var(--warn-bg)",
-          color: allPaid ? "var(--good)" : "var(--warn)",
+          background: allPaid
+            ? "linear-gradient(135deg, #1a8f68, #0f6f7a)"
+            : "linear-gradient(135deg, #f0821e, #d2432f)",
         }}
       >
         {allPaid ? (
           <>
-            <p className="text-[15px] font-medium">🎉 All {monthName} bills are paid!</p>
+            <p className="text-[15px] font-semibold">🎉 All {monthName} bills are paid!</p>
             <p className="mt-1 text-5xl font-bold">{money(0)}</p>
-            <p className="mt-1 text-[13px]">Nothing left to pay this month.</p>
+            <p className="mt-1 text-[13px] opacity-90">Nothing left to pay this month.</p>
           </>
         ) : (
           <>
-            <p className="text-[15px] font-medium">Still left to pay in {monthName}</p>
+            <p className="text-[15px] font-semibold">Still left to pay in {monthName}</p>
             <p className="mt-1 text-5xl font-bold">{money(leftToPay)}</p>
-            <p className="mt-1 text-[13px]">
+            <div className="mx-auto mt-3 h-2.5 max-w-xs overflow-hidden rounded-full bg-white/30">
+              <div
+                className="h-full rounded-full bg-white transition-all"
+                style={{ width: `${donePct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-[13px] opacity-90">
               {money(paidTotal)} of {money(owedTotal)} is already paid.
               {rolloverTotal > 0 &&
                 ` Includes ${money(rolloverTotal)} left over from ${prevMonthName}.`}
@@ -286,36 +461,46 @@ export default function BillsClient({
       {/* Bills that didn't get paid last month — they roll over and stay
           owed until they're settled. */}
       {rolloverBills.length > 0 && (
-        <Card>
+        <section
+          className="rounded-2xl border p-4"
+          style={{ background: "var(--warn-bg)", borderColor: "#eddcb6" }}
+        >
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[13px] font-medium text-warn">
+            <p className="text-[15px] font-bold text-warn">
               ⏰ Left over from {prevMonthName}
             </p>
-            <p className="text-[13px] font-medium">{money(rolloverTotal)}</p>
+            <p className="text-[15px] font-bold text-warn">{money(rolloverTotal)}</p>
           </div>
-          <div className="divide-y divide-border">
+          <div className="space-y-2">
             {rolloverBills.map((b) => (
               <div
                 key={b.id}
-                className="flex items-center justify-between gap-2 py-3"
+                className="flex items-center justify-between gap-2 rounded-xl bg-card p-3"
               >
-                <span className="min-w-0">
-                  <p className="truncate text-[16px]">{b.name}</p>
-                  <p className="text-xs text-muted">
-                    {money(b.amount)} · from {prevMonthName}
-                  </p>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="text-xl" aria-hidden>
+                    {billEmoji(b.name, b.fico)}
+                  </span>
+                  <span className="min-w-0">
+                    <p className="truncate text-[16px] font-semibold">{b.name}</p>
+                    <p className="text-xs text-muted">
+                      {money(b.amount)} · from {prevMonthName}
+                    </p>
+                  </span>
                 </span>
                 <PaidPill
                   paid={false}
-                  onToggle={
-                    admin ? () => handleMarkRolloverPaid(b) : undefined
-                  }
+                  onToggle={admin ? () => handleMarkRolloverPaid(b) : undefined}
                 />
               </div>
             ))}
           </div>
-        </Card>
+        </section>
       )}
+
+      {/* The two big buckets: credit cards first, then everything else. */}
+      {renderGroup("fico", ficoBills)}
+      {renderGroup("regular", regularBills)}
 
       {/* Weekly income from massage — Chris-only detail, hidden from Jamie
           so the page stays about one thing: are the bills paid? */}
@@ -349,106 +534,74 @@ export default function BillsClient({
           </p>
         </Card>
       )}
+    </div>
+  );
+}
 
-      {/* Bills list */}
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[13px] text-muted">{monthName} bills</p>
-          <p className="text-[13px] font-medium">{money(monthlyTotal)}/mo</p>
-        </div>
-
-        <div className="divide-y divide-border">
-          {bills.map((b) =>
-            editingId === b.id ? (
-              <BillForm
-                key={b.id}
-                initial={b}
-                onCancel={() => setEditingId(null)}
-                onSave={(data) => handleUpdate({ ...data, id: b.id })}
-              />
-            ) : (
-              <div key={b.id} className="py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    className="flex min-w-0 items-center gap-1.5 text-left"
-                    onClick={() => toggleExpand(b.id)}
-                  >
-                    <ChevronDown
-                      size={14}
-                      className="shrink-0 text-muted transition-transform"
-                      style={{
-                        transform: expandedId === b.id ? "rotate(0deg)" : "rotate(-90deg)",
-                      }}
-                    />
-                    <span className="min-w-0">
-                      <p className="truncate text-[16px]">{b.name}</p>
-                      <p className="text-xs text-muted">
-                        {money(b.amount)} · {dueLabel(b.dueDay)}
-                      </p>
-                    </span>
-                  </button>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <PaidPill
-                      paid={paidIds.has(b.id)}
-                      onToggle={
-                        admin
-                          ? () =>
-                              paidIds.has(b.id)
-                                ? handleUnmarkPaid(b)
-                                : handleMarkPaid(b)
-                          : undefined
-                      }
-                    />
-                    {admin && (
-                      <>
-                        <button
-                          aria-label="Edit"
-                          className="text-muted"
-                          onClick={() => setEditingId(b.id)}
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          aria-label="Delete"
-                          className="text-muted"
-                          onClick={() => handleDelete(b.id)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {expandedId === b.id && (
-                  <BillDetail
-                    billId={b.id}
-                    admin={admin}
-                    loading={details[b.id]?.loading ?? true}
-                    payments={details[b.id]?.payments ?? []}
-                    documents={details[b.id]?.documents ?? []}
-                    onRefresh={() => refreshDetail(b.id)}
-                  />
-                )}
-              </div>
-            )
+// One bill: a tappable card that opens its history underneath. Jamie only ever
+// taps the name; the edit/delete buttons are Chris-only.
+function BillRow({
+  bill,
+  color,
+  paid,
+  expanded,
+  admin,
+  onOpen,
+  onTogglePaid,
+  onEdit,
+  onDelete,
+  detail,
+}: {
+  bill: Bill;
+  color: string;
+  paid: boolean;
+  expanded: boolean;
+  admin: boolean;
+  onOpen: () => void;
+  onTogglePaid?: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  detail: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl bg-card">
+      <div className="flex items-center justify-between gap-2 p-3">
+        <button
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          onClick={onOpen}
+          aria-expanded={expanded}
+        >
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl"
+            style={{ background: "var(--tint)" }}
+            aria-hidden
+          >
+            {billEmoji(bill.name, bill.fico)}
+          </span>
+          <span className="min-w-0">
+            <p className="truncate text-[17px] font-semibold" style={{ color }}>
+              {bill.name}
+            </p>
+            <p className="text-[13px] text-muted">
+              {money(bill.amount)} · {dueLabel(bill.dueDay)}
+            </p>
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <PaidPill paid={paid} onToggle={onTogglePaid} />
+          {admin && (
+            <>
+              <button aria-label="Edit" className="text-muted" onClick={onEdit}>
+                <Pencil size={16} />
+              </button>
+              <button aria-label="Delete" className="text-muted" onClick={onDelete}>
+                <Trash2 size={16} />
+              </button>
+            </>
           )}
         </div>
-
-        {admin &&
-          (adding ? (
-            <div className="pt-2">
-              <BillForm onCancel={() => setAdding(false)} onSave={handleAdd} />
-            </div>
-          ) : (
-            <button
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-              onClick={() => setAdding(true)}
-            >
-              <Plus size={16} />
-              Add a bill
-            </button>
-          ))}
-      </Card>
+      </div>
+      {expanded && <div className="px-3 pb-3">{detail}</div>}
     </div>
   );
 }
@@ -458,18 +611,18 @@ export default function BillsClient({
 function PaidPill({ paid, onToggle }: { paid: boolean; onToggle?: () => void }) {
   const style = paid
     ? { background: "var(--good-bg)", color: "var(--good)" }
-    : { background: "var(--tint)", color: "var(--muted)" };
+    : { background: "var(--warn-bg)", color: "var(--warn)" };
   const label = paid ? "✓ Paid" : "Not yet";
   if (!onToggle) {
     return (
-      <span className="rounded-full px-3 py-1.5 text-[13px] font-semibold" style={style}>
+      <span className="rounded-full px-3 py-1.5 text-[13px] font-bold" style={style}>
         {label}
       </span>
     );
   }
   return (
     <button
-      className="rounded-full px-3 py-1.5 text-[13px] font-semibold active:scale-95"
+      className="rounded-full px-3 py-1.5 text-[13px] font-bold active:scale-95"
       style={style}
       onClick={onToggle}
       title={paid ? "Unmark paid" : "Mark paid"}
@@ -482,16 +635,19 @@ function PaidPill({ paid, onToggle }: { paid: boolean; onToggle?: () => void }) 
 // Small inline form for adding or editing one bill.
 function BillForm({
   initial,
+  defaultFico,
   onCancel,
   onSave,
 }: {
   initial?: Bill;
+  defaultFico?: boolean;
   onCancel: () => void;
   onSave: (data: Omit<Bill, "id">) => void;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [amount, setAmount] = useState(String(initial?.amount ?? ""));
   const [dueDay, setDueDay] = useState(String(initial?.dueDay ?? ""));
+  const [fico, setFico] = useState(initial?.fico ?? defaultFico ?? false);
 
   function submit() {
     const trimmed = name.trim();
@@ -500,11 +656,12 @@ function BillForm({
       name: trimmed,
       amount: Math.max(0, Math.round(Number(amount) || 0)),
       dueDay: Math.min(31, Math.max(0, Math.round(Number(dueDay) || 0))),
+      fico,
     });
   }
 
   return (
-    <div className="space-y-3 py-3">
+    <div className="space-y-3 py-1">
       <div>
         <label className="mb-1 block text-[13px] text-muted">Bill name</label>
         <input
@@ -538,6 +695,21 @@ function BillForm({
           />
         </div>
       </div>
+      <div>
+        <label className="mb-1 block text-[13px] text-muted">Which list?</label>
+        <div className="flex gap-2">
+          <GroupChoice
+            active={fico}
+            group="fico"
+            onClick={() => setFico(true)}
+          />
+          <GroupChoice
+            active={!fico}
+            group="regular"
+            onClick={() => setFico(false)}
+          />
+        </div>
+      </div>
       <div className="flex justify-end gap-2">
         <button className="rounded-lg px-3 py-2 text-sm text-muted" onClick={onCancel}>
           Cancel
@@ -552,6 +724,31 @@ function BillForm({
         </button>
       </div>
     </div>
+  );
+}
+
+function GroupChoice({
+  active,
+  group,
+  onClick,
+}: {
+  active: boolean;
+  group: Group;
+  onClick: () => void;
+}) {
+  const cfg = GROUPS[group];
+  return (
+    <button
+      className="flex-1 rounded-lg border px-3 py-2 text-[13px] font-semibold"
+      style={{
+        borderColor: active ? cfg.color : "var(--border)",
+        background: active ? cfg.bg : "transparent",
+        color: active ? cfg.color : "var(--muted)",
+      }}
+      onClick={onClick}
+    >
+      {cfg.emoji} {cfg.title}
+    </button>
   );
 }
 
@@ -645,14 +842,14 @@ function BillDetail({
   }
 
   return (
-    <div className="mt-2 space-y-4 rounded-xl bg-tint p-3">
+    <div className="space-y-4 rounded-xl bg-tint p-3">
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : (
         <>
           {/* Payment history */}
           <div>
-            <p className="mb-1.5 text-[13px] font-medium">Payment history</p>
+            <p className="mb-1.5 text-[13px] font-bold">🧾 Payment history</p>
             {payments.length === 0 && !addingPayment && (
               <p className="text-xs text-muted">No payments logged yet.</p>
             )}
@@ -712,7 +909,7 @@ function BillDetail({
 
           {/* Lease / agreement documents */}
           <div>
-            <p className="mb-1.5 text-[13px] font-medium">Documents</p>
+            <p className="mb-1.5 text-[13px] font-bold">📄 Documents</p>
             {documents.length === 0 && (
               <p className="text-xs text-muted">No documents uploaded yet.</p>
             )}

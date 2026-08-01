@@ -111,6 +111,7 @@ export async function getBills(): Promise<Bill[]> {
     name: row.name,
     amount: Number(row.amount),
     dueDay: Number(row.due_day ?? 0),
+    fico: Boolean(row.fico),
   }));
 }
 
