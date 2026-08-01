@@ -57,3 +57,13 @@ export async function isAdmin(): Promise<boolean> {
 export async function isLoggedIn(): Promise<boolean> {
   return (await getRole()) !== null;
 }
+
+const VIEW_AS_COOKIE = "jm_view_as";
+
+export async function isViewingAsJamie(): Promise<boolean> {
+  const admin = await isAdmin();
+  if (!admin) return false;
+
+  const store = await cookies();
+  return store.get(VIEW_AS_COOKIE)?.value === "jamie";
+}

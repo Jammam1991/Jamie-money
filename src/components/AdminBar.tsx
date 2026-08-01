@@ -1,19 +1,33 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { Lock, LogOut, Activity } from "lucide-react";
-import { logout } from "@/lib/actions";
+import { logout, toggleViewAsJamie } from "@/lib/actions";
 
 // A small control in the top-right corner. Once logged in, everyone gets a
-// log-out button; the admin also gets a link to Jamie's login activity.
+// log-out button; the admin also gets a link to Jamie's login activity and
+// a toggle to view as Jamie.
 export default function AdminBar({
   admin,
   loggedIn,
+  viewingAsJamie,
 }: {
   admin: boolean;
   loggedIn: boolean;
+  viewingAsJamie: boolean;
 }) {
+  const [toggling, setToggling] = useState(false);
+
+  const handleToggle = async () => {
+    setToggling(true);
+    await toggleViewAsJamie();
+    setToggling(false);
+  };
+
   return (
     <div className="mb-1 flex justify-end gap-4">
-      {admin && (
+      {admin && !viewingAsJamie && (
         <Link
           href="/activity"
           className="flex items-center gap-1 text-[12px] text-muted"
@@ -21,6 +35,15 @@ export default function AdminBar({
           <Activity size={13} />
           Activity
         </Link>
+      )}
+      {admin && (
+        <button
+          onClick={handleToggle}
+          disabled={toggling}
+          className="flex items-center gap-1 text-[12px] text-muted hover:opacity-70 disabled:opacity-50 transition-opacity"
+        >
+          {viewingAsJamie ? "← Admin" : "View as Jamie"}
+        </button>
       )}
       {loggedIn ? (
         <form action={logout}>

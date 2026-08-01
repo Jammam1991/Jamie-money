@@ -5,7 +5,7 @@ import BottomNav from "@/components/BottomNav";
 import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
-import { getRole } from "@/lib/auth";
+import { getRole, isViewingAsJamie } from "@/lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,11 +40,17 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const role = await getRole();
+  const viewingAsJamie = await isViewingAsJamie();
   return (
     <html lang="en" className={`${geistSans.variable} antialiased`}>
       <body>
+        {viewingAsJamie && (
+          <div className="sticky top-0 z-30 bg-blue-100 border-b-2 border-blue-300 px-4 py-2 text-center text-sm font-medium text-blue-900">
+            👁️ Viewing as Jamie
+          </div>
+        )}
         <main className="mx-auto min-h-screen max-w-md px-4 pt-6 pb-24">
-          <AdminBar admin={role === "admin"} loggedIn={role !== null} />
+          <AdminBar admin={role === "admin"} loggedIn={role !== null} viewingAsJamie={viewingAsJamie} />
           <Header />
           <UpdateNotice />
           {children}

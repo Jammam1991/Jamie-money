@@ -97,6 +97,30 @@ export async function logout(): Promise<void> {
   redirect("/");
 }
 
+const VIEW_AS_COOKIE = "jm_view_as";
+
+export async function toggleViewAsJamie(): Promise<void> {
+  const admin = await isAdmin();
+  if (!admin) return;
+
+  const store = await cookies();
+  const current = store.get(VIEW_AS_COOKIE)?.value;
+
+  if (current === "jamie") {
+    store.delete(VIEW_AS_COOKIE);
+  } else {
+    store.set(VIEW_AS_COOKIE, "jamie", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24, // 1 day
+    });
+  }
+
+  revalidatePath("/");
+}
+
 // A sort value that keeps newly added rows in the order they were created.
 // Seconds fit inside Postgres' integer column; milliseconds would overflow.
 function nextSort(): number {

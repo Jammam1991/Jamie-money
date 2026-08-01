@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, Scale, CreditCard, AlertCircle } from "lucide-react";
+import { Home, Receipt, AlertCircle } from "lucide-react";
 
 const tabs = [
   { href: "/", label: "My Cash", Icon: Home },
   { href: "/bills", label: "Bills", Icon: Receipt },
   { href: "/owes", label: "Owes Chris", Icon: AlertCircle },
-  { href: "/debt", label: "Debt", Icon: CreditCard },
-  { href: "/divorce", label: "Divorce", Icon: Scale },
 ];
 
 export default function BottomNav() {
