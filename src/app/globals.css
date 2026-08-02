@@ -42,4 +42,11 @@ body {
   color: var(--text);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent text distortion during scroll on iOS Safari */
+body {
+  -webkit-transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
 }

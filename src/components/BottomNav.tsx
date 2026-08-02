@@ -13,7 +13,7 @@ const tabs = [
 export default function BottomNav() {
   const pathname = usePathname();
   return (
-    <nav className="fixed bottom-0 inset-x-0 border-t border-border bg-card">
+    <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card">
       <div className="mx-auto flex max-w-md">
         {tabs.map(({ href, label, Icon }) => {
           const active = pathname === href;

@@ -179,7 +179,15 @@ export default function BillsClient({
   const owedTotal = monthlyTotal + rolloverTotal;
   const leftToPay = monthlyTotal - paidTotal + rolloverTotal;
   const allPaid = leftToPay <= 0;
-  const weeklyTarget = monthlyTotal / WEEKS_PER_MONTH;
+
+  // Calculate weeks remaining in current month
+  const now = new Date();
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const daysRemaining = lastDay.getDate() - now.getDate() + 1;
+  const weeksRemaining = Math.ceil(daysRemaining / 7);
+
+  // Weekly target with rollover: divide what's owed by weeks remaining
+  const weeklyTarget = weeksRemaining > 0 ? leftToPay / weeksRemaining : leftToPay;
   const donePct = owedTotal > 0 ? Math.round((paidTotal / owedTotal) * 100) : 100;
 
   const ficoBills = bills.filter((b) => b.fico);
@@ -425,7 +433,7 @@ export default function BillsClient({
         </div>
       )}
 
-      {/* Headline: what's still left to pay this month */}
+      {/* Headline: what's still left to pay this week */}
       <div
         className="rounded-2xl p-5 text-center text-white"
         style={{
@@ -442,6 +450,7 @@ export default function BillsClient({
           </>
         ) : (
           <>
+<<<<<<< HEAD
             <p className="text-[15px] font-semibold">Still left to pay in {monthName}</p>
             <p className="mt-1 text-5xl font-bold">{money(leftToPay)}</p>
             <div className="mx-auto mt-3 h-2.5 max-w-xs overflow-hidden rounded-full bg-white/30">
@@ -452,8 +461,14 @@ export default function BillsClient({
             </div>
             <p className="mt-2 text-[13px] opacity-90">
               {money(paidTotal)} of {money(owedTotal)} is already paid.
+=======
+            <p className="text-[15px] font-medium">This week's target</p>
+            <p className="mt-1 text-5xl font-bold">{money(Math.round(weeklyTarget))}</p>
+            <p className="mt-1 text-[13px]">
+              {money(leftToPay)} total for {monthName}
+>>>>>>> ce74a81 (fix: resolve text clipping, sticky nav, and scroll distortion; implement weekly bills)
               {rolloverTotal > 0 &&
-                ` Includes ${money(rolloverTotal)} left over from ${prevMonthName}.`}
+                ` (includes ${money(rolloverTotal)} from ${prevMonthName})`}
             </p>
           </>
         )}

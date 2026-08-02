@@ -45,7 +45,7 @@ export function Thermometer({ current, max }: { current: number; max: number }) 
   }
 
   return (
-    <div className="mb-6">
+    <div className="mb-6 -mx-4 px-4">
       <div className="mb-4 flex items-end justify-between">
         <div>
           <div className="text-sm text-muted">Debt Level</div>
