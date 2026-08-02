@@ -450,9 +450,8 @@ export default function BillsClient({
           </>
         ) : (
           <>
-<<<<<<< HEAD
-            <p className="text-[15px] font-semibold">Still left to pay in {monthName}</p>
-            <p className="mt-1 text-5xl font-bold">{money(leftToPay)}</p>
+            <p className="text-[15px] font-semibold">This week's target</p>
+            <p className="mt-1 text-5xl font-bold">{money(Math.round(weeklyTarget))}</p>
             <div className="mx-auto mt-3 h-2.5 max-w-xs overflow-hidden rounded-full bg-white/30">
               <div
                 className="h-full rounded-full bg-white transition-all"
@@ -460,13 +459,7 @@ export default function BillsClient({
               />
             </div>
             <p className="mt-2 text-[13px] opacity-90">
-              {money(paidTotal)} of {money(owedTotal)} is already paid.
-=======
-            <p className="text-[15px] font-medium">This week's target</p>
-            <p className="mt-1 text-5xl font-bold">{money(Math.round(weeklyTarget))}</p>
-            <p className="mt-1 text-[13px]">
               {money(leftToPay)} total for {monthName}
->>>>>>> ce74a81 (fix: resolve text clipping, sticky nav, and scroll distortion; implement weekly bills)
               {rolloverTotal > 0 &&
                 ` (includes ${money(rolloverTotal)} from ${prevMonthName})`}
             </p>
