@@ -158,6 +158,20 @@ export function money(n: number): string {
   return "$" + rounded.toLocaleString("en-US");
 }
 
+// Same as money() but keeps the cents — used where a real bill statement is
+// copied line for line and rounding would change the numbers.
+export function moneyExact(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  return (
+    sign +
+    "$" +
+    Math.abs(n).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
+}
+
 export const owesChris: OwesCharge[] = [
   { id: "1", description: "SoCal Gas", amount: 25, date: "2026-07-15", paid: false },
   { id: "2", description: "Car Insurance", amount: 275, date: "2026-07-10", paid: false },
