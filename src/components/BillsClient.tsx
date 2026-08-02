@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
-import { Plus, Trash2, Check, Pencil, Upload, FileText } from "lucide-react";
+import { Plus, Trash2, Check, ChevronDown, Pencil, Upload, FileText } from "lucide-react";
 import { Card } from "@/components/ui";
-import { money, WEEKS_PER_MONTH, type Bill, type BillDocument, type BillPayment } from "@/lib/data";
+import { money, moneyExact, WEEKS_PER_MONTH, type Bill, type BillDocument, type BillPayment } from "@/lib/data";
+import { statementsForBill, type BillStatement } from "@/lib/statements";
 import {
   addBill,
   addBillPayment,
@@ -383,6 +384,7 @@ export default function BillsClient({
                 detail={
                   <BillDetail
                     billId={b.id}
+                    billName={b.name}
                     admin={admin}
                     loading={details[b.id]?.loading ?? true}
                     payments={details[b.id]?.payments ?? []}
@@ -878,6 +880,7 @@ function todayIso(): string {
 // under its row when expanded.
 function BillDetail({
   billId,
+  billName,
   admin,
   loading,
   payments,
@@ -885,12 +888,14 @@ function BillDetail({
   onRefresh,
 }: {
   billId: string;
+  billName: string;
   admin: boolean;
   loading: boolean;
   payments: BillPayment[];
   documents: BillDocument[];
   onRefresh: () => void;
 }) {
+  const statements = statementsForBill(billName);
   const [addingPayment, setAddingPayment] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -948,6 +953,12 @@ function BillDetail({
 
   return (
     <div className="space-y-4 rounded-xl bg-tint p-3">
+      {/* The actual bill for the month, copied line for line. Shows straight
+          away — it doesn't wait on the database like the history below. */}
+      {statements.map((s) => (
+        <StatementCard key={s.month} statement={s} />
+      ))}
+
       {loading ? (
         <p className="text-xs text-muted">Loading…</p>
       ) : (
@@ -1067,6 +1078,92 @@ function BillDetail({
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// One month's real bill, laid out to be read on a phone: every charge on its
+// own line with what it covers underneath, then the totals.
+function StatementCard({ statement: s }: { statement: BillStatement }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="overflow-hidden rounded-lg bg-card">
+      <button
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-bold">
+          <FileText size={14} className="shrink-0 text-muted" />
+          <span className="truncate">{s.monthLabel} bill</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          <span className="text-[13px] font-bold" style={{ color: "var(--good)" }}>
+            {moneyExact(s.grandTotal)}
+          </span>
+          <ChevronDown
+            size={14}
+            className={"text-muted transition-transform " + (open ? "rotate-180" : "")}
+          />
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3">
+          <p className="mb-3 rounded-lg bg-tint p-2 text-xs leading-snug text-muted">
+            {s.plainEnglish}
+          </p>
+
+          {s.sections.map((sec) => (
+            <div key={sec.title} className="mb-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
+                {sec.title}
+              </p>
+              <div className="mt-1 space-y-1.5">
+                {sec.lines.map((line, i) => (
+                  <div key={i} className="flex items-start justify-between gap-3">
+                    <span className="min-w-0">
+                      <span className="block text-[13px]">{line.label}</span>
+                      {line.period && (
+                        <span className="block text-[11px] text-muted">{line.period}</span>
+                      )}
+                    </span>
+                    <span
+                      className="shrink-0 text-[13px] tabular-nums"
+                      style={line.amount < 0 ? { color: "var(--good)" } : undefined}
+                    >
+                      {moneyExact(line.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1.5 flex items-start justify-between gap-3 border-t border-border pt-1.5">
+                <span className="min-w-0 text-[12px] font-semibold">{sec.totalLabel}</span>
+                <span className="shrink-0 text-[12px] font-semibold tabular-nums">
+                  {moneyExact(sec.total)}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          <div className="space-y-1 border-t border-border pt-2">
+            <div className="flex items-center justify-between gap-3 text-[12px]">
+              <span>{s.totalCurrentLabel}</span>
+              <span className="tabular-nums">{moneyExact(s.totalCurrent)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-[12px] text-muted">
+              <span className="min-w-0 truncate">{s.priorBalanceLabel}</span>
+              <span className="shrink-0 tabular-nums">{moneyExact(s.priorBalance)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-1.5 text-[14px] font-bold">
+              <span>Total due</span>
+              <span className="tabular-nums" style={{ color: "var(--good)" }}>
+                {moneyExact(s.grandTotal)}
+              </span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
