@@ -450,7 +450,7 @@ export default function BillsClient({
           </>
         ) : (
           <>
-            <p className="text-[15px] font-semibold">This week's target</p>
+            <p className="text-[15px] font-semibold">This week&apos;s target</p>
             <p className="mt-1 text-5xl font-bold">{money(Math.round(weeklyTarget))}</p>
             <div className="mx-auto mt-3 h-2.5 max-w-xs overflow-hidden rounded-full bg-white/30">
               <div
