@@ -561,77 +561,15 @@ export async function getOverallContext(): Promise<OverallContext> {
   };
 }
 
-// ── Credit reports & score history ───────────────────────────────────────────
-
-export interface CreditReportAccount {
-  id: string;
-  reportId: string;
-  name: string;
-  balance: number;
-  apr: number;
-  minPayment: number;
-}
-
-export interface CreditReport {
-  id: string;
-  reportDate: string;
-  bureau: string;
-  ficoScore: number | null;
-  totalBalance: number;
-  note: string | null;
-  accounts: CreditReportAccount[];
-}
-
-// Every report Chris has uploaded, newest first, with its accounts attached.
-// Two queries instead of a join so the fallback (no database) stays simple.
-export async function getCreditReports(): Promise<CreditReport[]> {
-  const c = client();
-  if (!c) return [];
-  const { data, error } = await c
-    .from("credit_reports")
-    .select("*")
-    .order("report_date", { ascending: false })
-    .order("created_at", { ascending: false });
-  if (error || !data || data.length === 0) return [];
-
-  const ids = data.map((r) => r.id);
-  const { data: accounts } = await c
-    .from("credit_report_accounts")
-    .select("*")
-    .in("report_id", ids)
-    .order("sort");
-
-  const byReport = new Map<string, CreditReportAccount[]>();
-  for (const row of accounts ?? []) {
-    const key = String(row.report_id);
-    const list = byReport.get(key) ?? [];
-    list.push({
-      id: String(row.id),
-      reportId: key,
-      name: row.name,
-      balance: Number(row.balance),
-      apr: Number(row.apr ?? 0),
-      minPayment: Number(row.min_payment ?? 0),
-    });
-    byReport.set(key, list);
-  }
-
-  return data.map((row) => ({
-    id: String(row.id),
-    reportDate: row.report_date,
-    bureau: row.bureau ?? "Unknown",
-    ficoScore: row.fico_score === null ? null : Number(row.fico_score),
-    totalBalance: Number(row.total_balance ?? 0),
-    note: row.note ?? null,
-    accounts: byReport.get(String(row.id)) ?? [],
-  }));
-}
+// ── Credit history, mirrored from Money App ──────────────────────────────────
+// Money App owns the credit-report parsing and the score log. These tables are
+// a read-only copy refreshed by syncMoneyAppDebts — nothing here is edited in
+// this app.
 
 export interface FicoScoreEntry {
-  id: string;
   score: number;
   scoredOn: string;
-  source: string; // 'report' or 'manual'
+  note: string | null;
 }
 
 // The credit-score history, oldest first so the chart reads left to right.
@@ -639,15 +577,76 @@ export async function getFicoHistory(): Promise<FicoScoreEntry[]> {
   const c = client();
   if (!c) return [];
   const { data, error } = await c
-    .from("fico_scores")
+    .from("moneyapp_fico_history")
     .select("*")
     .order("scored_on", { ascending: true });
   if (error || !data) return [];
   return data.map((row) => ({
-    id: String(row.id),
     score: Number(row.score),
     scoredOn: row.scored_on,
-    source: row.source ?? "manual",
+    note: row.note ?? null,
+  }));
+}
+
+export interface SnapshotAccount {
+  debtId: string;
+  name: string;
+  balance: number;
+  missedPayment: boolean;
+}
+
+export interface CreditSnapshot {
+  date: string;
+  totalBalance: number;
+  missedCount: number;
+  accounts: SnapshotAccount[];
+}
+
+// Balance snapshots grouped by date, newest first. Money App writes one row
+// per account each time a credit report is imported, so each group here is one
+// report. Account names come from the `debts` table, which the same sync fills.
+export async function getCreditSnapshots(): Promise<CreditSnapshot[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("moneyapp_debt_snapshots")
+    .select("*")
+    .order("snapshot_date", { ascending: false });
+  if (error || !data || data.length === 0) return [];
+
+  const { data: debts } = await c
+    .from("debts")
+    .select("name, moneyapp_debt_id")
+    .not("moneyapp_debt_id", "is", null);
+  const names = new Map(
+    (debts ?? []).map((d) => [String(d.moneyapp_debt_id), String(d.name)])
+  );
+
+  const byDate = new Map<string, CreditSnapshot>();
+  for (const row of data) {
+    const date = row.snapshot_date;
+    const group: CreditSnapshot =
+      byDate.get(date) ??
+      { date, totalBalance: 0, missedCount: 0, accounts: [] };
+    const debtId = String(row.moneyapp_debt_id);
+    const balance = Number(row.balance);
+    const missed = Boolean(row.missed_payment);
+    group.accounts.push({
+      debtId,
+      // An account closed in Money App drops out of the export, so its name is
+      // gone even though its old snapshots remain.
+      name: names.get(debtId) ?? "Closed account",
+      balance,
+      missedPayment: missed,
+    });
+    group.totalBalance += balance;
+    if (missed) group.missedCount++;
+    byDate.set(date, group);
+  }
+
+  return [...byDate.values()].map((g) => ({
+    ...g,
+    accounts: g.accounts.sort((a, b) => b.balance - a.balance),
   }));
 }
 

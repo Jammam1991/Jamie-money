@@ -1,39 +1,19 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Check,
+  AlertTriangle,
   ChevronDown,
   FileText,
   Gauge,
-  Plus,
-  Trash2,
+  RefreshCw,
   TrendingDown,
   TrendingUp,
-  Upload,
-  X,
 } from "lucide-react";
 import { Card } from "@/components/ui";
-import { money } from "@/lib/data";
-import {
-  parseCreditReport,
-  todayIso,
-  type ParsedDebt,
-  type ParsedReport,
-} from "@/lib/parseReport";
-import { extractPdfText } from "@/lib/pdfText";
-import type { CreditReport, FicoScoreEntry } from "@/lib/store";
-import {
-  addFicoScore,
-  deleteCreditReport,
-  deleteFicoScore,
-  saveCreditReport,
-} from "@/lib/actions";
-
-const inputClass =
-  "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
-const primaryBtn =
-  "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
+import { money, type Debt } from "@/lib/data";
+import type { CreditSnapshot, FicoScoreEntry } from "@/lib/store";
 
 // Plain-English label for a credit score.
 function scoreLabel(score: number): string {
@@ -64,189 +44,110 @@ function niceDate(isoDate: string): string {
 }
 
 export default function CreditReportClient({
-  initialReports,
-  initialScores,
+  scores,
+  snapshots,
+  debts,
   admin,
+  moneyAppReady,
 }: {
-  initialReports: CreditReport[];
-  initialScores: FicoScoreEntry[];
+  scores: FicoScoreEntry[];
+  snapshots: CreditSnapshot[];
+  debts: Debt[];
   admin: boolean;
+  moneyAppReady: boolean;
 }) {
-  const [reports, setReports] = useState(initialReports);
-  const [scores, setScores] = useState(initialScores);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-  const tempId = useRef(-1);
-
-  // Newest first for reports; oldest first for scores (so the chart reads
-  // left to right).
-  const latest = reports[0] ?? null;
-  const previous = reports[1] ?? null;
-  const latestScore = scores.length > 0 ? scores[scores.length - 1] : null;
-  const priorScore = scores.length > 1 ? scores[scores.length - 2] : null;
-
-  function handleSaveReport(input: {
-    reportDate: string;
-    bureau: string;
-    score: number | null;
-    accounts: ParsedDebt[];
-  }) {
-    const tid = String(tempId.current--);
-    const total = input.accounts.reduce((s, a) => s + a.balance, 0);
-    const optimistic: CreditReport = {
-      id: tid,
-      reportDate: input.reportDate,
-      bureau: input.bureau,
-      ficoScore: input.score,
-      totalBalance: total,
-      note: null,
-      accounts: input.accounts.map((a, i) => ({
-        id: `${tid}-${i}`,
-        reportId: tid,
-        name: a.name,
-        balance: a.balance,
-        apr: a.apr,
-        minPayment: a.minPayment,
-      })),
-    };
-    setReports((r) =>
-      [optimistic, ...r].sort((a, b) => b.reportDate.localeCompare(a.reportDate))
-    );
-    if (input.score !== null) {
-      setScores((s) =>
-        [
-          ...s,
-          {
-            id: `${tid}-score`,
-            score: input.score!,
-            scoredOn: input.reportDate,
-            source: "report",
-          },
-        ].sort((a, b) => a.scoredOn.localeCompare(b.scoredOn))
-      );
-    }
-    setUploading(false);
-    setError(null);
-
-    startTransition(async () => {
-      const res = await saveCreditReport(input);
-      if (res.ok && res.id) {
-        setReports((r) => r.map((x) => (x.id === tid ? { ...x, id: res.id! } : x)));
-      } else if (!res.ok) {
-        setReports((r) => r.filter((x) => x.id !== tid));
-        setScores((s) => s.filter((x) => x.id !== `${tid}-score`));
-        setError(res.error ?? "Couldn't save that report.");
-      }
-    });
-  }
-
-  function handleDeleteReport(id: string) {
-    const removed = reports.find((r) => r.id === id);
-    setReports((r) => r.filter((x) => x.id !== id));
-    // The report's own score entry goes with it (the database cascades too).
-    setScores((s) =>
-      s.filter(
-        (x) => !(x.source === "report" && x.scoredOn === removed?.reportDate)
-      )
-    );
-    startTransition(() => {
-      deleteCreditReport(id);
-    });
-  }
-
-  function handleAddScore(score: number, scoredOn: string) {
-    const tid = String(tempId.current--);
-    setScores((s) =>
-      [...s, { id: tid, score, scoredOn, source: "manual" }].sort((a, b) =>
-        a.scoredOn.localeCompare(b.scoredOn)
-      )
-    );
-    startTransition(async () => {
-      const res = await addFicoScore({ score, scoredOn });
-      if (res.ok && res.id) {
-        setScores((s) => s.map((x) => (x.id === tid ? { ...x, id: res.id! } : x)));
-      } else if (!res.ok) {
-        setScores((s) => s.filter((x) => x.id !== tid));
-        setError(res.error ?? "Couldn't save that score.");
-      }
-    });
-  }
-
-  function handleDeleteScore(id: string) {
-    setScores((s) => s.filter((x) => x.id !== id));
-    startTransition(() => {
-      deleteFicoScore(id);
-    });
-  }
+  // Scores arrive oldest first, so the chart reads left to right.
+  const latest = scores.length > 0 ? scores[scores.length - 1] : null;
+  const prior = scores.length > 1 ? scores[scores.length - 2] : null;
+  const empty = scores.length === 0 && snapshots.length === 0;
 
   return (
     <div className="space-y-4">
-      {error && (
-        <div className="rounded-2xl bg-warn-bg p-3 text-[13px] text-warn">{error}</div>
-      )}
+      <ScoreHeadline latest={latest} prior={prior} />
 
-      {/* Credit score right now */}
-      <ScoreHeadline latest={latestScore} prior={priorScore} />
+      {admin && <SyncButton ready={moneyAppReady} />}
 
-      {/* Upload a new report */}
-      {admin &&
-        (uploading ? (
-          <UploadPanel
-            onCancel={() => setUploading(false)}
-            onSave={handleSaveReport}
-          />
-        ) : (
-          <button
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-4 text-sm text-muted"
-            onClick={() => {
-              setError(null);
-              setUploading(true);
-            }}
-          >
-            <Upload size={16} />
-            Upload a credit report
-          </button>
-        ))}
+      {scores.length > 0 && <ScoreHistory scores={scores} />}
 
-      {/* Score history */}
-      <ScoreHistory
-        scores={scores}
-        admin={admin}
-        onAdd={handleAddScore}
-        onDelete={handleDeleteScore}
-      />
+      {debts.length > 0 && <WhatYouOwe debts={debts} snapshots={snapshots} />}
 
-      {/* What the newest report says he owes */}
-      {latest && <LatestReport report={latest} previous={previous} />}
-
-      {/* Every report, oldest kept forever */}
-      {reports.length > 0 && (
+      {snapshots.length > 0 && (
         <Card>
           <p className="mb-2 flex items-center gap-1.5 text-[13px] text-muted">
             <FileText size={15} />
             Report history
           </p>
           <div className="space-y-2">
-            {reports.map((r) => (
-              <ReportRow
-                key={r.id}
-                report={r}
-                admin={admin}
-                onDelete={() => handleDeleteReport(r.id)}
-              />
+            {snapshots.map((s) => (
+              <SnapshotRow key={s.date} snapshot={s} />
             ))}
           </div>
         </Card>
       )}
 
-      {reports.length === 0 && scores.length === 0 && (
+      {empty && (
         <Card>
           <p className="text-sm text-muted">
-            Nothing here yet. Upload a credit report and this page will keep the
-            debts it lists, the score, and how both change over time.
+            Nothing here yet. Credit reports get uploaded in Money App — this
+            page shows what it found: the score over time, what&apos;s owed, and
+            any missed payments.
           </p>
+          {admin && !moneyAppReady && (
+            <p className="mt-2 text-sm text-warn">
+              Money App isn&apos;t connected yet. Add MONEYAPP_API_URL and
+              MONEYAPP_API_KEY in Vercel, then tap sync.
+            </p>
+          )}
         </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Pull the latest numbers over from Money App ───────────────────────────────
+function SyncButton({ ready }: { ready: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function sync() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await fetch("/api/moneyapp/sync", { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        setNote(body.error ?? "Couldn't reach Money App.");
+      } else {
+        setNote(
+          `Updated ${body.synced} account${body.synced === 1 ? "" : "s"}` +
+            (body.scores ? `, ${body.scores} score${body.scores === 1 ? "" : "s"}` : "") +
+            "."
+        );
+        router.refresh();
+      }
+    } catch {
+      setNote("Couldn't reach Money App.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-4 text-sm text-muted disabled:opacity-50"
+        onClick={sync}
+        disabled={busy || !ready}
+      >
+        <RefreshCw size={16} className={busy ? "animate-spin" : ""} />
+        {busy ? "Getting the latest…" : "Sync from Money App"}
+      </button>
+      {note && <p className="mt-2 text-center text-xs text-muted">{note}</p>}
+      {!ready && (
+        <p className="mt-2 text-center text-xs text-muted">
+          Money App isn&apos;t connected yet.
+        </p>
       )}
     </div>
   );
@@ -268,8 +169,7 @@ function ScoreHeadline({
           Credit score
         </p>
         <p className="mt-2 text-sm text-muted">
-          No score saved yet. It gets filled in the first time a report is
-          uploaded.
+          No score yet. It fills in from Money App.
         </p>
       </Card>
     );
@@ -318,115 +218,24 @@ function ScoreHeadline({
 }
 
 // ── Score history: a small line chart plus the list ───────────────────────────
-function ScoreHistory({
-  scores,
-  admin,
-  onAdd,
-  onDelete,
-}: {
-  scores: FicoScoreEntry[];
-  admin: boolean;
-  onAdd: (score: number, scoredOn: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [score, setScore] = useState("");
-  const [when, setWhen] = useState(todayIso());
-
-  function submit() {
-    const n = Number(score);
-    if (!(n >= 300 && n <= 850)) return;
-    onAdd(Math.round(n), when);
-    setScore("");
-    setWhen(todayIso());
-    setAdding(false);
-  }
-
+function ScoreHistory({ scores }: { scores: FicoScoreEntry[] }) {
   return (
     <Card>
       <p className="mb-2 text-[13px] text-muted">Score history</p>
-
-      {scores.length === 0 ? (
-        <p className="text-sm text-muted">No scores saved yet.</p>
-      ) : (
-        <>
-          <ScoreChart scores={scores} />
-          <div className="mt-3 space-y-2">
-            {[...scores].reverse().map((s) => (
-              <div key={s.id} className="flex items-center justify-between text-[15px]">
-                <span className="text-muted">{niceDate(s.scoredOn)}</span>
-                <span className="flex items-center gap-3">
-                  <span className="font-medium" style={{ color: scoreColor(s.score) }}>
-                    {s.score}
-                  </span>
-                  {admin && (
-                    <button
-                      aria-label="Delete score"
-                      className="text-muted"
-                      onClick={() => onDelete(s.id)}
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {admin &&
-        (adding ? (
-          <div className="mt-3 space-y-2 rounded-xl bg-tint p-3">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="block">
-                <span className="mb-1 block text-[11px] text-muted">Score</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  className={inputClass}
-                  placeholder="700"
-                  value={score}
-                  onChange={(e) => setScore(e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[11px] text-muted">Date</span>
-                <input
-                  type="date"
-                  className={inputClass}
-                  value={when}
-                  onChange={(e) => setWhen(e.target.value)}
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                className="rounded-lg px-3 py-2 text-sm text-muted"
-                onClick={() => setAdding(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className={primaryBtn + " flex items-center gap-1.5"}
-                style={{ background: "var(--good)" }}
-                onClick={submit}
-                disabled={!(Number(score) >= 300 && Number(score) <= 850)}
-              >
-                <Check size={16} />
-                Save
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-            onClick={() => setAdding(true)}
+      <ScoreChart scores={scores} />
+      <div className="mt-3 space-y-2">
+        {[...scores].reverse().map((s) => (
+          <div
+            key={s.scoredOn}
+            className="flex items-center justify-between text-[15px]"
           >
-            <Plus size={16} />
-            Add a score by hand
-          </button>
+            <span className="text-muted">{niceDate(s.scoredOn)}</span>
+            <span className="font-medium" style={{ color: scoreColor(s.score) }}>
+              {s.score}
+            </span>
+          </div>
         ))}
+      </div>
     </Card>
   );
 }
@@ -460,7 +269,7 @@ function ScoreChart({ scores }: { scores: FicoScoreEntry[] }) {
         )}
         {scores.map((s, i) => (
           <circle
-            key={s.id}
+            key={s.scoredOn}
             cx={x(i)}
             cy={y(s.score)}
             r={3}
@@ -476,51 +285,52 @@ function ScoreChart({ scores }: { scores: FicoScoreEntry[] }) {
   );
 }
 
-// ── What the newest report says ───────────────────────────────────────────────
-function LatestReport({
-  report,
-  previous,
+// ── What's owed right now, and how it moved ───────────────────────────────────
+function WhatYouOwe({
+  debts,
+  snapshots,
 }: {
-  report: CreditReport;
-  previous: CreditReport | null;
+  debts: Debt[];
+  snapshots: CreditSnapshot[];
 }) {
-  const change = previous ? report.totalBalance - previous.totalBalance : 0;
-  const minTotal = report.accounts.reduce((s, a) => s + a.minPayment, 0);
+  const total = debts.reduce((s, d) => s + d.balance, 0);
+  const minTotal = debts.reduce((s, d) => s + d.minPayment, 0);
+  // Compare against the oldest snapshot still on record, so the line reads
+  // "since the first report we have" rather than "since the newest one",
+  // which would usually be today's numbers.
+  const oldest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const change = oldest ? total - oldest.totalBalance : 0;
 
   return (
     <>
       <div className="rounded-2xl bg-warn-bg p-4">
-        <p className="text-[13px] text-warn">Owed on the newest report</p>
-        <p className="text-3xl font-medium text-warn">{money(report.totalBalance)}</p>
+        <p className="text-[13px] text-warn">Owed right now</p>
+        <p className="text-3xl font-medium text-warn">{money(total)}</p>
         <p className="mt-1 text-[13px] text-warn">
-          {report.accounts.length} account{report.accounts.length === 1 ? "" : "s"} ·{" "}
-          {report.bureau} · {niceDate(report.reportDate)}
+          Across {debts.length} account{debts.length === 1 ? "" : "s"}
         </p>
-        {previous && change !== 0 && (
+        {oldest && change !== 0 && (
           <p className="mt-2 text-[13px] text-warn">
             {change < 0 ? "Down" : "Up"} {money(Math.abs(change))} since{" "}
-            {niceDate(previous.reportDate)}.
+            {niceDate(oldest.date)}.
           </p>
         )}
       </div>
 
       <Card>
-        <p className="mb-2 text-[13px] text-muted">Accounts on that report</p>
+        <p className="mb-2 text-[13px] text-muted">The accounts</p>
         <div className="space-y-3">
-          {report.accounts.map((a) => (
-            <div key={a.id}>
+          {debts.map((d) => (
+            <div key={d.id}>
               <div className="flex items-center justify-between font-medium">
-                <span className="truncate">{a.name}</span>
-                <span>{money(a.balance)}</span>
+                <span className="truncate">{d.name}</span>
+                <span>{money(d.balance)}</span>
               </div>
               <p className="mt-1 text-xs text-muted">
-                {a.apr}% interest · {money(a.minPayment)}/mo minimum
+                {d.apr}% interest · {money(d.minPayment)}/mo minimum
               </p>
             </div>
           ))}
-          {report.accounts.length === 0 && (
-            <p className="text-sm text-muted">No accounts were read off it.</p>
-          )}
         </div>
         {minTotal > 0 && (
           <p className="mt-3 text-xs text-muted">
@@ -532,324 +342,63 @@ function LatestReport({
   );
 }
 
-// ── One row in the report history, tap to open ────────────────────────────────
-function ReportRow({
-  report,
-  admin,
-  onDelete,
-}: {
-  report: CreditReport;
-  admin: boolean;
-  onDelete: () => void;
-}) {
+// ── One report in the history, tap to open ────────────────────────────────────
+function SnapshotRow({ snapshot }: { snapshot: CreditSnapshot }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="rounded-xl bg-tint p-3">
-      <div className="flex items-center justify-between">
-        <button
-          className="flex flex-1 items-center gap-2 text-left"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-        >
-          <ChevronDown
-            size={16}
-            className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
-          />
-          <span>
-            <span className="block text-[15px] font-medium">
-              {niceDate(report.reportDate)}
-            </span>
-            <span className="block text-xs text-muted">
-              {report.bureau} · {money(report.totalBalance)}
-              {report.ficoScore !== null && ` · score ${report.ficoScore}`}
-            </span>
+      <button
+        className="flex w-full items-center gap-2 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+        <span className="flex-1">
+          <span className="block text-[15px] font-medium">
+            {niceDate(snapshot.date)}
           </span>
-        </button>
-        {admin && (
-          <button aria-label="Delete report" className="text-muted" onClick={onDelete}>
-            <Trash2 size={15} />
-          </button>
+          <span className="block text-xs text-muted">
+            {money(snapshot.totalBalance)} across {snapshot.accounts.length}{" "}
+            account{snapshot.accounts.length === 1 ? "" : "s"}
+          </span>
+        </span>
+        {snapshot.missedCount > 0 && (
+          <span
+            className="flex shrink-0 items-center gap-1 text-xs"
+            style={{ color: "var(--warn)" }}
+          >
+            <AlertTriangle size={13} />
+            {snapshot.missedCount} missed
+          </span>
         )}
-      </div>
+      </button>
 
       {open && (
         <div className="mt-3 space-y-2 border-t border-border pt-3">
-          {report.accounts.map((a) => (
-            <div key={a.id} className="flex items-center justify-between text-[13px]">
-              <span className="truncate text-muted">{a.name}</span>
+          {snapshot.accounts.map((a) => (
+            <div
+              key={a.debtId}
+              className="flex items-center justify-between text-[13px]"
+            >
+              <span className="flex min-w-0 items-center gap-1.5 text-muted">
+                <span className="truncate">{a.name}</span>
+                {a.missedPayment && (
+                  <AlertTriangle
+                    size={12}
+                    className="shrink-0"
+                    style={{ color: "var(--warn)" }}
+                  />
+                )}
+              </span>
               <span>{money(a.balance)}</span>
             </div>
           ))}
-          {report.accounts.length === 0 && (
-            <p className="text-[13px] text-muted">No accounts on this one.</p>
-          )}
         </div>
       )}
     </div>
-  );
-}
-
-// ── Upload / paste a report, check what was read, then save ───────────────────
-function UploadPanel({
-  onCancel,
-  onSave,
-}: {
-  onCancel: () => void;
-  onSave: (input: {
-    reportDate: string;
-    bureau: string;
-    score: number | null;
-    accounts: ParsedDebt[];
-  }) => void;
-}) {
-  const [text, setText] = useState("");
-  const [parsed, setParsed] = useState<ParsedReport | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-
-  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    setNote(null);
-    try {
-      const extracted = await extractPdfText(file);
-      if (!extracted.trim()) {
-        setNote(
-          "Couldn't read text from that PDF. Try copy-pasting the report text below."
-        );
-      } else {
-        setText(extracted);
-        setParsed(parseCreditReport(extracted));
-      }
-    } catch {
-      setNote(
-        "Couldn't open that file. Try copy-pasting the report text below instead."
-      );
-    } finally {
-      setBusy(false);
-      e.target.value = "";
-    }
-  }
-
-  function updateAccount(i: number, patch: Partial<ParsedDebt>) {
-    setParsed((p) =>
-      p
-        ? {
-            ...p,
-            accounts: p.accounts.map((a, idx) =>
-              idx === i ? { ...a, ...patch } : a
-            ),
-          }
-        : p
-    );
-  }
-
-  function removeAccount(i: number) {
-    setParsed((p) =>
-      p ? { ...p, accounts: p.accounts.filter((_, idx) => idx !== i) } : p
-    );
-  }
-
-  if (parsed === null) {
-    return (
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-[13px] font-medium">Upload a credit report</p>
-          <button aria-label="Close" className="text-muted" onClick={onCancel}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-border py-4 text-sm text-muted">
-          <Upload size={16} />
-          {busy ? "Reading…" : "Pick a credit-report PDF"}
-          <input
-            type="file"
-            accept="application/pdf,.pdf"
-            className="hidden"
-            onChange={onFile}
-            disabled={busy}
-          />
-        </label>
-
-        <p className="my-2 text-center text-xs text-muted">or paste the text</p>
-        <textarea
-          className={inputClass + " h-28 resize-none"}
-          placeholder="Paste the text from the credit report here…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
-        {note && <p className="mt-2 text-xs text-warn">{note}</p>}
-        <div className="mt-3 flex justify-end">
-          <button
-            className={primaryBtn}
-            style={{ background: "var(--good)" }}
-            onClick={() => setParsed(parseCreditReport(text))}
-            disabled={!text.trim()}
-          >
-            Read the report
-          </button>
-        </div>
-      </Card>
-    );
-  }
-
-  const total = parsed.accounts.reduce((s, a) => s + a.balance, 0);
-
-  return (
-    <Card>
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-[13px] font-medium">Check what was read</p>
-        <button aria-label="Close" className="text-muted" onClick={onCancel}>
-          <X size={18} />
-        </button>
-      </div>
-      <p className="mb-3 text-xs text-muted">
-        Fix anything wrong, then save. Nothing is stored until you tap save.
-      </p>
-
-      <div className="grid grid-cols-3 gap-2">
-        <label className="block">
-          <span className="mb-1 block text-[11px] text-muted">Report date</span>
-          <input
-            type="date"
-            className={inputClass}
-            value={parsed.reportDate}
-            onChange={(e) =>
-              setParsed({ ...parsed, reportDate: e.target.value })
-            }
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[11px] text-muted">Bureau</span>
-          <select
-            className={inputClass}
-            value={parsed.bureau}
-            onChange={(e) => setParsed({ ...parsed, bureau: e.target.value })}
-          >
-            <option>Experian</option>
-            <option>Equifax</option>
-            <option>TransUnion</option>
-            <option>Unknown</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[11px] text-muted">Score</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            placeholder="—"
-            className={inputClass}
-            value={parsed.score ?? ""}
-            onChange={(e) =>
-              setParsed({
-                ...parsed,
-                score: e.target.value === "" ? null : Number(e.target.value),
-              })
-            }
-          />
-        </label>
-      </div>
-
-      <p className="mb-2 mt-4 text-xs text-muted">
-        {parsed.accounts.length === 0
-          ? "No accounts found — you can still save the score."
-          : `Found ${parsed.accounts.length} account${
-              parsed.accounts.length === 1 ? "" : "s"
-            }, ${money(total)} in total.`}
-      </p>
-
-      <div className="space-y-3">
-        {parsed.accounts.map((a, i) => (
-          <div key={i} className="rounded-xl bg-tint p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <input
-                className={inputClass}
-                value={a.name}
-                onChange={(e) => updateAccount(i, { name: e.target.value })}
-              />
-              <button
-                aria-label="Remove"
-                className="text-muted"
-                onClick={() => removeAccount(i)}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <NumberField
-                label="Balance $"
-                value={a.balance}
-                onChange={(v) => updateAccount(i, { balance: v })}
-              />
-              <NumberField
-                label="Rate %"
-                value={a.apr}
-                onChange={(v) => updateAccount(i, { apr: v })}
-              />
-              <NumberField
-                label="Min $/mo"
-                value={a.minPayment}
-                onChange={(v) => updateAccount(i, { minPayment: v })}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 flex justify-end gap-2">
-        <button
-          className="rounded-lg px-3 py-2 text-sm text-muted"
-          onClick={() => setParsed(null)}
-        >
-          Back
-        </button>
-        <button
-          className={primaryBtn + " flex items-center gap-1.5"}
-          style={{ background: "var(--good)" }}
-          onClick={() =>
-            onSave({
-              reportDate: parsed.reportDate,
-              bureau: parsed.bureau,
-              score:
-                parsed.score !== null &&
-                parsed.score >= 300 &&
-                parsed.score <= 850
-                  ? parsed.score
-                  : null,
-              accounts: parsed.accounts,
-            })
-          }
-        >
-          <Check size={16} />
-          Save report
-        </button>
-      </div>
-    </Card>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] text-muted">{label}</span>
-      <input
-        type="number"
-        inputMode="decimal"
-        className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value) || 0)}
-      />
-    </label>
   );
 }

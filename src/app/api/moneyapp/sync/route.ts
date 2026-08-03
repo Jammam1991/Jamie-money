@@ -23,5 +23,11 @@ export async function POST() {
   if (result.error) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
-  return NextResponse.json({ ok: true, synced: result.synced, fico: result.fico });
+  return NextResponse.json({
+    ok: true,
+    synced: result.synced,
+    fico: result.fico,
+    scores: result.scores,
+    snapshots: result.snapshots,
+  });
 }
