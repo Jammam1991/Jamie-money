@@ -85,9 +85,9 @@ export const PAGES: AppPage[] = [
   {
     key: "divorce-responsibility",
     href: "/divorce-responsibility",
-    label: "Divorce Responsibility",
+    label: "The Debt Story",
     where: "menu",
-    blurb: "Who is on the hook for what.",
+    blurb: "How the debt got here, and what Jamie's share works out to.",
   },
 ];
 

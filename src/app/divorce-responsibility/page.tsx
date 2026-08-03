@@ -7,11 +7,11 @@ export const dynamic = "force-dynamic";
 
 export default async function DivorceResponsibilityPage() {
   const { comingSoon } = await pageGate("divorce-responsibility");
-  if (comingSoon) return <ComingSoon title="Divorce Responsibility" />;
+  if (comingSoon) return <ComingSoon title="The Debt Story" />;
 
   return (
     <div>
-      <PageTitle>Divorce Responsibility</PageTitle>
+      <PageTitle>The Debt Story</PageTitle>
       <DivorceResponsibilityClient />
     </div>
   );
