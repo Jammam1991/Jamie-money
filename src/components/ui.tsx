@@ -60,6 +60,10 @@ export function Thermometer({
     label = "Warming";
   }
 
+  // The bulb goes red the moment the level reaches "Hot" and stays red — an
+  // early warning that's hard to miss even if the glass is only half full.
+  const bulbColor = pct >= 50 ? "#dc2626" : color;
+
   // Zone words instead of numbers — they tell Jamie how bad it is without
   // giving away the dollar ceiling.
   const zones = [
@@ -110,8 +114,8 @@ export function Thermometer({
             ))}
           </div>
           <div
-            className="-mt-1 h-16 w-16 rounded-full border-2 border-border"
-            style={{ backgroundColor: color }}
+            className="-mt-1 h-16 w-16 rounded-full border-2 border-border transition-colors duration-700"
+            style={{ backgroundColor: bulbColor }}
           />
         </div>
 
