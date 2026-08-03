@@ -1,28 +1,35 @@
-"use client";
-
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui";
 import { money, moneyExact } from "@/lib/data";
 import {
+  ADVANCES,
   DRAWS,
   STORY,
+  bill,
+  chrisDrawsTotal,
   chrisSpareMonthly,
   chrisSpareTotal,
   drawsTotal,
+  gymOwesChris,
+  gymSettleUp,
   jamieEarlyTotal,
   jamieEarnedTotal,
-  jamieHalfOfBusiness,
   jamieHalfOfDebt,
+  jamieHalfOfGymDebt,
   jamieLateTotal,
-  jamieOwes,
-  jamieOwesNet,
   jamieRetirementClaim,
 } from "@/lib/debtStory";
 
 // The story is told in chapters, top to bottom, the way you'd tell it out loud:
 // how the pile got built, who fed it, who paid for it, and what's left to settle.
+// A server component on purpose — the manager-pay months are counted from "now",
+// and doing that on the server means the number can't drift after hydration.
 
 export default function DivorceResponsibilityClient() {
+  const now = new Date();
+  const settle = gymSettleUp(now);
+  const total = bill(now);
+
   return (
     <div className="space-y-4">
       {/* The ending, up front — then the rest of the page explains it. */}
@@ -30,7 +37,7 @@ export default function DivorceResponsibilityClient() {
         <p className="text-[15px] font-medium text-warn">
           🧾 What Jamie owes Chris
         </p>
-        <p className="mt-1 text-5xl font-bold text-warn">{money(jamieOwes)}</p>
+        <p className="mt-1 text-5xl font-bold text-warn">{money(total.owes)}</p>
         <p className="mt-2 text-[13px] text-warn">
           Here&apos;s how that number got here.
         </p>
@@ -165,9 +172,9 @@ export default function DivorceResponsibilityClient() {
       >
         <p className="text-[15px]">
           Chris built about <strong>{money(STORY.chris401k)}</strong> in
-          401k/pension while they were married. That was built during the
-          marriage, so roughly half of it —{" "}
-          <strong>{money(jamieRetirementClaim)}</strong> — points back at Jamie.
+          401k/pension while they were married. Because it was built during the
+          marriage, <strong>{money(jamieRetirementClaim)}</strong> of it points
+          back at Jamie — and it comes straight off what he owes.
         </p>
       </Chapter>
 
@@ -195,20 +202,7 @@ export default function DivorceResponsibilityClient() {
         accent="var(--warn)"
         bg="var(--warn-bg)"
       >
-        <div className="grid grid-cols-2 gap-2 text-center">
-          <Stat
-            label="Chris put in"
-            value={money(STORY.businessInvestment)}
-            color="var(--good)"
-          />
-          <Stat
-            label="Jamie put in"
-            value={money(STORY.jamieBusinessInvestment)}
-            color="var(--warn)"
-          />
-        </div>
-
-        <ul className="mt-4 space-y-2.5 text-[15px]">
+        <ul className="space-y-2.5 text-[15px]">
           <Beat emoji="🤫">
             Jamie quietly stopped his massage business — the{" "}
             {money(STORY.jamieMonthlyLate)}/month one — and never told Chris.
@@ -225,6 +219,29 @@ export default function DivorceResponsibilityClient() {
             more shared debt.
           </Beat>
         </ul>
+
+        <div className="mt-4 rounded-xl bg-card p-4">
+          <p className="text-[13px] text-muted">
+            What the gym owes Chris today
+          </p>
+          <p className="text-4xl font-bold" style={{ color: "var(--warn)" }}>
+            {moneyExact(gymOwesChris)}
+          </p>
+          <div className="mt-3 space-y-1.5">
+            {ADVANCES.map((a) => (
+              <Row
+                key={a.label}
+                label={a.label}
+                value={moneyExact(a.amount)}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-[13px] text-muted">
+            Loans and card payments Chris made out of his own pocket to keep the
+            doors open. Jamie&apos;s side of the ledger:{" "}
+            <strong>{moneyExact(STORY.contributionsJamie)}</strong> contributed.
+          </p>
+        </div>
       </Chapter>
 
       {/* ── The receipts ────────────────────────────────────────────────── */}
@@ -264,6 +281,59 @@ export default function DivorceResponsibilityClient() {
           <strong>on the books</strong>: the PT cash he collected on the side was
           never tracked, so it isn&apos;t in this total at all.
         </p>
+
+        {/* Same business, same two partners, wildly different withdrawals. */}
+        <p className="mt-4 mb-2 text-[13px] text-muted">
+          Distributions, side by side
+        </p>
+        <Split
+          leftLabel="Jamie took"
+          leftValue={drawsTotal}
+          rightLabel="Chris took"
+          rightValue={chrisDrawsTotal}
+        />
+      </Chapter>
+
+      {/* ── The part that goes back the other way ───────────────────────── */}
+      <Chapter
+        n={9}
+        emoji="⚖️"
+        when={`${settle.months} months running the gym`}
+        title="But he did do the job"
+        accent="var(--good)"
+        bg="var(--good-bg)"
+      >
+        <p className="text-[15px]">
+          Jamie managed the place from December {STORY.gymStartYear}. A manager
+          doing that job gets paid — call it{" "}
+          <strong>{money(STORY.managerMonthly)}/month</strong>. He never drew a
+          real paycheck, so that pay is his, and it comes off what he took.
+        </p>
+
+        <div className="mt-4 space-y-2 rounded-xl bg-card p-4">
+          <Row
+            label={`Manager pay earned (${settle.months} × ${money(STORY.managerMonthly)})`}
+            value={money(settle.earned)}
+          />
+          <Row label="What he actually drew" value={moneyExact(drawsTotal)} />
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-2 text-[15px] font-bold">
+            <span>{settle.overdraw > 0 ? "Drew beyond his pay" : "He's under his pay by"}</span>
+            <span
+              className="shrink-0"
+              style={{
+                color: settle.overdraw > 0 ? "var(--warn)" : "var(--good)",
+              }}
+            >
+              {moneyExact(settle.overdraw > 0 ? settle.overdraw : settle.underdraw)}
+            </span>
+          </div>
+        </div>
+
+        <p className="mt-3 text-[13px]">
+          {settle.overdraw > 0
+            ? "Everything above the pay he earned is money he has to hand back."
+            : "So the draws themselves aren't the debt — the earned pay covers them. What's left to settle is the money Chris sank into the gym to keep it alive."}
+        </p>
       </Chapter>
 
       {/* ── The bill ────────────────────────────────────────────────────── */}
@@ -275,31 +345,34 @@ export default function DivorceResponsibilityClient() {
             value={money(jamieHalfOfDebt)}
           />
           <Row
-            label={`Half the gym investment (${money(STORY.businessInvestment)})`}
-            value={money(jamieHalfOfBusiness)}
+            label={`Half of what the gym owes Chris (${moneyExact(gymOwesChris)})`}
+            value={moneyExact(jamieHalfOfGymDebt)}
           />
           <Row
-            label="What he drew out of the gym"
-            value={moneyExact(drawsTotal)}
+            label="Drawn beyond the pay he earned"
+            value={moneyExact(total.overdraw)}
           />
-          <div className="flex items-center justify-between border-t border-border pt-2 text-lg font-bold">
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-2 text-lg font-bold">
             <span>Jamie owes</span>
-            <span style={{ color: "var(--warn)" }}>{money(jamieOwes)}</span>
+            <span className="shrink-0" style={{ color: "var(--warn)" }}>
+              {money(total.owes)}
+            </span>
           </div>
-          <div className="flex items-center justify-between pt-1 text-[13px] text-muted">
-            <span>Less half the retirement</span>
-            <span>− {money(jamieRetirementClaim)}</span>
+          <div className="flex items-center justify-between gap-3 pt-1 text-[13px] text-muted">
+            <span>Less his slice of the retirement</span>
+            <span className="shrink-0">− {money(jamieRetirementClaim)}</span>
           </div>
-          <div className="flex items-center justify-between text-[15px] font-semibold">
+          <div className="flex items-center justify-between gap-3 text-[15px] font-semibold">
             <span>Net</span>
-            <span>{money(jamieOwesNet)}</span>
+            <span className="shrink-0">{money(total.net)}</span>
           </div>
         </div>
         <p className="mt-3 text-[13px] text-muted">
-          The three lines don&apos;t overlap: the shared debt was built before
-          the gym existed, the investment is money Chris put in, and the draws
-          are money Jamie took out. The untracked PT cash isn&apos;t counted
-          anywhere.
+          The lines don&apos;t overlap: the shared debt was built before the gym
+          existed, and the gym line is money Chris personally lent the business
+          that it can&apos;t pay back if it closes. The draws aren&apos;t charged
+          twice — they&apos;re already netted against the manager pay he earned.
+          The untracked PT cash isn&apos;t counted anywhere.
         </p>
       </Card>
 
@@ -376,6 +449,55 @@ function Stat({
       <p className="text-lg font-semibold" style={{ color }}>
         {value}
       </p>
+    </div>
+  );
+}
+
+// Two amounts as one bar, so the gap between them is the point.
+function Split({
+  leftLabel,
+  leftValue,
+  rightLabel,
+  rightValue,
+}: {
+  leftLabel: string;
+  leftValue: number;
+  rightLabel: string;
+  rightValue: number;
+}) {
+  const total = leftValue + rightValue;
+  const leftPct = total > 0 ? (leftValue / total) * 100 : 50;
+
+  return (
+    <div>
+      <div className="flex h-7 overflow-hidden rounded-full bg-tint">
+        <div
+          className="flex items-center justify-center text-[11px] font-semibold text-white"
+          style={{ width: `${leftPct}%`, background: "var(--warn)" }}
+        >
+          {Math.round(leftPct)}%
+        </div>
+        <div
+          className="flex flex-1 items-center justify-center text-[11px] font-semibold text-white"
+          style={{ background: "var(--good)" }}
+        >
+          {Math.round(100 - leftPct)}%
+        </div>
+      </div>
+      <div className="mt-2 flex justify-between text-[13px]">
+        <span>
+          {leftLabel}{" "}
+          <strong style={{ color: "var(--warn)" }}>
+            {moneyExact(leftValue)}
+          </strong>
+        </span>
+        <span>
+          {rightLabel}{" "}
+          <strong style={{ color: "var(--good)" }}>
+            {moneyExact(rightValue)}
+          </strong>
+        </span>
+      </div>
     </div>
   );
 }
