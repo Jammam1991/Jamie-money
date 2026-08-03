@@ -142,6 +142,8 @@ export default function OverallDebtClient() {
       <Card className="bg-tint">
         <p className="mb-3 text-[13px] font-medium text-muted">Context</p>
         <ul className="space-y-2 text-[13px] text-muted">
+          <li>• Marriage: July 2020 through present</li>
+          <li>• Separated: 2023</li>
           <li>• Jamie salary: $147,000 (cash deposits)</li>
           <li>• Chris salary: $135,000 (rental deposits & W-2 income)</li>
           <li>• Condo: Separate property — purchased before marriage</li>
