@@ -386,6 +386,10 @@ export default function DivorceResponsibilityClient() {
             label="Drawn beyond the pay he earned"
             value={moneyExact(total.overdraw)}
           />
+          <Row
+            label={`Chris's half of the things Jamie's holding (${money(assetsTotal)})`}
+            value={money(assetsHalf)}
+          />
           <div className="flex items-center justify-between gap-3 border-t border-border pt-2 text-lg font-bold">
             <span>Jamie owes</span>
             <span className="shrink-0" style={{ color: "var(--warn)" }}>
@@ -415,8 +419,9 @@ export default function DivorceResponsibilityClient() {
       <Card>
         <p className="mb-1 text-[15px] font-semibold">💍 Then there&apos;s the stuff</p>
         <p className="mb-3 text-[13px] text-muted">
-          Bought during the marriage, so it gets split too. Kept off the bill
-          above until you settle who walks away with what.
+          Bought during the marriage, so it gets split too — and Jamie is
+          holding all of it. If he keeps it, he owes Chris half of what
+          it&apos;s worth. That half is on the bill above.
         </p>
         <div className="space-y-2">
           {ASSETS.map((a, i) => (
@@ -436,7 +441,7 @@ export default function DivorceResponsibilityClient() {
             <span className="shrink-0">{money(assetsTotal)}</span>
           </div>
           <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
-            <span>Half each</span>
+            <span>Chris&apos;s half — owed back</span>
             <span className="shrink-0">{money(assetsHalf)}</span>
           </div>
         </div>

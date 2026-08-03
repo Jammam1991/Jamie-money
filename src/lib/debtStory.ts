@@ -78,12 +78,12 @@ export const ADVANCES = [
 export const gymOwesChris = ADVANCES.reduce((sum, a) => sum + a.amount, 0);
 
 // ── Things, not money ────────────────────────────────────────────────────────
-// Personal property bought during the marriage. Deliberately NOT folded into
-// the bill: which way each line runs depends on who physically ends up with the
-// item, and that isn't settled yet. Listed so nothing gets quietly forgotten.
+// Personal property bought during the marriage. Jamie is holding all of it, so
+// Chris's half is a real line on the bill — if Jamie keeps the things, he owes
+// Chris what half of them are worth.
 export const ASSETS = [
-  { item: "Rolex", value: 30_000, who: "To be split" },
-  { item: "Rolex", value: 15_000, who: "To be split" },
+  { item: "Rolex", value: 30_000, who: "Jamie holds" },
+  { item: "Rolex", value: 15_000, who: "Jamie holds" },
   { item: "Jewellery and other items", value: 20_000, who: "Jamie holds" },
 ] as const;
 
@@ -154,6 +154,10 @@ export const jamieRetirementClaim = STORY.jamieRetirementShare;
 export function bill(now: Date) {
   const { overdraw } = gymSettleUp(now);
   const owes =
-    jamieHalfOfDebt + STORY.carLoan + jamieHalfOfGymDebt + overdraw;
+    jamieHalfOfDebt +
+    STORY.carLoan +
+    jamieHalfOfGymDebt +
+    overdraw +
+    assetsHalf;
   return { overdraw, owes, net: owes - jamieRetirementClaim };
 }
