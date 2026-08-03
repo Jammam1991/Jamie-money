@@ -756,6 +756,131 @@ export async function updateOverallContext(input: {
   return { ok: true };
 }
 
+// ── Credit reports & score history ───────────────────────────────────────────
+
+// Save one uploaded credit report: the report row, its accounts, and — if the
+// report showed a score — a matching entry in the score history.
+export async function saveCreditReport(input: {
+  reportDate: string;
+  bureau: string;
+  score: number | null;
+  note?: string;
+  accounts: { name: string; balance: number; apr: number; minPayment: number }[];
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const reportDate = /^\d{4}-\d{2}-\d{2}$/.test(input.reportDate)
+    ? input.reportDate
+    : new Date().toISOString().split("T")[0];
+  const score =
+    input.score !== null && input.score >= 300 && input.score <= 850
+      ? Math.round(input.score)
+      : null;
+  const total = input.accounts.reduce((sum, a) => sum + (a.balance || 0), 0);
+
+  const { data: report, error } = await c
+    .from("credit_reports")
+    .insert({
+      report_date: reportDate,
+      bureau: input.bureau || "Unknown",
+      fico_score: score,
+      total_balance: total,
+      note: input.note?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  const reportId = String(report.id);
+
+  if (input.accounts.length > 0) {
+    const { error: accountError } = await c
+      .from("credit_report_accounts")
+      .insert(
+        input.accounts.map((a, i) => ({
+          report_id: reportId,
+          name: a.name,
+          balance: a.balance,
+          apr: a.apr,
+          min_payment: a.minPayment,
+          sort: i,
+        }))
+      );
+    // A half-saved report is worse than none — roll the whole thing back.
+    if (accountError) {
+      await c.from("credit_reports").delete().eq("id", reportId);
+      return { ok: false, error: accountError.message };
+    }
+  }
+
+  if (score !== null) {
+    await c.from("fico_scores").insert({
+      score,
+      scored_on: reportDate,
+      source: "report",
+      report_id: reportId,
+    });
+  }
+
+  revalidatePath("/credit-report");
+  return { ok: true, id: reportId };
+}
+
+export async function deleteCreditReport(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  // Accounts and the report's score entry are removed by the cascade.
+  const { error } = await c.from("credit_reports").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/credit-report");
+  return { ok: true };
+}
+
+// A score typed in by hand, for the months between full reports.
+export async function addFicoScore(input: {
+  score: number;
+  scoredOn: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  if (!(input.score >= 300 && input.score <= 850)) {
+    return { ok: false, error: "A credit score is between 300 and 850." };
+  }
+  const scoredOn = /^\d{4}-\d{2}-\d{2}$/.test(input.scoredOn)
+    ? input.scoredOn
+    : new Date().toISOString().split("T")[0];
+  const { data, error } = await c
+    .from("fico_scores")
+    .insert({
+      score: Math.round(input.score),
+      scored_on: scoredOn,
+      source: "manual",
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/credit-report");
+  return { ok: true, id: String(data.id) };
+}
+
+export async function deleteFicoScore(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("fico_scores").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/credit-report");
+  return { ok: true };
+}
+
 // ── Overall Debt Payments ─────────────────────────────────────────────────────
 
 export async function addOverallDebtPayment(input: {
