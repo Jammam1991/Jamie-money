@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, AlertCircle } from "lucide-react";
+import { Home, Receipt, AlertCircle, CreditCard } from "lucide-react";
 
 const tabs = [
   { href: "/", label: "My Cash", Icon: Home },
   { href: "/bills", label: "Bills", Icon: Receipt },
+  { href: "/debt", label: "My Debt", Icon: CreditCard },
   { href: "/owes", label: "Past Due", Icon: AlertCircle },
 ];
 
