@@ -514,6 +514,96 @@ export async function getOverallContext(): Promise<OverallContext> {
   };
 }
 
+// ── Credit reports & score history ───────────────────────────────────────────
+
+export interface CreditReportAccount {
+  id: string;
+  reportId: string;
+  name: string;
+  balance: number;
+  apr: number;
+  minPayment: number;
+}
+
+export interface CreditReport {
+  id: string;
+  reportDate: string;
+  bureau: string;
+  ficoScore: number | null;
+  totalBalance: number;
+  note: string | null;
+  accounts: CreditReportAccount[];
+}
+
+// Every report Chris has uploaded, newest first, with its accounts attached.
+// Two queries instead of a join so the fallback (no database) stays simple.
+export async function getCreditReports(): Promise<CreditReport[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("credit_reports")
+    .select("*")
+    .order("report_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error || !data || data.length === 0) return [];
+
+  const ids = data.map((r) => r.id);
+  const { data: accounts } = await c
+    .from("credit_report_accounts")
+    .select("*")
+    .in("report_id", ids)
+    .order("sort");
+
+  const byReport = new Map<string, CreditReportAccount[]>();
+  for (const row of accounts ?? []) {
+    const key = String(row.report_id);
+    const list = byReport.get(key) ?? [];
+    list.push({
+      id: String(row.id),
+      reportId: key,
+      name: row.name,
+      balance: Number(row.balance),
+      apr: Number(row.apr ?? 0),
+      minPayment: Number(row.min_payment ?? 0),
+    });
+    byReport.set(key, list);
+  }
+
+  return data.map((row) => ({
+    id: String(row.id),
+    reportDate: row.report_date,
+    bureau: row.bureau ?? "Unknown",
+    ficoScore: row.fico_score === null ? null : Number(row.fico_score),
+    totalBalance: Number(row.total_balance ?? 0),
+    note: row.note ?? null,
+    accounts: byReport.get(String(row.id)) ?? [],
+  }));
+}
+
+export interface FicoScoreEntry {
+  id: string;
+  score: number;
+  scoredOn: string;
+  source: string; // 'report' or 'manual'
+}
+
+// The credit-score history, oldest first so the chart reads left to right.
+export async function getFicoHistory(): Promise<FicoScoreEntry[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("fico_scores")
+    .select("*")
+    .order("scored_on", { ascending: true });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    score: Number(row.score),
+    scoredOn: row.scored_on,
+    source: row.source ?? "manual",
+  }));
+}
+
 export interface OverallDebtPayment {
   id: string;
   paymentDate: string;

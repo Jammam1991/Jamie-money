@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Scale, CreditCard } from "lucide-react";
+import { Menu, X, Scale, CreditCard, FileText } from "lucide-react";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -68,6 +68,17 @@ export default function Header() {
               <div className="flex items-center gap-3">
                 <CreditCard size={20} />
                 <span className="font-medium">Overall Debt</span>
+              </div>
+              <span className="text-muted">&gt;</span>
+            </Link>
+            <Link
+              href="/credit-report"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <FileText size={20} />
+                <span className="font-medium">Credit Report</span>
               </div>
               <span className="text-muted">&gt;</span>
             </Link>
