@@ -138,6 +138,17 @@ export default function OverallDebtClient() {
 
   return (
     <div className="space-y-4">
+      {/* Context Notes */}
+      <Card className="bg-tint">
+        <p className="mb-3 text-[13px] font-medium text-muted">Context</p>
+        <ul className="space-y-2 text-[13px] text-muted">
+          <li>• Jamie salary: $147,000 (cash deposits)</li>
+          <li>• Chris salary: $135,000 (rental deposits & W-2 income)</li>
+          <li>• Condo: Separate property — purchased before marriage</li>
+          <li>• Metlife Legal plan covers uncontested divorce legal fees</li>
+        </ul>
+      </Card>
+
       {/* Total debt */}
       <div className="rounded-2xl bg-warn-bg p-4">
         <p className="text-[13px] text-warn">Total communal property</p>
