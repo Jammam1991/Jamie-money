@@ -128,10 +128,11 @@ export async function getMoneyAppFico(): Promise<{ score: number; date: string }
   return null;
 }
 
-// Which pages Chris has switched off for Jamie, kept as one JSON list in the
-// existing key/value settings table (no new table to create). Anything not in
-// the list is visible, so a fresh install shows everything.
-export async function getHiddenPages(): Promise<string[]> {
+// Which pages Chris has parked as "Coming Soon" for Jamie. The link stays put;
+// the page just shows a placeholder instead of its content. Kept as one JSON
+// list in the existing key/value settings table (no new table to create), under
+// the original `hidden_pages` key so earlier choices carry over.
+export async function getComingSoonPages(): Promise<string[]> {
   const c = client();
   if (!c) return [];
   const { data, error } = await c

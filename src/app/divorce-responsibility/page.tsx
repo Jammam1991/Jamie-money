@@ -1,11 +1,13 @@
 import { PageTitle } from "@/components/ui";
 import DivorceResponsibilityClient from "@/components/DivorceResponsibilityClient";
-import { requireVisible } from "@/lib/visibility";
+import { pageGate } from "@/lib/visibility";
+import ComingSoon from "@/components/ComingSoon";
 
 export const dynamic = "force-dynamic";
 
 export default async function DivorceResponsibilityPage() {
-  await requireVisible("divorce-responsibility");
+  const { comingSoon } = await pageGate("divorce-responsibility");
+  if (comingSoon) return <ComingSoon title="Divorce Responsibility" />;
 
   return (
     <div>

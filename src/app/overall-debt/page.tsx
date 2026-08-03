@@ -1,12 +1,14 @@
 import { PageTitle } from "@/components/ui";
 import OverallDebtClient from "@/components/OverallDebtClient";
-import { requireVisible } from "@/lib/visibility";
+import { pageGate } from "@/lib/visibility";
+import ComingSoon from "@/components/ComingSoon";
 import { getOverallDebts, getOverallContext, getOverallDebtPayments } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverallDebtPage() {
-  const role = await requireVisible("overall-debt");
+  const { role, comingSoon } = await pageGate("overall-debt");
+  if (comingSoon) return <ComingSoon title="Overall Debt" />;
 
   const [debts, context, payments] = await Promise.all([
     getOverallDebts(),

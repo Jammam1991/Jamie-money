@@ -8,7 +8,7 @@ import {
   client,
   getBillDocuments,
   getBillPayments,
-  getHiddenPages,
+  getComingSoonPages,
   recordLogin,
 } from "./store";
 import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
@@ -128,19 +128,19 @@ function nextSort(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-// ── Which pages Jamie can see ─────────────────────────────────────────────────
-// Stored as one JSON list of hidden page keys under the `hidden_pages` setting.
-export async function setPageHidden(
+// ── Which pages say "Coming Soon" to Jamie ────────────────────────────────────
+// Stored as one JSON list of page keys under the `hidden_pages` setting.
+export async function setPageComingSoon(
   key: string,
-  hidden: boolean
+  comingSoon: boolean
 ): Promise<ActionResult> {
   const denied = await guard();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
 
-  const next = new Set(await getHiddenPages());
-  if (hidden) next.add(key);
+  const next = new Set(await getComingSoonPages());
+  if (comingSoon) next.add(key);
   else next.delete(key);
 
   const { error } = await c

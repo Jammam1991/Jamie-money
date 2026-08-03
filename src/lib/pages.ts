@@ -1,7 +1,8 @@
-// ── The list of pages Chris can switch on and off for Jamie ───────────────────
-// One place that names every screen Jamie can reach, so the bottom tabs, the
-// slide-out menu, the page guards, and the Settings screen never drift apart.
-// Home ("/") isn't here on purpose — it can't be hidden.
+// ── The list of pages Chris can park as "Coming Soon" for Jamie ───────────────
+// One place that names every screen Jamie can reach, so the page gates and the
+// Settings screen never drift apart. The links themselves never move — a parked
+// page still opens, it just shows a placeholder instead of its content.
+// Home ("/") isn't here on purpose — it always shows its real content.
 
 export type PageKey =
   | "bills"
@@ -44,14 +45,14 @@ export const PAGES: AppPage[] = [
     href: "/owes",
     label: "Past Due",
     where: "nav",
-    blurb: "Money owed to Chris. Also hides itself when nothing is late.",
+    blurb: "Money owed to Chris.",
   },
   {
     key: "compare",
     href: "/compare",
-    label: "Job vs Business (home card)",
+    label: "Job vs Business (quick look)",
     where: "home",
-    blurb: "The quick pay-comparison card on the home screen.",
+    blurb: "The short pay comparison, opened from the home screen card.",
   },
   {
     key: "job-vs-business",
@@ -90,12 +91,9 @@ export const PAGES: AppPage[] = [
   },
 ];
 
+// Where each page is reached from — just a heading on the Settings screen.
 export const WHERE_LABELS: Record<AppPage["where"], string> = {
   nav: "Bottom tabs",
   home: "Home screen",
   menu: "Menu (☰)",
 };
-
-export function isHidden(hidden: string[], key: PageKey): boolean {
-  return hidden.includes(key);
-}
