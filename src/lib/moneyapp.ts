@@ -9,6 +9,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 //
 // Required env vars (add in Vercel → jamie-money → Settings → Environment):
 //   MONEYAPP_API_URL — Money App's base URL, e.g. https://moneyapp.example.com
+//                       (MONEYAPP_URL is accepted too — Money App's own notes
+//                       call it that, and a name mismatch just looks like the
+//                       feature is switched off)
 //   MONEYAPP_API_KEY — an API key generated in the Money App repo via
 //                       `node scripts/generate-api-key.mjs "jamie-money integration"`
 //
@@ -48,14 +51,18 @@ type ExportResponse = {
   history?: ExportSnapshot[];
 };
 
+function apiUrl(): string | undefined {
+  return process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
+}
+
 export function moneyAppReady(): boolean {
-  return Boolean(process.env.MONEYAPP_API_URL && process.env.MONEYAPP_API_KEY);
+  return Boolean(apiUrl() && process.env.MONEYAPP_API_KEY);
 }
 
 export async function syncMoneyAppDebts(
   supabase: SupabaseClient,
 ): Promise<MoneyAppSyncResult> {
-  const baseUrl = process.env.MONEYAPP_API_URL;
+  const baseUrl = apiUrl();
   const apiKey = process.env.MONEYAPP_API_KEY;
   if (!baseUrl || !apiKey) {
     return {

@@ -94,8 +94,9 @@ export default function CreditReportClient({
           </p>
           {admin && !moneyAppReady && (
             <p className="mt-2 text-sm text-warn">
-              Money App isn&apos;t connected yet. Add MONEYAPP_API_URL and
-              MONEYAPP_API_KEY in Vercel, then tap sync.
+              Money App isn&apos;t connected yet. Add MONEYAPP_API_URL (or
+              MONEYAPP_URL) and MONEYAPP_API_KEY in Vercel, redeploy, then tap
+              sync.
             </p>
           )}
         </Card>
