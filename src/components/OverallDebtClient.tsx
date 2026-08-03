@@ -116,7 +116,7 @@ export default function OverallDebtClient() {
     <div className="space-y-4">
       {/* Total debt */}
       <div className="rounded-2xl bg-warn-bg p-4">
-        <p className="text-[13px] text-warn">Total household debt</p>
+        <p className="text-[13px] text-warn">Total communal property</p>
         <p className="text-3xl font-medium text-warn">{money(totalDebt)}</p>
       </div>
 
