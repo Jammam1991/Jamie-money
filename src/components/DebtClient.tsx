@@ -16,15 +16,17 @@ import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
   duration,
+  monthlyInterest,
   simulate,
   totalBalance,
   totalMinimum,
-  yearlyInterest,
 } from "@/lib/payoff";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
+import DebtHistory from "@/components/DebtHistory";
+import type { DebtTransaction } from "@/lib/store";
 import {
   addDebt,
   deleteDebt,
@@ -50,11 +52,13 @@ export default function DebtClient({
   admin,
   hasBank,
   fico,
+  initialTransactions,
 }: {
   initialDebts: Debt[];
   admin: boolean;
   hasBank: boolean;
   fico: { score: number; date: string } | null;
+  initialTransactions: DebtTransaction[];
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,7 +69,7 @@ export default function DebtClient({
   const tempId = useRef(-1);
 
   const total = totalBalance(debts);
-  const yr = yearlyInterest(debts);
+  const mo = monthlyInterest(debts);
   const minTotal = totalMinimum(debts);
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
@@ -139,9 +143,14 @@ export default function DebtClient({
       <div className="rounded-2xl bg-warn-bg p-4">
         <p className="text-[13px] text-warn">You owe in total</p>
         <p className="text-3xl font-medium text-warn">{money(total)}</p>
-        {yr > 0 && (
+        {mo > 0 && (
           <p className="mt-1 text-[13px] text-warn">
-            Interest is costing you about {money(yr)}/year.
+            Interest is costing you about {money(mo)}/month.
+          </p>
+        )}
+        {minTotal > 0 && (
+          <p className="text-[13px] text-warn">
+            Estimated payment: about {money(minTotal)}/month.
           </p>
         )}
       </div>
@@ -256,6 +265,9 @@ export default function DebtClient({
             </button>
           ))}
       </Card>
+
+      {/* Year -> month -> transaction drill-down */}
+      <DebtHistory initialTransactions={initialTransactions} admin={admin} />
     </div>
   );
 }

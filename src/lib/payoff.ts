@@ -14,9 +14,9 @@ export type SimResult = {
   paysOff: boolean; // false if the payment is too small to ever clear it
 };
 
-// The interest Jamie is on track to pay over the next year if nothing changes.
-export function yearlyInterest(debts: Debt[]): number {
-  return debts.reduce((sum, d) => sum + d.balance * (d.apr / 100), 0);
+// The interest Jamie is on track to pay next month if nothing changes.
+export function monthlyInterest(debts: Debt[]): number {
+  return debts.reduce((sum, d) => sum + d.balance * (d.apr / 100 / 12), 0);
 }
 
 // The smallest total monthly payment allowed (sum of every minimum).
