@@ -152,9 +152,9 @@ export default function OverallDebtClient() {
         </div>
       </Card>
 
-      {/* Breakdown by person */}
+      {/* Bank Ownership */}
       <Card>
-        <p className="mb-4 text-[13px] text-muted">Breakdown by person</p>
+        <p className="mb-4 text-[13px] text-muted">Bank Ownership</p>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm">Chris's debt</span>
@@ -168,6 +168,28 @@ export default function OverallDebtClient() {
             <span className="text-sm">Joint debt</span>
             <span className="font-medium">{money(breakdownByPerson.Joint)}</span>
           </div>
+        </div>
+      </Card>
+
+      {/* Actual Ownership Responsibility */}
+      <Card>
+        <p className="mb-4 text-[13px] text-muted">Actual Ownership Responsibility</p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm">Jamie's responsibility</span>
+            <span className="font-medium">{money(88500)}</span>
+          </div>
+          <p className="text-xs text-muted">Personal credit cards ($35k) + business debt ($53.5k)</p>
+          <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+            <span className="text-sm">Shared responsibility</span>
+            <span className="font-medium">{money(86000)}</span>
+          </div>
+          <p className="text-xs text-muted">Joint auto loan — split depends on asset/income division</p>
+          <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+            <span className="text-sm">Chris's responsibility</span>
+            <span className="font-medium">{money(365000)}</span>
+          </div>
+          <p className="text-xs text-muted">Secured in Chris's name — though home equity tied to marital home</p>
         </div>
       </Card>
 
