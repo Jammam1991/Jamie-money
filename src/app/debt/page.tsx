@@ -6,12 +6,14 @@ import {
   getMoneyAppFico,
   hasPlaidItems,
 } from "@/lib/store";
-import { requireVisible } from "@/lib/visibility";
+import { pageGate } from "@/lib/visibility";
+import ComingSoon from "@/components/ComingSoon";
 
 export const dynamic = "force-dynamic";
 
 export default async function DebtPage() {
-  const role = await requireVisible("debt");
+  const { role, comingSoon } = await pageGate("debt");
+  if (comingSoon) return <ComingSoon title="Debt" />;
   const [debts, hasBank, fico, transactions] = await Promise.all([
     getDebts(),
     hasPlaidItems(),

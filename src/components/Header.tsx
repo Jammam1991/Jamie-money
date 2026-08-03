@@ -4,25 +4,23 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, Scale, CreditCard, FileText } from "lucide-react";
 
-// The slide-out menu. Each row carries the same key the Settings screen uses,
-// so switching a page off there removes it here too.
+// The slide-out menu. Every row always shows — a page parked as "Coming Soon"
+// on the Settings screen keeps its link and says so when Jamie opens it.
 const links = [
-  { key: "job-vs-business", href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
-  { key: "debt", href: "/debt", label: "Debt", Icon: CreditCard },
-  { key: "overall-debt", href: "/overall-debt", label: "Overall Debt", Icon: CreditCard },
-  { key: "credit-report", href: "/credit-report", label: "Credit Report", Icon: FileText },
-  { key: "divorce", href: "/divorce", label: "Divorce", Icon: Scale },
+  { href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
+  { href: "/debt", label: "Debt", Icon: CreditCard },
+  { href: "/overall-debt", label: "Overall Debt", Icon: CreditCard },
+  { href: "/credit-report", label: "Credit Report", Icon: FileText },
+  { href: "/divorce", label: "Divorce", Icon: Scale },
   {
-    key: "divorce-responsibility",
     href: "/divorce-responsibility",
     label: "Divorce Responsibility",
     Icon: Scale,
   },
 ];
 
-export default function Header({ hidden = [] }: { hidden?: string[] }) {
+export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const visible = links.filter((l) => !hidden.includes(l.key));
 
   return (
     <>
@@ -55,9 +53,9 @@ export default function Header({ hidden = [] }: { hidden?: string[] }) {
           </div>
 
           <nav className="p-4 space-y-2">
-            {visible.map(({ key, href, label, Icon }) => (
+            {links.map(({ href, label, Icon }) => (
               <Link
-                key={key}
+                key={href}
                 href={href}
                 onClick={() => setMenuOpen(false)}
                 className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
@@ -69,9 +67,6 @@ export default function Header({ hidden = [] }: { hidden?: string[] }) {
                 <span className="text-muted">&gt;</span>
               </Link>
             ))}
-            {visible.length === 0 && (
-              <p className="p-3 text-[14px] text-muted">Nothing here right now.</p>
-            )}
           </nav>
         </div>
       )}

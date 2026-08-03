@@ -2,13 +2,15 @@ import { PageTitle } from "@/components/ui";
 import OwesChrisClient from "@/components/OwesChrisClient";
 import { getCashLog, getOwesCharges } from "@/lib/store";
 import { isViewingAsJamie } from "@/lib/auth";
-import { requireVisible } from "@/lib/visibility";
+import { pageGate } from "@/lib/visibility";
+import ComingSoon from "@/components/ComingSoon";
 import { monthStart } from "@/lib/pastDue";
 
 export const dynamic = "force-dynamic";
 
 export default async function OwesPage() {
-  const role = await requireVisible("owes");
+  const { role, comingSoon } = await pageGate("owes");
+  if (comingSoon) return <ComingSoon title="Past Due Balance" />;
   // "View as Jamie" hides the editing tools too, so Chris sees exactly the
   // read-only page Jamie gets.
   const viewingAsJamie = await isViewingAsJamie();

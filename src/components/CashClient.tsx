@@ -55,44 +55,16 @@ function dayLabel(iso: string): string {
   });
 }
 
-// The savings-goal strip: a tappable link to Bills, or a plain panel when the
-// Bills page is switched off for Jamie.
-function Goal({
-  linked,
-  style,
-  children,
-}: {
-  linked: boolean;
-  style: React.CSSProperties;
-  children: React.ReactNode;
-}) {
-  const className = "flex items-center justify-between rounded-2xl p-4";
-  if (!linked) {
-    return (
-      <div className={className} style={style}>
-        {children}
-      </div>
-    );
-  }
-  return (
-    <Link href="/bills" className={className} style={style}>
-      {children}
-    </Link>
-  );
-}
-
 export default function CashClient({
   initialEntries,
   admin,
   nextMonthName,
   nextMonthTotal,
-  showBillsLink = true,
 }: {
   initialEntries: CashEntry[];
   admin: boolean;
   nextMonthName: string;
   nextMonthTotal: number;
-  showBillsLink?: boolean;
 }) {
   const [entries, setEntries] = useState<CashEntry[]>(initialEntries);
   const [picked, setPicked] = useState<CashKind | null>(null);
@@ -327,11 +299,11 @@ export default function CashClient({
         </Card>
       )}
 
-      {/* Saving goal: what next month's bills will cost. Tap to see the bills —
-          unless the Bills page is switched off, then it's just a note. */}
+      {/* Saving goal: what next month's bills will cost. Tap to see the bills. */}
       {nextMonthTotal > 0 && (
-        <Goal
-          linked={showBillsLink}
+        <Link
+          href="/bills"
+          className="flex items-center justify-between rounded-2xl p-4"
           style={
             balance >= nextMonthTotal
               ? { background: "var(--good-bg)", color: "var(--good)" }
@@ -351,8 +323,8 @@ export default function CashClient({
               </>
             )}
           </span>
-          {showBillsLink && <ChevronRight size={18} className="shrink-0" />}
-        </Goal>
+          <ChevronRight size={18} className="shrink-0" />
+        </Link>
       )}
 
       {/* The story so far — tap "Show everything" to dig in. */}

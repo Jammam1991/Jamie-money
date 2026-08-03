@@ -7,12 +7,14 @@ import {
   getWeeklyIncome,
 } from "@/lib/store";
 import { isViewingAsJamie } from "@/lib/auth";
-import { requireVisible } from "@/lib/visibility";
+import { pageGate } from "@/lib/visibility";
+import ComingSoon from "@/components/ComingSoon";
 
 export const dynamic = "force-dynamic";
 
 export default async function BillsPage() {
-  const role = await requireVisible("bills");
+  const { role, comingSoon } = await pageGate("bills");
+  if (comingSoon) return <ComingSoon title="My Bills" />;
   // "View as Jamie" hides the editing tools too, so Chris sees exactly the
   // read-only page Jamie gets.
   const viewingAsJamie = await isViewingAsJamie();

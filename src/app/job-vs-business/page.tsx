@@ -6,12 +6,14 @@ import {
   getJobPostings,
   getDecisionJournal,
 } from "@/lib/store";
-import { requireVisible } from "@/lib/visibility";
+import { pageGate } from "@/lib/visibility";
+import ComingSoon from "@/components/ComingSoon";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobVsBusinessPage() {
-  await requireVisible("job-vs-business");
+  const { comingSoon } = await pageGate("job-vs-business");
+  if (comingSoon) return <ComingSoon title="Job vs Business" />;
 
   const [comparison, prosCons, postings, journal] = await Promise.all([
     getJobVsBusiness(),
