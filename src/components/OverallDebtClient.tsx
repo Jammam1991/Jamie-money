@@ -2,13 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { Card } from "@/components/ui";
-import { Pencil, X } from "lucide-react";
-import type { OverallDebt } from "@/lib/store";
-import { updateOverallContext } from "@/lib/actions";
+import { Pencil, X, Check, Trash2 } from "lucide-react";
+import type { OverallDebt, OverallDebtPayment } from "@/lib/store";
+import { updateOverallContext, addOverallDebtPayment, deleteOverallDebtPayment } from "@/lib/actions";
 
 interface Props {
   initialDebts: OverallDebt[];
   initialContext: any;
+  initialPayments: any[];
   admin: boolean;
 }
 
@@ -21,14 +22,22 @@ function money(n: number): string {
   }).format(n);
 }
 
-export default function OverallDebtClient({ initialDebts, initialContext, admin }: Props) {
+export default function OverallDebtClient({
+  initialDebts,
+  initialContext,
+  initialPayments = [],
+  admin
+}: Props) {
   const [editing, setEditing] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
+  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [payments, setPayments] = useState<OverallDebtPayment[]>(initialPayments);
   const [isPending, startTransition] = useTransition();
 
   // Jamie's debts
   const jamieDebts = initialDebts.filter((d) => d.securedBy === "Jamie");
   const jamieResponsible = jamieDebts.reduce((sum, d) => sum + d.balance, 0);
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
   // Parse values from initialContext or use defaults
   const monthlyPayments = 2800; // example - this should be editable
@@ -53,6 +62,67 @@ export default function OverallDebtClient({ initialDebts, initialContext, admin 
           <Pencil size={15} />
           Edit
         </button>
+      )}
+
+      {/* Payment Status */}
+      <div className="rounded-2xl bg-good-bg border border-border p-4">
+        <p className="text-[13px] text-muted mb-2">Total paid</p>
+        <p className="text-2xl font-bold text-good">{money(totalPaid)}</p>
+        <p className="text-xs text-muted mt-1">{payments.length} payment{payments.length !== 1 ? 's' : ''} logged</p>
+      </div>
+
+      {!showAddPayment && (
+        <button
+          onClick={() => setShowAddPayment(true)}
+          className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted hover:bg-tint transition-colors"
+        >
+          <Check size={15} />
+          Mark payment
+        </button>
+      )}
+
+      {showAddPayment && (
+        <AddPaymentForm
+          onClose={() => setShowAddPayment(false)}
+          onAdd={(payment) => {
+            setPayments([payment, ...payments]);
+            setShowAddPayment(false);
+          }}
+          isPending={isPending}
+          startTransition={startTransition}
+        />
+      )}
+
+      {/* Payment History */}
+      {payments.length > 0 && (
+        <Card>
+          <p className="mb-3 text-[13px] font-medium text-muted">Payment history</p>
+          <div className="space-y-2">
+            {payments.map((payment) => (
+              <div key={payment.id} className="flex items-center justify-between p-2 rounded border border-border">
+                <div>
+                  <p className="text-sm font-medium">{money(payment.amount)}</p>
+                  <p className="text-xs text-muted">{payment.paymentDate}</p>
+                  {payment.note && <p className="text-xs text-muted">{payment.note}</p>}
+                </div>
+                <button
+                  onClick={() => {
+                    startTransition(async () => {
+                      const result = await deleteOverallDebtPayment(payment.id);
+                      if (result.ok) {
+                        setPayments(payments.filter((p) => p.id !== payment.id));
+                      }
+                    });
+                  }}
+                  disabled={isPending}
+                  className="p-1.5 hover:bg-tint rounded disabled:opacity-50"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Main Summary */}
@@ -150,6 +220,103 @@ export default function OverallDebtClient({ initialDebts, initialContext, admin 
         </Card>
       )}
     </div>
+  );
+}
+
+function AddPaymentForm({
+  onClose,
+  onAdd,
+  isPending,
+  startTransition,
+}: {
+  onClose: () => void;
+  onAdd: (payment: OverallDebtPayment) => void;
+  isPending: boolean;
+  startTransition: (fn: () => Promise<void>) => void;
+}) {
+  const today = new Date().toISOString().split("T")[0];
+  const [paymentDate, setPaymentDate] = useState(today);
+  const [amount, setAmount] = useState("2800");
+  const [note, setNote] = useState("");
+
+  const inputClass =
+    "w-full rounded-lg border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-[var(--muted)]";
+
+  const handleSubmit = () => {
+    if (!paymentDate || !amount) return;
+    startTransition(async () => {
+      const result = await addOverallDebtPayment({
+        payment_date: paymentDate,
+        amount: Number(amount),
+        note: note || undefined,
+      });
+      if (result.ok && result.id) {
+        onAdd({
+          id: result.id,
+          paymentDate,
+          amount: Number(amount),
+          note: note || undefined,
+        });
+      }
+    });
+  };
+
+  return (
+    <Card>
+      <p className="mb-4 text-sm font-medium">Record payment</p>
+      <div className="space-y-2">
+        <div>
+          <label className="text-xs text-muted block mb-1">Payment date</label>
+          <input
+            type="date"
+            value={paymentDate}
+            onChange={(e) => setPaymentDate(e.target.value)}
+            className={inputClass}
+            disabled={isPending}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-muted block mb-1">Amount</label>
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className={inputClass}
+            disabled={isPending}
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-muted block mb-1">Note (optional)</label>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g., Monthly payment"
+            className={inputClass}
+            disabled={isPending}
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        <button
+          onClick={handleSubmit}
+          disabled={isPending || !paymentDate || !amount}
+          className="flex-1 rounded-lg bg-good px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+        >
+          Save payment
+        </button>
+        <button
+          onClick={onClose}
+          disabled={isPending}
+          className="flex-1 rounded-lg border border-border py-2 text-sm font-medium hover:bg-tint transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+    </Card>
   );
 }
 

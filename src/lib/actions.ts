@@ -755,3 +755,39 @@ export async function updateOverallContext(input: {
   revalidatePath("/overall-debt");
   return { ok: true };
 }
+
+// ── Overall Debt Payments ─────────────────────────────────────────────────────
+
+export async function addOverallDebtPayment(input: {
+  payment_date: string;
+  amount: number;
+  note?: string;
+}): Promise<ActionResult> {
+  const loggedIn = await guardLoggedIn();
+  if (loggedIn) return loggedIn;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("overall_debt_payments")
+    .insert({
+      payment_date: input.payment_date,
+      amount: input.amount,
+      note: input.note ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true, id: data.id };
+}
+
+export async function deleteOverallDebtPayment(id: string): Promise<ActionResult> {
+  const loggedIn = await guardLoggedIn();
+  if (loggedIn) return loggedIn;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("overall_debt_payments").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true };
+}

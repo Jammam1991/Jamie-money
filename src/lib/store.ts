@@ -513,3 +513,26 @@ export async function getOverallContext(): Promise<OverallContext> {
     legalPlanNote: data.legal_plan_note,
   };
 }
+
+export interface OverallDebtPayment {
+  id: string;
+  paymentDate: string;
+  amount: number;
+  note?: string;
+}
+
+export async function getOverallDebtPayments(): Promise<OverallDebtPayment[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("overall_debt_payments")
+    .select("*")
+    .order("payment_date", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    paymentDate: row.payment_date,
+    amount: Number(row.amount),
+    note: row.note ?? undefined,
+  }));
+}
