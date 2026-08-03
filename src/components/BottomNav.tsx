@@ -7,15 +7,17 @@ import { Home, Receipt, AlertCircle } from "lucide-react";
 const tabs = [
   { href: "/", label: "My Cash", Icon: Home },
   { href: "/bills", label: "Bills", Icon: Receipt },
-  { href: "/owes", label: "Owes Chris", Icon: AlertCircle },
+  { href: "/owes", label: "Past Due", Icon: AlertCircle },
 ];
 
-export default function BottomNav() {
+// `showPastDue` is false when nothing is late — the tab disappears entirely.
+export default function BottomNav({ showPastDue = true }: { showPastDue?: boolean }) {
   const pathname = usePathname();
+  const visible = tabs.filter((t) => t.href !== "/owes" || showPastDue);
   return (
     <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card">
       <div className="mx-auto flex max-w-md">
-        {tabs.map(({ href, label, Icon }) => {
+        {visible.map(({ href, label, Icon }) => {
           const active = pathname === href;
           return (
             <Link
