@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Scale, CreditCard, FileText } from "lucide-react";
+import { Menu, X, Scale, CreditCard, FileText, BookOpen } from "lucide-react";
 
 // The slide-out menu. Every row always shows — a page parked as "Coming Soon"
 // on the Settings screen keeps its link and says so when Jamie opens it.
@@ -14,8 +14,8 @@ const links = [
   { href: "/divorce", label: "Divorce", Icon: Scale },
   {
     href: "/divorce-responsibility",
-    label: "Divorce Responsibility",
-    Icon: Scale,
+    label: "The Debt Story",
+    Icon: BookOpen,
   },
 ];
 
