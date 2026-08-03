@@ -10,6 +10,12 @@ interface HouseholdDebt {
   monthlyInterest: string;
 }
 
+interface HouseholdAsset {
+  name: string;
+  value: number;
+  owner: "Chris" | "Jamie" | "Joint";
+}
+
 const DEBTS: HouseholdDebt[] = [
   {
     name: "Home Equity Loan",
@@ -83,6 +89,15 @@ const DEBTS: HouseholdDebt[] = [
   },
 ];
 
+const ASSETS: HouseholdAsset[] = [
+  { name: "Rolex watch", value: 25000, owner: "Joint" },
+  { name: "Rolex watch", value: 15000, owner: "Joint" },
+  { name: "401(k)", value: 35000, owner: "Chris" },
+  { name: "Pension", value: 26000, owner: "Chris" },
+  { name: "Jewelry", value: 10000, owner: "Jamie" },
+  { name: "Miscellaneous items", value: 10000, owner: "Jamie" },
+];
+
 function money(n: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -105,12 +120,21 @@ function getSecuredByColor(secured: string): string {
 
 export default function OverallDebtClient() {
   const totalDebt = DEBTS.reduce((sum, d) => sum + d.balance, 0);
+  const totalAssets = ASSETS.reduce((sum, a) => sum + a.value, 0);
 
-  const breakdownByPerson = {
+  const debtByPerson = {
     Chris: DEBTS.filter(d => d.securedBy === "Chris").reduce((sum, d) => sum + d.balance, 0),
     Jamie: DEBTS.filter(d => d.securedBy === "Jamie").reduce((sum, d) => sum + d.balance, 0),
     Joint: DEBTS.filter(d => d.securedBy === "Joint").reduce((sum, d) => sum + d.balance, 0),
   };
+
+  const assetsByOwner = {
+    Chris: ASSETS.filter(a => a.owner === "Chris").reduce((sum, a) => sum + a.value, 0),
+    Jamie: ASSETS.filter(a => a.owner === "Jamie").reduce((sum, a) => sum + a.value, 0),
+    Joint: ASSETS.filter(a => a.owner === "Joint").reduce((sum, a) => sum + a.value, 0),
+  };
+
+  const netWorth = totalAssets - totalDebt;
 
   return (
     <div className="space-y-4">
@@ -152,21 +176,74 @@ export default function OverallDebtClient() {
         </div>
       </Card>
 
+      {/* Assets table */}
+      <Card>
+        <p className="mb-4 text-[13px] text-muted">All assets</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="pb-2 font-medium">Asset</th>
+                <th className="pb-2 font-medium text-right">Value</th>
+                <th className="pb-2 font-medium text-right">Owner</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ASSETS.map((asset, idx) => (
+                <tr key={idx} className="border-b border-border last:border-b-0">
+                  <td className="py-3 pr-2">{asset.name}</td>
+                  <td className="py-3 text-right font-medium">{money(asset.value)}</td>
+                  <td className="py-3 text-right">
+                    <span
+                      className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
+                      style={{ backgroundColor: getSecuredByColor(asset.owner) }}
+                    >
+                      {asset.owner}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Net Worth Summary */}
+      <Card className="bg-good-bg">
+        <p className="mb-3 text-[13px] text-muted">Net worth</p>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm">Total assets</span>
+            <span className="font-medium">{money(totalAssets)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm">Total debts</span>
+            <span className="font-medium">−{money(totalDebt)}</span>
+          </div>
+          <div className="pt-2 border-t border-border flex items-center justify-between">
+            <span className="text-sm font-medium">Net worth</span>
+            <span className="text-lg font-medium" style={{ color: netWorth >= 0 ? "var(--good)" : "#dc2626" }}>
+              {netWorth >= 0 ? "+" : "−"}{money(Math.abs(netWorth))}
+            </span>
+          </div>
+        </div>
+      </Card>
+
       {/* Bank Ownership */}
       <Card>
         <p className="mb-4 text-[13px] text-muted">Bank Ownership</p>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm">Chris's debt</span>
-            <span className="font-medium">{money(breakdownByPerson.Chris)}</span>
+            <span className="font-medium">{money(debtByPerson.Chris)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm">Jamie's debt</span>
-            <span className="font-medium">{money(breakdownByPerson.Jamie)}</span>
+            <span className="font-medium">{money(debtByPerson.Jamie)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm">Joint debt</span>
-            <span className="font-medium">{money(breakdownByPerson.Joint)}</span>
+            <span className="font-medium">{money(debtByPerson.Joint)}</span>
           </div>
         </div>
       </Card>
