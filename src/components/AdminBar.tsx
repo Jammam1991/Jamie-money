@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Lock, LogOut, Activity } from "lucide-react";
+import { Lock, LogOut, Activity, Settings } from "lucide-react";
 import { logout, toggleViewAsJamie } from "@/lib/actions";
 
 // A small control in the top-right corner. Once logged in, everyone gets a
@@ -34,6 +34,15 @@ export default function AdminBar({
         >
           <Activity size={13} />
           Activity
+        </Link>
+      )}
+      {admin && !viewingAsJamie && (
+        <Link
+          href="/settings"
+          className="flex items-center gap-1 text-[12px] text-muted"
+        >
+          <Settings size={13} />
+          Settings
         </Link>
       )}
       {admin && (

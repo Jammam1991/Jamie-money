@@ -128,6 +128,26 @@ export async function getMoneyAppFico(): Promise<{ score: number; date: string }
   return null;
 }
 
+// Which pages Chris has switched off for Jamie, kept as one JSON list in the
+// existing key/value settings table (no new table to create). Anything not in
+// the list is visible, so a fresh install shows everything.
+export async function getHiddenPages(): Promise<string[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", "hidden_pages")
+    .maybeSingle();
+  if (error || !data) return [];
+  try {
+    const parsed = JSON.parse(data.value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getBills(): Promise<Bill[]> {
   const c = client();
   if (!c) return sampleBills;

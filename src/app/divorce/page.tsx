@@ -1,14 +1,12 @@
-import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import DivorceClient from "@/components/DivorceClient";
 import { getDivorce } from "@/lib/store";
-import { getRole } from "@/lib/auth";
+import { requireVisible } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
 export default async function DivorcePage() {
-  const role = await getRole();
-  if (!role) redirect("/login");
+  const role = await requireVisible("divorce");
   const divorce = await getDivorce();
   return (
     <div>

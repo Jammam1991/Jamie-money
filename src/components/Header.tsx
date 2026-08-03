@@ -4,8 +4,25 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, Scale, CreditCard, FileText } from "lucide-react";
 
-export default function Header() {
+// The slide-out menu. Each row carries the same key the Settings screen uses,
+// so switching a page off there removes it here too.
+const links = [
+  { key: "job-vs-business", href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
+  { key: "debt", href: "/debt", label: "Debt", Icon: CreditCard },
+  { key: "overall-debt", href: "/overall-debt", label: "Overall Debt", Icon: CreditCard },
+  { key: "credit-report", href: "/credit-report", label: "Credit Report", Icon: FileText },
+  { key: "divorce", href: "/divorce", label: "Divorce", Icon: Scale },
+  {
+    key: "divorce-responsibility",
+    href: "/divorce-responsibility",
+    label: "Divorce Responsibility",
+    Icon: Scale,
+  },
+];
+
+export default function Header({ hidden = [] }: { hidden?: string[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const visible = links.filter((l) => !hidden.includes(l.key));
 
   return (
     <>
@@ -38,72 +55,23 @@ export default function Header() {
           </div>
 
           <nav className="p-4 space-y-2">
-            <Link
-              href="/job-vs-business"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Scale size={20} />
-                <span className="font-medium">Job vs Business</span>
-              </div>
-              <span className="text-muted">&gt;</span>
-            </Link>
-            <Link
-              href="/debt"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <CreditCard size={20} />
-                <span className="font-medium">Debt</span>
-              </div>
-              <span className="text-muted">&gt;</span>
-            </Link>
-            <Link
-              href="/overall-debt"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <CreditCard size={20} />
-                <span className="font-medium">Overall Debt</span>
-              </div>
-              <span className="text-muted">&gt;</span>
-            </Link>
-            <Link
-              href="/credit-report"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <FileText size={20} />
-                <span className="font-medium">Credit Report</span>
-              </div>
-              <span className="text-muted">&gt;</span>
-            </Link>
-            <Link
-              href="/divorce"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Scale size={20} />
-                <span className="font-medium">Divorce</span>
-              </div>
-              <span className="text-muted">&gt;</span>
-            </Link>
-            <Link
-              href="/divorce-responsibility"
-              onClick={() => setMenuOpen(false)}
-              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <Scale size={20} />
-                <span className="font-medium">Divorce Responsibility</span>
-              </div>
-              <span className="text-muted">&gt;</span>
-            </Link>
+            {visible.map(({ key, href, label, Icon }) => (
+              <Link
+                key={key}
+                href={href}
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <Icon size={20} />
+                  <span className="font-medium">{label}</span>
+                </div>
+                <span className="text-muted">&gt;</span>
+              </Link>
+            ))}
+            {visible.length === 0 && (
+              <p className="p-3 text-[14px] text-muted">Nothing here right now.</p>
+            )}
           </nav>
         </div>
       )}

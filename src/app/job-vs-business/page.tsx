@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import JobVsBusinessClient from "@/components/JobVsBusinessClient";
 import {
@@ -7,13 +6,12 @@ import {
   getJobPostings,
   getDecisionJournal,
 } from "@/lib/store";
-import { getRole } from "@/lib/auth";
+import { requireVisible } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobVsBusinessPage() {
-  const role = await getRole();
-  if (!role) redirect("/login");
+  await requireVisible("job-vs-business");
 
   const [comparison, prosCons, postings, journal] = await Promise.all([
     getJobVsBusiness(),

@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
 import { getRole, isViewingAsJamie } from "@/lib/auth";
-import { getCashLog, getOwesCharges } from "@/lib/store";
+import { getCashLog, getHiddenPages, getOwesCharges } from "@/lib/store";
 import { computePastDue, monthStart } from "@/lib/pastDue";
 
 const geistSans = Geist({
@@ -44,11 +44,15 @@ export default async function RootLayout({
   const role = await getRole();
   const viewingAsJamie = await isViewingAsJamie();
 
+  // Pages Chris switched off on the Settings screen. Chris still sees them all
+  // himself — "View as Jamie" is how he checks what Jamie now gets.
+  const admin = role === "admin" && !viewingAsJamie;
+  const hidden = admin ? [] : await getHiddenPages();
+
   // The "Past Due" tab only exists when something is actually late. Chris keeps
   // it always so he can log new charges.
-  const admin = role === "admin" && !viewingAsJamie;
   let showPastDue = admin;
-  if (role && !showPastDue) {
+  if (role && !showPastDue && !hidden.includes("owes")) {
     const [charges, cashLog] = await Promise.all([getOwesCharges(), getCashLog()]);
     const pastDue = computePastDue(
       charges,
@@ -72,11 +76,11 @@ export default async function RootLayout({
           style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
         >
           <AdminBar admin={role === "admin"} loggedIn={role !== null} viewingAsJamie={viewingAsJamie} />
-          <Header />
+          <Header hidden={hidden} />
           <UpdateNotice />
           {children}
         </main>
-        <BottomNav showPastDue={showPastDue} />
+        <BottomNav showPastDue={showPastDue} hidden={hidden} />
       </body>
     </html>
   );

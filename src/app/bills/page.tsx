@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import BillsClient from "@/components/BillsClient";
 import {
@@ -7,13 +6,13 @@ import {
   getRolloverBillIds,
   getWeeklyIncome,
 } from "@/lib/store";
-import { getRole, isViewingAsJamie } from "@/lib/auth";
+import { isViewingAsJamie } from "@/lib/auth";
+import { requireVisible } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
 export default async function BillsPage() {
-  const role = await getRole();
-  if (!role) redirect("/login");
+  const role = await requireVisible("bills");
   // "View as Jamie" hides the editing tools too, so Chris sees exactly the
   // read-only page Jamie gets.
   const viewingAsJamie = await isViewingAsJamie();
