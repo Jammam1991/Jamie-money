@@ -6,6 +6,8 @@ import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
 import { getRole, isViewingAsJamie } from "@/lib/auth";
+import { getCashLog, getOwesCharges } from "@/lib/store";
+import { computePastDue, monthStart } from "@/lib/pastDue";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,6 +43,21 @@ export default async function RootLayout({
 }>) {
   const role = await getRole();
   const viewingAsJamie = await isViewingAsJamie();
+
+  // The "Past Due" tab only exists when something is actually late. Chris keeps
+  // it always so he can log new charges.
+  const admin = role === "admin" && !viewingAsJamie;
+  let showPastDue = admin;
+  if (role && !showPastDue) {
+    const [charges, cashLog] = await Promise.all([getOwesCharges(), getCashLog()]);
+    const pastDue = computePastDue(
+      charges,
+      cashLog.filter((e) => e.kind === "to_chris"),
+      monthStart()
+    );
+    showPastDue = pastDue.amount > 0;
+  }
+
   return (
     <html lang="en" className={`${geistSans.variable} antialiased`}>
       <body>
@@ -55,7 +72,7 @@ export default async function RootLayout({
           <UpdateNotice />
           {children}
         </main>
-        <BottomNav />
+        <BottomNav showPastDue={showPastDue} />
       </body>
     </html>
   );

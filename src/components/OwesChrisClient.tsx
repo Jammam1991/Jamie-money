@@ -6,6 +6,7 @@ import { Trash2, Check, ChevronRight, Plus } from "lucide-react";
 import { Card, Thermometer } from "@/components/ui";
 import { money, type CashEntry, type OwesCharge } from "@/lib/data";
 import { addOwesCharge, deleteOwesCharge, updateOwesCharge } from "@/lib/actions";
+import { computePastDue, EMERGENCY_AT } from "@/lib/pastDue";
 
 const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
@@ -25,10 +26,12 @@ export default function OwesChrisClient({
   initialCharges,
   givenEntries,
   admin,
+  monthStart,
 }: {
   initialCharges: OwesCharge[];
   givenEntries: CashEntry[]; // "Gave cash to Chris" taps from the home screen
   admin: boolean;
+  monthStart: string; // "YYYY-MM-01" — anything older that's unpaid is late
 }) {
   const [charges, setCharges] = useState<OwesCharge[]>(initialCharges);
   const [adding, setAdding] = useState(false);
@@ -39,16 +42,12 @@ export default function OwesChrisClient({
   const [newAmount, setNewAmount] = useState("");
   const [newDate, setNewDate] = useState(new Date().toISOString().split("T")[0]);
 
-  // What Chris covered (unpaid charges) minus every "Gave cash to Chris"
-  // Jamie logged on the home screen. The same numbers show on both pages.
-  const chargesTotal = charges.reduce(
-    (sum, c) => sum + (c.paid ? 0 : c.amount),
-    0
-  );
-  const givenTotal = givenEntries.reduce((sum, e) => sum + e.amount, 0);
-  const total = Math.max(0, chargesTotal - givenTotal);
-  const ahead = givenTotal - chargesTotal; // > 0 = Jamie has overpaid
-  const maxThermometer = 3000;
+  // Past due = what Chris covered in months that already ended and still hasn't
+  // been paid back. This month's charges aren't late yet.
+  const pastDue = computePastDue(charges, givenEntries, monthStart);
+  const ahead = pastDue.givenTotal - pastDue.chargesTotal; // > 0 = overpaid
+  const lateCharges = pastDue.openCharges.filter((c) => c.late);
+  const emergency = pastDue.amount >= EMERGENCY_AT;
 
   function run(
     label: string,
@@ -118,23 +117,64 @@ export default function OwesChrisClient({
     });
   }
 
+  // Nothing late? Jamie doesn't need this page at all — the tab is hidden for
+  // him too. Chris still gets the full tools so he can log new charges.
+  if (pastDue.amount <= 0 && !admin) {
+    return (
+      <Card className="text-center">
+        <div className="text-4xl">🎉</div>
+        <div className="mt-2 text-lg font-medium">Nothing past due</div>
+        <p className="mt-1 text-sm text-muted">
+          {pastDue.thisMonth > 0
+            ? `You're all caught up. ${money(pastDue.thisMonth)} from this month isn't late yet.`
+            : "You're all caught up with Chris."}
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <div>
-      <Thermometer current={total} max={maxThermometer} />
+      {/* Jamie sees his number and the bar climbing — never the ceiling. */}
+      <Thermometer
+        current={pastDue.amount}
+        max={EMERGENCY_AT}
+        title="Past due"
+        showScale={admin}
+      />
+
+      {emergency && (
+        <Card
+          className="mb-4 text-center"
+          style={{ borderColor: "#dc2626", backgroundColor: "rgba(220, 38, 38, 0.08)" }}
+        >
+          <div className="text-lg font-bold" style={{ color: "#dc2626" }}>
+            🚨 Emergency Mode
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            This has gone too far. Talk to Chris today.
+          </p>
+        </Card>
+      )}
 
       <Card className="mb-4">
         <div className="flex items-baseline justify-between text-[15px]">
           <span className="text-muted">What Chris covered</span>
-          <span>{money(chargesTotal)}</span>
+          <span>{money(pastDue.chargesTotal)}</span>
         </div>
         <div className="flex items-baseline justify-between text-[15px]">
           <span className="text-muted">Cash you gave him</span>
-          <span style={{ color: "var(--good)" }}>−{money(givenTotal)}</span>
+          <span style={{ color: "var(--good)" }}>−{money(pastDue.givenTotal)}</span>
         </div>
         <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2">
-          <span className="text-sm text-muted">Still owed</span>
-          <span className="text-3xl font-bold">{money(total)}</span>
+          <span className="text-sm text-muted">Past due</span>
+          <span className="text-3xl font-bold">{money(pastDue.amount)}</span>
         </div>
+        {pastDue.thisMonth > 0 && (
+          <p className="mt-1 text-[13px] text-muted">
+            {money(pastDue.thisMonth)} from this month isn&apos;t late yet.
+          </p>
+        )}
         {ahead > 0 && (
           <p className="mt-1 text-[13px]" style={{ color: "var(--good)" }}>
             🎉 You&apos;re ahead by {money(ahead)}.
@@ -243,34 +283,33 @@ export default function OwesChrisClient({
         </Card>
       )}
 
+      {/* Chris manages every charge; Jamie only sees the late ones. */}
       <div className="space-y-2">
-        {charges.length === 0 ? (
-          <Card>
-            <div className="text-center text-sm text-muted">No charges yet.</div>
-          </Card>
-        ) : (
-          charges.map((charge) => (
-            <Card
-              key={charge.id}
-              className="flex items-center justify-between gap-3"
-              style={{
-                opacity: charge.paid ? 0.6 : 1,
-                textDecoration: charge.paid ? "line-through" : "none",
-              }}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="font-medium">{charge.description}</div>
-                <div className="text-xs text-muted">
-                  {new Date(charge.date).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
+        {admin ? (
+          charges.length === 0 ? (
+            <Card>
+              <div className="text-center text-sm text-muted">No charges yet.</div>
+            </Card>
+          ) : (
+            charges.map((charge) => (
+              <Card
+                key={charge.id}
+                className="flex items-center justify-between gap-3"
+                style={{
+                  opacity: charge.paid ? 0.6 : 1,
+                  textDecoration: charge.paid ? "line-through" : "none",
+                }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium">{charge.description}</div>
+                  <div className="text-xs text-muted">
+                    {formatGivenDate(charge.date)}
+                    {!charge.paid && charge.date < monthStart && " · past due"}
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="font-bold">{money(charge.amount)}</div>
-              </div>
-              {admin && (
+                <div className="text-right">
+                  <div className="font-bold">{money(charge.amount)}</div>
+                </div>
                 <div className="flex gap-2 ml-2">
                   <button
                     onClick={() => handleMarkPaid(charge)}
@@ -292,7 +331,24 @@ export default function OwesChrisClient({
                     <Trash2 size={18} style={{ color: "var(--bad)" }} />
                   </button>
                 </div>
-              )}
+              </Card>
+            ))
+          )
+        ) : (
+          lateCharges.map((charge) => (
+            <Card
+              key={charge.id}
+              className="flex items-center justify-between gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">{charge.description}</div>
+                <div className="text-xs text-muted">
+                  {formatGivenDate(charge.date)}
+                </div>
+              </div>
+              <div className="text-right font-bold">
+                {money(charge.remaining)}
+              </div>
             </Card>
           ))
         )}
