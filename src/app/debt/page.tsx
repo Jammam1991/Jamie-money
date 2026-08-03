@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import DebtClient from "@/components/DebtClient";
 import {
@@ -7,13 +6,12 @@ import {
   getMoneyAppFico,
   hasPlaidItems,
 } from "@/lib/store";
-import { getRole } from "@/lib/auth";
+import { requireVisible } from "@/lib/visibility";
 
 export const dynamic = "force-dynamic";
 
 export default async function DebtPage() {
-  const role = await getRole();
-  if (!role) redirect("/login");
+  const role = await requireVisible("debt");
   const [debts, hasBank, fico, transactions] = await Promise.all([
     getDebts(),
     hasPlaidItems(),

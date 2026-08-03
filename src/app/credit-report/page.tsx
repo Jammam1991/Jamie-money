@@ -1,14 +1,12 @@
-import { redirect } from "next/navigation";
 import { PageTitle } from "@/components/ui";
 import CreditReportClient from "@/components/CreditReportClient";
-import { getRole } from "@/lib/auth";
+import { requireVisible } from "@/lib/visibility";
 import { getCreditReports, getFicoHistory } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 export default async function CreditReportPage() {
-  const role = await getRole();
-  if (!role) redirect("/login");
+  const role = await requireVisible("credit-report");
 
   const [reports, scores] = await Promise.all([
     getCreditReports(),
