@@ -45,8 +45,6 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Prevent text distortion during scroll on iOS Safari */
-body {
-  -webkit-transform: translate3d(0, 0, 0);
-  -webkit-backface-visibility: hidden;
-}
+/* NOTE: do not put a transform on <body>. A transformed ancestor becomes the
+   containing block for position: fixed children, which un-pins the bottom nav
+   and the slide-out menu so they scroll with the page instead of staying put. */

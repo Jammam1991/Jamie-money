@@ -66,7 +66,11 @@ export default async function RootLayout({
             👁️ Viewing as Jamie
           </div>
         )}
-        <main className="mx-auto min-h-screen max-w-md px-4 pt-6 pb-24">
+        <main
+          className="mx-auto min-h-screen max-w-md px-4 pt-6 pb-24"
+          // Keep the last card clear of the fixed nav plus the home indicator.
+          style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+        >
           <AdminBar admin={role === "admin"} loggedIn={role !== null} viewingAsJamie={viewingAsJamie} />
           <Header />
           <UpdateNotice />

@@ -15,7 +15,12 @@ export default function BottomNav({ showPastDue = true }: { showPastDue?: boolea
   const pathname = usePathname();
   const visible = tabs.filter((t) => t.href !== "/owes" || showPastDue);
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card">
+    <nav
+      className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card"
+      // The layout uses viewportFit: "cover", so the bar reaches into the home
+      // indicator area. Pad it so the labels never sit under the indicator.
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       <div className="mx-auto flex max-w-md">
         {visible.map(({ href, label, Icon }) => {
           const active = pathname === href;
