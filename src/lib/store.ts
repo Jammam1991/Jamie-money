@@ -403,3 +403,113 @@ export async function getDecisionJournal(): Promise<DecisionEntry[]> {
     createdAt: row.created_at,
   }));
 }
+
+// ── Overall Debt & Assets ────────────────────────────────────────────────────
+
+export interface OverallDebt {
+  id: string;
+  name: string;
+  balance: number;
+  securedBy: "Chris" | "Jamie" | "Joint";
+  monthlyPayment: string;
+  monthlyInterest: string;
+}
+
+export async function getOverallDebts(): Promise<OverallDebt[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("overall_debts")
+    .select("*")
+    .order("sort");
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    balance: Number(row.balance),
+    securedBy: row.secured_by as "Chris" | "Jamie" | "Joint",
+    monthlyPayment: row.monthly_payment,
+    monthlyInterest: row.monthly_interest,
+  }));
+}
+
+export interface OverallAsset {
+  id: string;
+  name: string;
+  value: number;
+  owner: "Chris" | "Jamie" | "Joint";
+}
+
+export async function getOverallAssets(): Promise<OverallAsset[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("overall_assets")
+    .select("*")
+    .order("sort");
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    value: Number(row.value),
+    owner: row.owner as "Chris" | "Jamie" | "Joint",
+  }));
+}
+
+export interface OverallContext {
+  jamieSalary: number;
+  jamieSalaryNote: string;
+  chrisSalary: number;
+  chrisSalaryNote: string;
+  marriageStartDate: string;
+  marriageEndDate: string;
+  separatedDate: string;
+  condoNote: string;
+  legalPlanNote: string;
+}
+
+export async function getOverallContext(): Promise<OverallContext> {
+  const c = client();
+  if (!c) {
+    return {
+      jamieSalary: 147000,
+      jamieSalaryNote: "cash deposits",
+      chrisSalary: 135000,
+      chrisSalaryNote: "rental deposits & W-2 income",
+      marriageStartDate: "July 2020",
+      marriageEndDate: "present",
+      separatedDate: "2023",
+      condoNote: "Separate property — purchased before marriage",
+      legalPlanNote: "Metlife Legal plan covers uncontested divorce",
+    };
+  }
+  const { data, error } = await c
+    .from("overall_context")
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) {
+    return {
+      jamieSalary: 147000,
+      jamieSalaryNote: "cash deposits",
+      chrisSalary: 135000,
+      chrisSalaryNote: "rental deposits & W-2 income",
+      marriageStartDate: "July 2020",
+      marriageEndDate: "present",
+      separatedDate: "2023",
+      condoNote: "Separate property — purchased before marriage",
+      legalPlanNote: "Metlife Legal plan covers uncontested divorce",
+    };
+  }
+  return {
+    jamieSalary: Number(data.jamie_salary),
+    jamieSalaryNote: data.jamie_salary_note,
+    chrisSalary: Number(data.chris_salary),
+    chrisSalaryNote: data.chris_salary_note,
+    marriageStartDate: data.marriage_start_date,
+    marriageEndDate: data.marriage_end_date,
+    separatedDate: data.separated_date,
+    condoNote: data.condo_note,
+    legalPlanNote: data.legal_plan_note,
+  };
+}

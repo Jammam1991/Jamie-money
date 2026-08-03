@@ -604,3 +604,154 @@ export async function deleteOwesCharge(id: string): Promise<ActionResult> {
   revalidatePath("/owes");
   return { ok: true };
 }
+
+// ── Overall Debt Management ───────────────────────────────────────────────────
+
+export async function addOverallDebt(input: {
+  name: string;
+  balance: number;
+  secured_by: "Chris" | "Jamie" | "Joint";
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("overall_debts")
+    .insert({
+      name: input.name,
+      balance: input.balance,
+      secured_by: input.secured_by,
+      monthly_payment: "TBD",
+      monthly_interest: "TBD",
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true, id: data.id };
+}
+
+export async function updateOverallDebt(input: {
+  id: string;
+  name?: string;
+  balance?: number;
+  secured_by?: "Chris" | "Jamie" | "Joint";
+  monthly_payment?: string;
+  monthly_interest?: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) update.name = input.name;
+  if (input.balance !== undefined) update.balance = input.balance;
+  if (input.secured_by !== undefined) update.secured_by = input.secured_by;
+  if (input.monthly_payment !== undefined) update.monthly_payment = input.monthly_payment;
+  if (input.monthly_interest !== undefined) update.monthly_interest = input.monthly_interest;
+  const { error } = await c.from("overall_debts").update(update).eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true };
+}
+
+export async function deleteOverallDebt(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("overall_debts").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true };
+}
+
+// ── Overall Assets Management ─────────────────────────────────────────────────
+
+export async function addOverallAsset(input: {
+  name: string;
+  value: number;
+  owner: "Chris" | "Jamie" | "Joint";
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("overall_assets")
+    .insert({
+      name: input.name,
+      value: input.value,
+      owner: input.owner,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true, id: data.id };
+}
+
+export async function updateOverallAsset(input: {
+  id: string;
+  name?: string;
+  value?: number;
+  owner?: "Chris" | "Jamie" | "Joint";
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) update.name = input.name;
+  if (input.value !== undefined) update.value = input.value;
+  if (input.owner !== undefined) update.owner = input.owner;
+  const { error } = await c.from("overall_assets").update(update).eq("id", input.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true };
+}
+
+export async function deleteOverallAsset(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("overall_assets").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true };
+}
+
+// ── Overall Context Management ────────────────────────────────────────────────
+
+export async function updateOverallContext(input: {
+  jamie_salary?: number;
+  jamie_salary_note?: string;
+  chris_salary?: number;
+  chris_salary_note?: string;
+  marriage_start_date?: string;
+  marriage_end_date?: string;
+  separated_date?: string;
+  condo_note?: string;
+  legal_plan_note?: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.jamie_salary !== undefined) update.jamie_salary = input.jamie_salary;
+  if (input.jamie_salary_note !== undefined) update.jamie_salary_note = input.jamie_salary_note;
+  if (input.chris_salary !== undefined) update.chris_salary = input.chris_salary;
+  if (input.chris_salary_note !== undefined) update.chris_salary_note = input.chris_salary_note;
+  if (input.marriage_start_date !== undefined) update.marriage_start_date = input.marriage_start_date;
+  if (input.marriage_end_date !== undefined) update.marriage_end_date = input.marriage_end_date;
+  if (input.separated_date !== undefined) update.separated_date = input.separated_date;
+  if (input.condo_note !== undefined) update.condo_note = input.condo_note;
+  if (input.legal_plan_note !== undefined) update.legal_plan_note = input.legal_plan_note;
+  const { error } = await c.from("overall_context").update(update).eq("id", "1");
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/overall-debt");
+  return { ok: true };
+}
