@@ -19,6 +19,8 @@ export type MoneyAppFico = { score: number; date: string };
 export type MoneyAppSyncResult = {
   synced: number;
   fico: MoneyAppFico | null;
+  scores: number; // credit scores mirrored into moneyapp_fico_history
+  snapshots: number; // balance snapshots mirrored into moneyapp_debt_snapshots
   error?: string;
 };
 
@@ -30,7 +32,21 @@ type ExportDebt = {
   apr: number;
   minPayment: number;
 };
-type ExportResponse = { debts: ExportDebt[]; fico: MoneyAppFico | null };
+type ExportScore = { date: string; score: number; note: string | null };
+type ExportSnapshot = {
+  debtId: string;
+  date: string;
+  balance: number;
+  missedPayment: boolean;
+  note: string | null;
+};
+type ExportResponse = {
+  debts: ExportDebt[];
+  fico: MoneyAppFico | null;
+  // Both added later — an older Money App won't send them.
+  ficoHistory?: ExportScore[];
+  history?: ExportSnapshot[];
+};
 
 export function moneyAppReady(): boolean {
   return Boolean(process.env.MONEYAPP_API_URL && process.env.MONEYAPP_API_KEY);
@@ -42,7 +58,13 @@ export async function syncMoneyAppDebts(
   const baseUrl = process.env.MONEYAPP_API_URL;
   const apiKey = process.env.MONEYAPP_API_KEY;
   if (!baseUrl || !apiKey) {
-    return { synced: 0, fico: null, error: "Money App isn't connected yet." };
+    return {
+      synced: 0,
+      fico: null,
+      scores: 0,
+      snapshots: 0,
+      error: "Money App isn't connected yet.",
+    };
   }
 
   let parsed: ExportResponse;
@@ -57,6 +79,8 @@ export async function syncMoneyAppDebts(
     return {
       synced: 0,
       fico: null,
+      scores: 0,
+      snapshots: 0,
       error: err instanceof Error ? err.message : "Couldn't reach Money App.",
     };
   }
@@ -113,5 +137,54 @@ export async function syncMoneyAppDebts(
     });
   }
 
-  return { synced, fico: parsed.fico ?? null };
+  const { scores, snapshots } = await mirrorCreditHistory(supabase, parsed);
+
+  return { synced, fico: parsed.fico ?? null, scores, snapshots };
+}
+
+// Copy Money App's credit-score history and balance snapshots into our two
+// mirror tables, which is everything the Credit Report page reads.
+//
+// Both are upserts rather than a wipe-and-refill: a sync that only returns
+// part of the history (or an older Money App that returns none of it) then
+// leaves what's already here alone instead of emptying the page.
+async function mirrorCreditHistory(
+  supabase: SupabaseClient,
+  parsed: ExportResponse,
+): Promise<{ scores: number; snapshots: number }> {
+  const now = new Date().toISOString();
+  let scores = 0;
+  let snapshots = 0;
+
+  const history = parsed.ficoHistory ?? [];
+  if (history.length > 0) {
+    const { error } = await supabase.from("moneyapp_fico_history").upsert(
+      history.map((h) => ({
+        scored_on: h.date,
+        score: h.score,
+        note: h.note,
+        synced_at: now,
+      })),
+      { onConflict: "scored_on" },
+    );
+    if (!error) scores = history.length;
+  }
+
+  const rows = parsed.history ?? [];
+  if (rows.length > 0) {
+    const { error } = await supabase.from("moneyapp_debt_snapshots").upsert(
+      rows.map((r) => ({
+        moneyapp_debt_id: r.debtId,
+        snapshot_date: r.date,
+        balance: r.balance,
+        missed_payment: r.missedPayment,
+        note: r.note,
+        synced_at: now,
+      })),
+      { onConflict: "moneyapp_debt_id,snapshot_date" },
+    );
+    if (!error) snapshots = rows.length;
+  }
+
+  return { scores, snapshots };
 }
