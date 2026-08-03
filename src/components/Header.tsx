@@ -61,6 +61,17 @@ export default function Header() {
               <span className="text-muted">&gt;</span>
             </Link>
             <Link
+              href="/overall-debt"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <CreditCard size={20} />
+                <span className="font-medium">Overall Debt</span>
+              </div>
+              <span className="text-muted">&gt;</span>
+            </Link>
+            <Link
               href="/divorce"
               onClick={() => setMenuOpen(false)}
               className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
@@ -68,6 +79,17 @@ export default function Header() {
               <div className="flex items-center gap-3">
                 <Scale size={20} />
                 <span className="font-medium">Divorce</span>
+              </div>
+              <span className="text-muted">&gt;</span>
+            </Link>
+            <Link
+              href="/divorce-responsibility"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Scale size={20} />
+                <span className="font-medium">Divorce Responsibility</span>
               </div>
               <span className="text-muted">&gt;</span>
             </Link>
