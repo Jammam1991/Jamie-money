@@ -1,23 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, Tint } from "@/components/ui";
-import { Plus, Trash2, Pencil } from "lucide-react";
-import type { OverallDebt, OverallAsset, OverallContext } from "@/lib/store";
-import {
-  addOverallDebt,
-  updateOverallDebt,
-  deleteOverallDebt,
-  addOverallAsset,
-  updateOverallAsset,
-  deleteOverallAsset,
-  updateOverallContext,
-} from "@/lib/actions";
+import { Card } from "@/components/ui";
+import { Pencil, X } from "lucide-react";
+import type { OverallDebt } from "@/lib/store";
+import { updateOverallContext } from "@/lib/actions";
 
 interface Props {
   initialDebts: OverallDebt[];
-  initialAssets: OverallAsset[];
-  initialContext: OverallContext;
+  initialContext: any;
   admin: boolean;
 }
 
@@ -30,78 +21,26 @@ function money(n: number): string {
   }).format(n);
 }
 
-function getOwnerColor(owner: string): string {
-  switch (owner) {
-    case "Chris":
-      return "#0e6f8a";
-    case "Jamie":
-      return "#9a6212";
-    default:
-      return "#167a5b";
-  }
-}
-
-export default function OverallDebtClient({
-  initialDebts,
-  initialAssets,
-  initialContext,
-  admin,
-}: Props) {
-  const [debts, setDebts] = useState(initialDebts);
-  const [assets, setAssets] = useState(initialAssets);
-  const [context, setContext] = useState(initialContext);
+export default function OverallDebtClient({ initialDebts, initialContext, admin }: Props) {
   const [editing, setEditing] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const totalDebt = debts.reduce((sum, d) => sum + d.balance, 0);
-  const totalAssets = assets.reduce((sum, a) => sum + a.value, 0);
-  const netWorth = totalAssets - totalDebt;
+  // Jamie's debts
+  const jamieDebts = initialDebts.filter((d) => d.securedBy === "Jamie");
+  const jamieResponsible = jamieDebts.reduce((sum, d) => sum + d.balance, 0);
 
-  const debtByPerson = {
-    Chris: debts.filter((d) => d.securedBy === "Chris").reduce((sum, d) => sum + d.balance, 0),
-    Jamie: debts.filter((d) => d.securedBy === "Jamie").reduce((sum, d) => sum + d.balance, 0),
-    Joint: debts.filter((d) => d.securedBy === "Joint").reduce((sum, d) => sum + d.balance, 0),
-  };
+  // Parse values from initialContext or use defaults
+  const monthlyPayments = 2800; // example - this should be editable
+  const financeFeesTotal = 1500; // example - this should be editable
+  const interestAccruing = 450; // example - this should be editable
 
-  const assetsByOwner = {
-    Chris: assets.filter((a) => a.owner === "Chris").reduce((sum, a) => sum + a.value, 0),
-    Jamie: assets.filter((a) => a.owner === "Jamie").reduce((sum, a) => sum + a.value, 0),
-    Joint: assets.filter((a) => a.owner === "Joint").reduce((sum, a) => sum + a.value, 0),
-  };
-
-  const onDeleteDebt = (id: string) => {
-    startTransition(async () => {
-      const result = await deleteOverallDebt(id);
-      if (result.ok) {
-        setDebts(debts.filter((d) => d.id !== id));
-      }
-    });
-  };
-
-  const onDeleteAsset = (id: string) => {
-    startTransition(async () => {
-      const result = await deleteOverallAsset(id);
-      if (result.ok) {
-        setAssets(assets.filter((a) => a.id !== id));
-      }
-    });
-  };
+  const jamieAnnualIncome = initialContext.jamieSalary || 147000;
+  const monthlyIncome = jamieAnnualIncome / 12;
+  const percentageOfIncome = (monthlyPayments / monthlyIncome) * 100;
 
   if (editing && admin) {
-    return (
-      <EditMode
-        debts={debts}
-        assets={assets}
-        context={context}
-        onSave={() => setEditing(false)}
-        onAddDebt={(debt) => setDebts([...debts, debt])}
-        onDeleteDebt={onDeleteDebt}
-        onAddAsset={(asset) => setAssets([...assets, asset])}
-        onDeleteAsset={onDeleteAsset}
-        isPending={isPending}
-        startTransition={startTransition}
-      />
-    );
+    return <EditMode onClose={() => setEditing(false)} initialContext={initialContext} />;
   }
 
   return (
@@ -112,230 +51,113 @@ export default function OverallDebtClient({
           className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
         >
           <Pencil size={15} />
-          Edit debts & assets
+          Edit
         </button>
       )}
 
-      {/* Context Notes */}
-      <Card className="bg-tint">
-        <p className="mb-3 text-[13px] font-medium text-muted">Context</p>
-        <ul className="space-y-2 text-[13px] text-muted">
-          <li>• Marriage: {context.marriageStartDate} through {context.marriageEndDate}</li>
-          <li>• Separated: {context.separatedDate}</li>
-          <li>• Jamie salary: ${context.jamieSalary.toLocaleString()} ({context.jamieSalaryNote})</li>
-          <li>• Chris salary: ${context.chrisSalary.toLocaleString()} ({context.chrisSalaryNote})</li>
-          <li>• Condo: {context.condoNote}</li>
-          <li>• {context.legalPlanNote}</li>
-        </ul>
-      </Card>
+      {/* Main Summary */}
+      <div className="space-y-2">
+        <button
+          onClick={() => setSelectedDetail("total")}
+          className="w-full text-left rounded-2xl bg-warn-bg border border-border p-4 hover:opacity-80 transition-opacity"
+        >
+          <p className="text-[13px] text-warn mb-1">Jamie's total responsibility</p>
+          <p className="text-4xl font-bold text-warn">{money(jamieResponsible)}</p>
+          <p className="text-xs text-warn mt-1">Click to see details</p>
+        </button>
 
-      {/* Total debt */}
-      <div className="rounded-2xl bg-warn-bg p-4">
-        <p className="text-[13px] text-warn">Total communal property</p>
-        <p className="text-3xl font-medium text-warn">{money(totalDebt)}</p>
+        <button
+          onClick={() => setSelectedDetail("payments")}
+          className="w-full text-left rounded-2xl bg-card border border-border p-4 hover:opacity-80 transition-opacity"
+        >
+          <p className="text-[13px] text-muted mb-1">Monthly payments</p>
+          <p className="text-3xl font-bold">{money(monthlyPayments)}</p>
+          <p className="text-xs text-muted mt-1">{percentageOfIncome.toFixed(1)}% of monthly income</p>
+        </button>
+
+        <button
+          onClick={() => setSelectedDetail("interest")}
+          className="w-full text-left rounded-2xl bg-card border border-border p-4 hover:opacity-80 transition-opacity"
+        >
+          <p className="text-[13px] text-muted mb-1">Interest accruing (during AMLI lease)</p>
+          <p className="text-3xl font-bold">{money(interestAccruing)}</p>
+          <p className="text-xs text-muted mt-1">Monthly while lease is active</p>
+        </button>
+
+        <button
+          onClick={() => setSelectedDetail("fees")}
+          className="w-full text-left rounded-2xl bg-card border border-border p-4 hover:opacity-80 transition-opacity"
+        >
+          <p className="text-[13px] text-muted mb-1">Finance fees</p>
+          <p className="text-3xl font-bold">{money(financeFeesTotal)}</p>
+          <p className="text-xs text-muted mt-1">Click to see breakdown</p>
+        </button>
       </div>
 
-      {/* Debt table */}
-      <Card>
-        <p className="mb-4 text-[13px] text-muted">All debts</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-muted">
-                <th className="pb-2 font-medium">Debt</th>
-                <th className="pb-2 font-medium text-right">Balance</th>
-                <th className="pb-2 font-medium text-right">Secured by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {debts.map((debt) => (
-                <tr key={debt.id} className="border-b border-border last:border-b-0">
-                  <td className="py-3 pr-2">{debt.name}</td>
-                  <td className="py-3 text-right font-medium">{money(debt.balance)}</td>
-                  <td className="py-3 text-right">
-                    <span
-                      className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
-                      style={{ backgroundColor: getOwnerColor(debt.securedBy) }}
-                    >
-                      {debt.securedBy}
-                    </span>
-                  </td>
-                </tr>
+      {/* Details Popup */}
+      {selectedDetail && (
+        <Card className="bg-tint">
+          <div className="flex items-start justify-between mb-3">
+            <p className="text-sm font-medium">Details</p>
+            <button onClick={() => setSelectedDetail(null)} className="p-1 hover:bg-border rounded">
+              <X size={16} />
+            </button>
+          </div>
+
+          {selectedDetail === "total" && (
+            <div className="space-y-2 text-[13px]">
+              {jamieDebts.map((debt) => (
+                <div key={debt.id} className="flex justify-between">
+                  <span>{debt.name}</span>
+                  <span className="font-medium">{money(debt.balance)}</span>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              <div className="pt-2 border-t border-border flex justify-between font-medium">
+                <span>Total</span>
+                <span>{money(jamieResponsible)}</span>
+              </div>
+            </div>
+          )}
 
-      {/* Assets table */}
-      <Card>
-        <p className="mb-4 text-[13px] text-muted">All assets</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-left text-muted">
-                <th className="pb-2 font-medium">Asset</th>
-                <th className="pb-2 font-medium text-right">Value</th>
-                <th className="pb-2 font-medium text-right">Owner</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((asset) => (
-                <tr key={asset.id} className="border-b border-border last:border-b-0">
-                  <td className="py-3 pr-2">{asset.name}</td>
-                  <td className="py-3 text-right font-medium">{money(asset.value)}</td>
-                  <td className="py-3 text-right">
-                    <span
-                      className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
-                      style={{ backgroundColor: getOwnerColor(asset.owner) }}
-                    >
-                      {asset.owner}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+          {selectedDetail === "payments" && (
+            <div className="space-y-2 text-[13px]">
+              <div>
+                <p className="text-muted mb-1">Monthly income: {money(monthlyIncome)}</p>
+                <p className="text-muted mb-2">Payment percentage: {percentageOfIncome.toFixed(1)}%</p>
+                <p className="font-medium text-base">{money(monthlyPayments)}/month</p>
+              </div>
+            </div>
+          )}
 
-      {/* Bank Ownership */}
-      <Card>
-        <p className="mb-4 text-[13px] text-muted">Bank Ownership</p>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Chris's debt</span>
-            <span className="font-medium">{money(debtByPerson.Chris)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Jamie's debt</span>
-            <span className="font-medium">{money(debtByPerson.Jamie)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Joint debt</span>
-            <span className="font-medium">{money(debtByPerson.Joint)}</span>
-          </div>
-        </div>
-      </Card>
+          {selectedDetail === "interest" && (
+            <div className="space-y-2 text-[13px]">
+              <p className="text-muted">Interest accumulating while AMLI lease is active</p>
+              <p className="font-medium text-base">{money(interestAccruing)}/month</p>
+              <p className="text-muted text-xs mt-2">No payments required during lease period</p>
+            </div>
+          )}
 
-      {/* Actual Ownership Responsibility */}
-      <Card>
-        <p className="mb-4 text-[13px] text-muted">Actual Ownership Responsibility</p>
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Jamie's responsibility</span>
-            <span className="font-medium">{money(88500)}</span>
-          </div>
-          <p className="text-xs text-muted">Personal credit cards ($35k) + business debt ($53.5k)</p>
-          <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-            <span className="text-sm">Shared responsibility</span>
-            <span className="font-medium">{money(86000)}</span>
-          </div>
-          <p className="text-xs text-muted">Joint auto loan — split depends on asset/income division</p>
-          <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-            <span className="text-sm">Chris's responsibility</span>
-            <span className="font-medium">{money(365000)}</span>
-          </div>
-          <p className="text-xs text-muted">
-            Secured in Chris's name — though home equity tied to marital home
-          </p>
-        </div>
-      </Card>
-
-      {/* Net Worth Summary */}
-      <Card className="bg-good-bg">
-        <p className="mb-3 text-[13px] text-muted">Net worth</p>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Total assets</span>
-            <span className="font-medium">{money(totalAssets)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm">Total debts</span>
-            <span className="font-medium">−{money(totalDebt)}</span>
-          </div>
-          <div className="pt-2 border-t border-border flex items-center justify-between">
-            <span className="text-sm font-medium">Net worth</span>
-            <span className="text-lg font-medium" style={{ color: netWorth >= 0 ? "var(--good)" : "#dc2626" }}>
-              {netWorth >= 0 ? "+" : "−"}{money(Math.abs(netWorth))}
-            </span>
-          </div>
-        </div>
-      </Card>
-
-      {/* Summary notes */}
-      <Card>
-        <p className="text-[13px] text-muted">Monthly payments & interest</p>
-        <p className="mt-2 text-xs text-muted">
-          Payment and interest details marked as TBD pending account review.
-        </p>
-      </Card>
+          {selectedDetail === "fees" && (
+            <div className="space-y-2 text-[13px]">
+              <p className="text-muted">Finance fees breakdown:</p>
+              <div className="flex justify-between">
+                <span>Total fees</span>
+                <span className="font-medium">{money(financeFeesTotal)}</span>
+              </div>
+              <p className="text-muted text-xs mt-2">Click edit to adjust details</p>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
 
-function EditMode({
-  debts,
-  assets,
-  context,
-  onSave,
-  onAddDebt,
-  onDeleteDebt,
-  onAddAsset,
-  onDeleteAsset,
-  isPending,
-  startTransition,
-}: {
-  debts: OverallDebt[];
-  assets: OverallAsset[];
-  context: OverallContext;
-  onSave: () => void;
-  onAddDebt: (debt: OverallDebt) => void;
-  onDeleteDebt: (id: string) => void;
-  onAddAsset: (asset: OverallAsset) => void;
-  onDeleteAsset: (id: string) => void;
-  isPending: boolean;
-  startTransition: (fn: () => Promise<void>) => void;
-}) {
-  const [debtName, setDebtName] = useState("");
-  const [debtBalance, setDebtBalance] = useState("0");
-  const [debtOwner, setDebtOwner] = useState<"Chris" | "Jamie" | "Joint">("Joint");
-
-  const [assetName, setAssetName] = useState("");
-  const [assetValue, setAssetValue] = useState("0");
-  const [assetOwner, setAssetOwner] = useState<"Chris" | "Jamie" | "Joint">("Joint");
-
-  const handleAddDebt = () => {
-    if (!debtName.trim()) return;
-    startTransition(async () => {
-      const result = await addOverallDebt({
-        name: debtName,
-        balance: Number(debtBalance),
-        secured_by: debtOwner,
-      });
-      if (result.ok) {
-        setDebtName("");
-        setDebtBalance("0");
-        setDebtOwner("Joint");
-      }
-    });
-  };
-
-  const handleAddAsset = () => {
-    if (!assetName.trim()) return;
-    startTransition(async () => {
-      const result = await addOverallAsset({
-        name: assetName,
-        value: Number(assetValue),
-        owner: assetOwner,
-      });
-      if (result.ok) {
-        setAssetName("");
-        setAssetValue("0");
-        setAssetOwner("Joint");
-      }
-    });
-  };
+function EditMode({ onClose, initialContext }: { onClose: () => void; initialContext: any }) {
+  const [monthlyPayments, setMonthlyPayments] = useState("2800");
+  const [financeFeesTotal, setFinanceFeesTotal] = useState("1500");
+  const [interestAccruing, setInterestAccruing] = useState("450");
+  const [isPending, startTransition] = useTransition();
 
   const inputClass =
     "w-full rounded-lg border border-border bg-card px-3 py-2 text-[13px] outline-none focus:border-[var(--muted)]";
@@ -343,130 +165,52 @@ function EditMode({
   return (
     <div className="space-y-4">
       <Card>
-        <p className="mb-4 text-[13px] font-medium text-muted">Add debt</p>
-        <div className="space-y-2">
-          <input
-            type="text"
-            placeholder="Debt name"
-            value={debtName}
-            onChange={(e) => setDebtName(e.target.value)}
-            className={inputClass}
-            disabled={isPending}
-          />
-          <input
-            type="number"
-            placeholder="Balance"
-            value={debtBalance}
-            onChange={(e) => setDebtBalance(e.target.value)}
-            className={inputClass}
-            disabled={isPending}
-          />
-          <select value={debtOwner} onChange={(e) => setDebtOwner(e.target.value as any)} className={inputClass} disabled={isPending}>
-            <option value="Chris">Chris</option>
-            <option value="Jamie">Jamie</option>
-            <option value="Joint">Joint</option>
-          </select>
+        <p className="mb-4 text-sm font-medium">Edit Jamie's Responsibility</p>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted block mb-1">Monthly Payments</label>
+            <input
+              type="number"
+              value={monthlyPayments}
+              onChange={(e) => setMonthlyPayments(e.target.value)}
+              className={inputClass}
+              disabled={isPending}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted block mb-1">Finance Fees Total</label>
+            <input
+              type="number"
+              value={financeFeesTotal}
+              onChange={(e) => setFinanceFeesTotal(e.target.value)}
+              className={inputClass}
+              disabled={isPending}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted block mb-1">Interest Accruing (monthly)</label>
+            <input
+              type="number"
+              value={interestAccruing}
+              onChange={(e) => setInterestAccruing(e.target.value)}
+              className={inputClass}
+              disabled={isPending}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 mt-4">
           <button
-            onClick={handleAddDebt}
-            disabled={isPending || !debtName.trim()}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-warn px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-border py-2 text-sm font-medium hover:bg-tint transition-colors"
           >
-            <Plus size={15} />
-            Add debt
+            Done
           </button>
         </div>
       </Card>
-
-      {/* Existing debts */}
-      {debts.length > 0 && (
-        <Card>
-          <p className="mb-3 text-[13px] font-medium text-muted">Existing debts</p>
-          <div className="space-y-2">
-            {debts.map((debt) => (
-              <div key={debt.id} className="flex items-center justify-between p-2 rounded border border-border">
-                <div>
-                  <p className="text-sm font-medium">{debt.name}</p>
-                  <p className="text-xs text-muted">{money(debt.balance)} — {debt.securedBy}</p>
-                </div>
-                <button
-                  onClick={() => onDeleteDebt(debt.id)}
-                  disabled={isPending}
-                  className="p-1.5 hover:bg-tint rounded disabled:opacity-50"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      <Card>
-        <p className="mb-4 text-[13px] font-medium text-muted">Add asset</p>
-        <div className="space-y-2">
-          <input
-            type="text"
-            placeholder="Asset name"
-            value={assetName}
-            onChange={(e) => setAssetName(e.target.value)}
-            className={inputClass}
-            disabled={isPending}
-          />
-          <input
-            type="number"
-            placeholder="Value"
-            value={assetValue}
-            onChange={(e) => setAssetValue(e.target.value)}
-            className={inputClass}
-            disabled={isPending}
-          />
-          <select value={assetOwner} onChange={(e) => setAssetOwner(e.target.value as any)} className={inputClass} disabled={isPending}>
-            <option value="Chris">Chris</option>
-            <option value="Jamie">Jamie</option>
-            <option value="Joint">Joint</option>
-          </select>
-          <button
-            onClick={handleAddAsset}
-            disabled={isPending || !assetName.trim()}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-good px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            <Plus size={15} />
-            Add asset
-          </button>
-        </div>
-      </Card>
-
-      {/* Existing assets */}
-      {assets.length > 0 && (
-        <Card>
-          <p className="mb-3 text-[13px] font-medium text-muted">Existing assets</p>
-          <div className="space-y-2">
-            {assets.map((asset) => (
-              <div key={asset.id} className="flex items-center justify-between p-2 rounded border border-border">
-                <div>
-                  <p className="text-sm font-medium">{asset.name}</p>
-                  <p className="text-xs text-muted">{money(asset.value)} — {asset.owner}</p>
-                </div>
-                <button
-                  onClick={() => onDeleteAsset(asset.id)}
-                  disabled={isPending}
-                  className="p-1.5 hover:bg-tint rounded disabled:opacity-50"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      <button
-        onClick={onSave}
-        disabled={isPending}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-good px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-      >
-        Done editing
-      </button>
     </div>
   );
 }
