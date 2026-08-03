@@ -2,11 +2,13 @@
 
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui";
-import { money } from "@/lib/data";
+import { money, moneyExact } from "@/lib/data";
 import {
+  DRAWS,
   STORY,
   chrisSpareMonthly,
   chrisSpareTotal,
+  drawsTotal,
   jamieEarlyTotal,
   jamieEarnedTotal,
   jamieHalfOfBusiness,
@@ -225,6 +227,45 @@ export default function DivorceResponsibilityClient() {
         </ul>
       </Chapter>
 
+      {/* ── The receipts ────────────────────────────────────────────────── */}
+      <Chapter
+        n={8}
+        emoji="🧾"
+        when="From the books"
+        title="Here's exactly what he took"
+        accent="var(--reg)"
+        bg="var(--reg-bg)"
+      >
+        <div className="rounded-xl bg-card p-3">
+          {DRAWS.map((d) => (
+            <div
+              key={d.bucket}
+              className="border-t border-border py-2.5 first:border-t-0 first:pt-0"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[15px] font-medium">{d.bucket}</span>
+                <span className="shrink-0 text-[15px] font-semibold">
+                  {moneyExact(d.amount)}
+                </span>
+              </div>
+              <p className="text-xs text-muted">{d.what}</p>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between gap-3 border-t-2 border-border pt-2.5">
+            <span className="text-[15px] font-bold">Total he took</span>
+            <span className="shrink-0 text-xl font-bold" style={{ color: "var(--warn)" }}>
+              {moneyExact(drawsTotal)}
+            </span>
+          </div>
+        </div>
+        <p className="mt-3 text-[13px]">
+          A Porsche payment, a Tesla insurance bill, an Equinox membership — paid
+          by the gym, called a paycheck. And this is only what&apos;s{" "}
+          <strong>on the books</strong>: the PT cash he collected on the side was
+          never tracked, so it isn&apos;t in this total at all.
+        </p>
+      </Chapter>
+
       {/* ── The bill ────────────────────────────────────────────────────── */}
       <Card className="border-l-4" style={{ borderLeftColor: "var(--warn)" }}>
         <p className="mb-3 text-[15px] font-semibold">🧮 So here&apos;s the bill</p>
@@ -236,6 +277,10 @@ export default function DivorceResponsibilityClient() {
           <Row
             label={`Half the gym investment (${money(STORY.businessInvestment)})`}
             value={money(jamieHalfOfBusiness)}
+          />
+          <Row
+            label="What he drew out of the gym"
+            value={moneyExact(drawsTotal)}
           />
           <div className="flex items-center justify-between border-t border-border pt-2 text-lg font-bold">
             <span>Jamie owes</span>
@@ -251,8 +296,10 @@ export default function DivorceResponsibilityClient() {
           </div>
         </div>
         <p className="mt-3 text-[13px] text-muted">
-          Plus whatever the gym still needs to be made whole — that number keeps
-          moving.
+          The three lines don&apos;t overlap: the shared debt was built before
+          the gym existed, the investment is money Chris put in, and the draws
+          are money Jamie took out. The untracked PT cash isn&apos;t counted
+          anywhere.
         </p>
       </Card>
 

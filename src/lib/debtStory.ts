@@ -35,6 +35,23 @@ export const STORY = {
   jamieBusinessInvestment: 0,
 } as const;
 
+// What Jamie actually pulled out of the gym for himself, line by line, from the
+// BoxingRX books. Cents kept on purpose — these come off real statements, not
+// from memory. Does NOT include the untracked PT cash, which nobody can total.
+export const DRAWS = [
+  { bucket: "Taycan", amount: 31_630.86, what: "His car loan payments" },
+  { bucket: "Transfers", amount: 9_075.0, what: "Cash straight to him" },
+  { bucket: "Charges", amount: 7_434.77, what: "Card spending" },
+  { bucket: "Car Insurance", amount: 6_458.3, what: "Tesla insurance" },
+  {
+    bucket: "Equinox",
+    amount: 3_940.0,
+    what: "Gym membership + transfers to his account",
+  },
+] as const;
+
+export const drawsTotal = DRAWS.reduce((sum, d) => sum + d.amount, 0);
+
 const monthsTogether = STORY.yearsTogether * 12;
 
 // What was left of Chris's paycheck each month once his own bills were paid —
@@ -49,12 +66,15 @@ export const jamieLateTotal = STORY.jamieMonthlyLate * STORY.jamieLateMonths;
 export const jamieEarnedTotal = jamieEarlyTotal + jamieLateTotal;
 
 // The bill: half of what they borrowed together, plus half of what Chris alone
-// put into the business they started together.
+// put into the business they started together, plus every dollar Jamie took out
+// of that business for himself. The three don't overlap — the shared debt was
+// built before the gym existed, the investment is money Chris put in, and the
+// draws are money Jamie took out.
 export const jamieHalfOfDebt = Math.round(STORY.jointDebt / 2);
 export const jamieHalfOfBusiness = Math.round(
   (STORY.businessInvestment - STORY.jamieBusinessInvestment) / 2
 );
-export const jamieOwes = jamieHalfOfDebt + jamieHalfOfBusiness;
+export const jamieOwes = jamieHalfOfDebt + jamieHalfOfBusiness + drawsTotal;
 
 // The offset that runs the other direction: half the retirement Chris built
 // while they were married.
