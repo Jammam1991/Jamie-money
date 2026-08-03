@@ -916,3 +916,42 @@ export async function deleteOverallDebtPayment(id: string): Promise<ActionResult
   revalidatePath("/overall-debt");
   return { ok: true };
 }
+
+// ── Debt Transactions ─────────────────────────────────────────────────────────
+// The individual charges behind the debt, shown as year -> month -> transaction.
+
+export async function addDebtTransaction(input: {
+  tx_date: string;
+  description: string;
+  amount: number;
+  source?: string;
+}): Promise<ActionResult> {
+  const loggedIn = await guardLoggedIn();
+  if (loggedIn) return loggedIn;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("debt_transactions")
+    .insert({
+      tx_date: input.tx_date,
+      description: input.description,
+      amount: input.amount,
+      source: input.source ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  return { ok: true, id: data.id };
+}
+
+export async function deleteDebtTransaction(id: string): Promise<ActionResult> {
+  const loggedIn = await guardLoggedIn();
+  if (loggedIn) return loggedIn;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("debt_transactions").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  return { ok: true };
+}

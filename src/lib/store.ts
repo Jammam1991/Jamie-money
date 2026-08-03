@@ -51,6 +51,33 @@ export async function getDebts(): Promise<Debt[]> {
   }));
 }
 
+// One charge that helped build the debt, for the year -> month -> transaction
+// drill-down on the Debt page.
+export interface DebtTransaction {
+  id: string;
+  txDate: string; // YYYY-MM-DD
+  description: string;
+  amount: number;
+  source?: string; // which card or loan it landed on
+}
+
+export async function getDebtTransactions(): Promise<DebtTransaction[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("debt_transactions")
+    .select("*")
+    .order("tx_date", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    txDate: row.tx_date,
+    description: row.description,
+    amount: Number(row.amount),
+    source: row.source ?? undefined,
+  }));
+}
+
 // The Home page's cash log, newest first. An empty list is a legitimate state
 // (nothing logged yet) — only fall back to the sample when there's no database.
 export async function getCashLog(): Promise<CashEntry[]> {
