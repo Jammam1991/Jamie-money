@@ -32,6 +32,11 @@ export const STORY = {
   // What Jamie put toward the debt payments in all that time.
   jamiePaidOnDebt: 0,
 
+  // The car loan. Both names are on the paper, but it's Jamie's car, Jamie
+  // drives it, and the gym has been making the payments — so the whole balance
+  // sits on his side. Counted separately from the 2020-2023 pile above.
+  carLoan: 86_000,
+
   // Dec 2024 was the first full month they owned BoxingRX.
   gymStartYear: 2024,
   gymStartMonth: 12,
@@ -39,7 +44,12 @@ export const STORY = {
   // Jamie ran the place, and a manager doing that job would have been paid. He
   // never was on paper — he took money out instead. So the pay he earned is set
   // against what he drew, and only the excess is a debt.
-  managerMonthly: 3_000,
+  //
+  // Held at 2,000 on purpose. Jamie was also collecting PT cash off the books
+  // the whole time, and none of it was tracked. Once that's counted it comes
+  // out of what the gym still owes him, so crediting a full manager's wage on
+  // top would pay him twice. Raise this once the PT number is known.
+  managerMonthly: 2_000,
 
   // Equity actually contributed, from the books.
   contributionsChris: 1_243.93,
@@ -66,6 +76,19 @@ export const ADVANCES = [
 ] as const;
 
 export const gymOwesChris = ADVANCES.reduce((sum, a) => sum + a.amount, 0);
+
+// ── Things, not money ────────────────────────────────────────────────────────
+// Personal property bought during the marriage. Deliberately NOT folded into
+// the bill: which way each line runs depends on who physically ends up with the
+// item, and that isn't settled yet. Listed so nothing gets quietly forgotten.
+export const ASSETS = [
+  { item: "Rolex", value: 30_000, who: "To be split" },
+  { item: "Rolex", value: 15_000, who: "To be split" },
+  { item: "Jewellery and other items", value: 20_000, who: "Jamie holds" },
+] as const;
+
+export const assetsTotal = ASSETS.reduce((sum, a) => sum + a.value, 0);
+export const assetsHalf = assetsTotal / 2;
 
 // ── What each of them took out ───────────────────────────────────────────────
 // Jamie's draws, line by line, from the BoxingRX books. Cents kept on purpose —
@@ -130,6 +153,7 @@ export const jamieRetirementClaim = STORY.jamieRetirementShare;
 
 export function bill(now: Date) {
   const { overdraw } = gymSettleUp(now);
-  const owes = jamieHalfOfDebt + jamieHalfOfGymDebt + overdraw;
+  const owes =
+    jamieHalfOfDebt + STORY.carLoan + jamieHalfOfGymDebt + overdraw;
   return { overdraw, owes, net: owes - jamieRetirementClaim };
 }

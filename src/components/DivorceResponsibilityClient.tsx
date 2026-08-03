@@ -3,8 +3,11 @@ import { Card } from "@/components/ui";
 import { money, moneyExact } from "@/lib/data";
 import {
   ADVANCES,
+  ASSETS,
   DRAWS,
   STORY,
+  assetsHalf,
+  assetsTotal,
   bill,
   chrisDrawsTotal,
   chrisSpareMonthly,
@@ -310,6 +313,12 @@ export default function DivorceResponsibilityClient() {
           real paycheck, so that pay is his, and it comes off what he took.
         </p>
 
+        <p className="mt-2 text-[13px] text-muted">
+          A placeholder, deliberately low. Jamie was also taking PT cash off the
+          books the whole time and none of it was tracked — that money counts as
+          pay too. Once it&apos;s totalled, this rate gets revisited.
+        </p>
+
         <div className="mt-4 space-y-2 rounded-xl bg-card p-4">
           <Row
             label={`Manager pay earned (${settle.months} × ${money(STORY.managerMonthly)})`}
@@ -336,6 +345,30 @@ export default function DivorceResponsibilityClient() {
         </p>
       </Chapter>
 
+      {/* ── The car ─────────────────────────────────────────────────────── */}
+      <Chapter
+        n={10}
+        emoji="🚗"
+        when="Both names, one driver"
+        title="And the car is his"
+        accent="var(--warn)"
+        bg="var(--warn-bg)"
+      >
+        <p className="text-4xl font-bold" style={{ color: "var(--warn)" }}>
+          {money(STORY.carLoan)}
+        </p>
+        <p className="mt-1 text-[15px]">
+          still owed on the loan. Both their names are on the paper, but
+          it&apos;s Jamie&apos;s car and Jamie drives it — and the gym has been
+          making the payments, which is the{" "}
+          <strong>{moneyExact(DRAWS[0].amount)}</strong> Taycan line in his draws
+          above. The whole balance sits on his side.
+        </p>
+        <p className="mt-3 text-[13px] text-muted">
+          Counted on its own, not inside the {money(STORY.jointDebt)} above.
+        </p>
+      </Chapter>
+
       {/* ── The bill ────────────────────────────────────────────────────── */}
       <Card className="border-l-4" style={{ borderLeftColor: "var(--warn)" }}>
         <p className="mb-3 text-[15px] font-semibold">🧮 So here&apos;s the bill</p>
@@ -344,6 +377,7 @@ export default function DivorceResponsibilityClient() {
             label={`Half the shared debt (${money(STORY.jointDebt)})`}
             value={money(jamieHalfOfDebt)}
           />
+          <Row label="The car loan — all of it" value={money(STORY.carLoan)} />
           <Row
             label={`Half of what the gym owes Chris (${moneyExact(gymOwesChris)})`}
             value={moneyExact(jamieHalfOfGymDebt)}
@@ -369,11 +403,43 @@ export default function DivorceResponsibilityClient() {
         </div>
         <p className="mt-3 text-[13px] text-muted">
           The lines don&apos;t overlap: the shared debt was built before the gym
-          existed, and the gym line is money Chris personally lent the business
-          that it can&apos;t pay back if it closes. The draws aren&apos;t charged
-          twice — they&apos;re already netted against the manager pay he earned.
-          The untracked PT cash isn&apos;t counted anywhere.
+          existed, the car loan is counted on its own, and the gym line is money
+          Chris personally lent the business that it can&apos;t pay back if it
+          closes. The draws aren&apos;t charged twice — they&apos;re already
+          netted against the manager pay he earned. The untracked PT cash
+          isn&apos;t counted anywhere.
         </p>
+      </Card>
+
+      {/* ── Things, not money ───────────────────────────────────────────── */}
+      <Card>
+        <p className="mb-1 text-[15px] font-semibold">💍 Then there&apos;s the stuff</p>
+        <p className="mb-3 text-[13px] text-muted">
+          Bought during the marriage, so it gets split too. Kept off the bill
+          above until you settle who walks away with what.
+        </p>
+        <div className="space-y-2">
+          {ASSETS.map((a, i) => (
+            <div
+              key={`${a.item}-${i}`}
+              className="flex items-center justify-between gap-3 text-[15px]"
+            >
+              <span>
+                {a.item}
+                <span className="block text-xs text-muted">{a.who}</span>
+              </span>
+              <span className="shrink-0 font-medium">{money(a.value)}</span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-2 text-[15px] font-bold">
+            <span>Worth altogether</span>
+            <span className="shrink-0">{money(assetsTotal)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 text-[13px] text-muted">
+            <span>Half each</span>
+            <span className="shrink-0">{money(assetsHalf)}</span>
+          </div>
+        </div>
       </Card>
 
       <Card className="bg-tint">
