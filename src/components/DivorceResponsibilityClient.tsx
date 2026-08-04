@@ -32,6 +32,29 @@ import {
   periodMax,
   periodTotal,
 } from "@/lib/spendingHistory";
+import { groupByYear, type SpendItem, type Tier } from "@/lib/spendingItems";
+
+// The dot next to every line: how much weight it can carry.
+const TIER_COLOR: Record<Tier, string> = {
+  bank: "var(--good)",
+  memory: "#fbbf24",
+  none: "#dc2626",
+};
+
+const TIER_LABEL: Record<Tier, string> = {
+  bank: "Bank record",
+  memory: "From memory",
+  none: "No date or receipt",
+};
+
+// Dates the older half of the ledger only knows roughly get a "~" so nobody
+// mistakes a placeholder for a real transaction date.
+function shortDate(it: SpendItem): string {
+  if (!it.d) return "—";
+  const [y, m, d] = it.d.split("-");
+  const stamp = `${m}/${d}/${y}`;
+  return it.p === "exact day" ? stamp : `~${stamp}`;
+}
 
 // The story is told in chapters, top to bottom, the way you'd tell it out loud:
 // how the pile got built, who fed it, who paid for it, and what's left to settle.
@@ -519,31 +542,107 @@ function SpendingHistory() {
         </p>
         <div className="space-y-4">
           {PERIODS.map((p) => (
-            <div key={p.key}>
-              <div className="mb-1 flex items-baseline justify-between gap-3">
-                <span className="text-[15px] font-medium">
-                  {p.emoji} {p.title}
-                </span>
-                <span
-                  className="shrink-0 text-[17px] font-bold"
+            <details key={p.key} className="group">
+              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                <div className="mb-1 flex items-baseline justify-between gap-3">
+                  <span className="text-[15px] font-medium">
+                    {p.emoji} {p.title}
+                  </span>
+                  <span
+                    className="shrink-0 text-[17px] font-bold"
+                    style={{ color: p.accent }}
+                  >
+                    {money(p.amount)}
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-tint">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${(p.amount / periodMax) * 100}%`,
+                      background: p.accent,
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[12px] text-muted">
+                  {p.when} · {p.items} items · {p.note}
+                </p>
+                <p
+                  className="mt-1 text-[12px] font-medium"
                   style={{ color: p.accent }}
                 >
-                  {money(p.amount)}
-                </span>
+                  <span className="inline-block transition-transform group-open:rotate-90">
+                    ›
+                  </span>{" "}
+                  <span className="group-open:hidden">
+                    Show the {p.items} lines
+                  </span>
+                  <span className="hidden group-open:inline">Hide them</span>
+                </p>
+              </summary>
+
+              {/* One collapsed row per year, so a 79-line year stays tidy. */}
+              <div className="mt-2 space-y-1 border-l-2 pl-3" style={{ borderLeftColor: p.accent }}>
+                {groupByYear(p.key).map((g) => (
+                  <details key={g.year} className="group/yr">
+                    <summary className="flex cursor-pointer list-none items-baseline justify-between gap-3 rounded-lg px-2 py-1.5 text-[13px] hover:bg-tint [&::-webkit-details-marker]:hidden">
+                      <span className="font-medium">
+                        <span className="inline-block text-muted transition-transform group-open/yr:rotate-90">
+                          ›
+                        </span>{" "}
+                        {g.year}
+                        <span className="ml-1.5 font-normal text-muted">
+                          {g.items.length} items
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-medium">
+                        {money(g.total)}
+                      </span>
+                    </summary>
+                    <ul className="mb-1 space-y-1 px-2 pb-1 pt-1">
+                      {g.items.map((it, i) => (
+                        <li
+                          key={`${g.year}-${i}`}
+                          className="flex items-start justify-between gap-2 text-[12px] leading-snug"
+                        >
+                          <span className="flex min-w-0 items-start gap-1.5">
+                            <span
+                              className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                              style={{ background: TIER_COLOR[it.e] }}
+                              title={TIER_LABEL[it.e]}
+                            />
+                            <span className="min-w-0">
+                              <span className="text-muted">{shortDate(it)}</span>{" "}
+                              <span className="break-words">{it.t}</span>
+                            </span>
+                          </span>
+                          <span
+                            className="shrink-0 tabular-nums"
+                            style={{ color: it.a > 0 ? "var(--good)" : undefined }}
+                          >
+                            {it.a > 0 ? "+" : ""}
+                            {moneyExact(Math.abs(it.a))}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
               </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-tint">
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${(p.amount / periodMax) * 100}%`,
-                    background: p.accent,
-                  }}
-                />
-              </div>
-              <p className="mt-1 text-[12px] text-muted">
-                {p.when} · {p.items} items · {p.note}
-              </p>
-            </div>
+            </details>
+          ))}
+        </div>
+
+        {/* What the coloured dot on each line means. */}
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+          {(["bank", "memory", "none"] as Tier[]).map((t) => (
+            <span key={t} className="flex items-center gap-1.5">
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ background: TIER_COLOR[t] }}
+              />
+              {TIER_LABEL[t]}
+            </span>
           ))}
         </div>
         <div className="mt-4 rounded-xl bg-warn-bg p-3">
