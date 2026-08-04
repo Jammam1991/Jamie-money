@@ -20,6 +20,15 @@
   --reg: #0e6f8a;
   --reg-bg: #e4f3f8;
   --reg-line: #c8e6ef;
+
+  /* Names the Credit Report screen uses, so the layout copied over from Money
+     App reads the same but wears this app's warmer colours. */
+  --surface: var(--tint);
+  --foreground: var(--text);
+  --faint: #97958d; /* one step quieter than --muted, for captions */
+  --pos: var(--good);
+  --neg: #b3261e;
+  --accent: var(--fico);
 }
 
 @theme inline {
@@ -33,6 +42,12 @@
   --color-good-bg: var(--good-bg);
   --color-warn: var(--warn);
   --color-warn-bg: var(--warn-bg);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-faint: var(--faint);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
 }
 
