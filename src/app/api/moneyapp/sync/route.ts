@@ -29,5 +29,6 @@ export async function POST() {
     fico: result.fico,
     scores: result.scores,
     snapshots: result.snapshots,
+    reports: result.reports,
   });
 }

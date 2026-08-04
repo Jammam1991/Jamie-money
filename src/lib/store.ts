@@ -16,6 +16,7 @@ import {
   type Divorce,
   type OwesCharge,
 } from "./data";
+import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
@@ -589,65 +590,83 @@ export async function getFicoHistory(): Promise<FicoScoreEntry[]> {
   }));
 }
 
-export interface SnapshotAccount {
-  debtId: string;
-  name: string;
+// A credit account with the extra details the Credit Report page shows —
+// account type, when it opened, which day it reports, and any note. All of it
+// comes from Money App; a debt entered by hand here simply has none of it.
+export interface CreditAccount extends Debt {
+  // How the payment history and the report snapshots find this account.
+  moneyappDebtId: string | null;
+  type: DebtType;
+  openedDate: string | null;
+  creditReportDay: number | null;
+  notes: string | null;
+}
+
+export async function getCreditAccounts(): Promise<CreditAccount[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c.from("debts").select("*").order("sort");
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    name: row.name,
+    balance: Number(row.balance),
+    monthly: Number(row.monthly),
+    paidPct: Number(row.paid_pct),
+    apr: Number(row.apr ?? 0),
+    minPayment: Number(row.min_payment ?? row.monthly ?? 0),
+    moneyappDebtId: row.moneyapp_debt_id ? String(row.moneyapp_debt_id) : null,
+    type: isDebtType(row.debt_type) ? row.debt_type : "other",
+    openedDate: row.opened_date ?? null,
+    creditReportDay: row.credit_report_day != null ? Number(row.credit_report_day) : null,
+    notes: row.notes ?? null,
+  }));
+}
+
+// Every report Money App has parsed, newest first.
+export async function getCreditReports(): Promise<ReportSnapshot[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("moneyapp_credit_reports")
+    .select("*")
+    .order("report_date", { ascending: false });
+  if (error || !data) return [];
+  return data.map((row) => ({
+    date: row.report_date,
+    score: row.score != null ? Number(row.score) : null,
+    reasons: (row.reasons as ReportSnapshot["reasons"]) ?? null,
+    negatives: (row.negatives as ReportSnapshot["negatives"]) ?? [],
+    summary: (row.summary as ReportSnapshot["summary"]) ?? null,
+    inquiries: (row.inquiries as ReportSnapshot["inquiries"]) ?? [],
+    reportAccounts: (row.accounts as ReportSnapshot["reportAccounts"]) ?? [],
+  }));
+}
+
+// The raw per-account balance rows, for the payment-history squares on each
+// account. getCreditSnapshots() groups the same rows by report date instead.
+export interface DebtSnapshotRow {
+  moneyappDebtId: string;
+  date: string;
   balance: number;
   missedPayment: boolean;
+  note: string | null;
 }
 
-export interface CreditSnapshot {
-  date: string;
-  totalBalance: number;
-  missedCount: number;
-  accounts: SnapshotAccount[];
-}
-
-// Balance snapshots grouped by date, newest first. Money App writes one row
-// per account each time a credit report is imported, so each group here is one
-// report. Account names come from the `debts` table, which the same sync fills.
-export async function getCreditSnapshots(): Promise<CreditSnapshot[]> {
+export async function getDebtSnapshotRows(): Promise<DebtSnapshotRow[]> {
   const c = client();
   if (!c) return [];
   const { data, error } = await c
     .from("moneyapp_debt_snapshots")
     .select("*")
     .order("snapshot_date", { ascending: false });
-  if (error || !data || data.length === 0) return [];
-
-  const { data: debts } = await c
-    .from("debts")
-    .select("name, moneyapp_debt_id")
-    .not("moneyapp_debt_id", "is", null);
-  const names = new Map(
-    (debts ?? []).map((d) => [String(d.moneyapp_debt_id), String(d.name)])
-  );
-
-  const byDate = new Map<string, CreditSnapshot>();
-  for (const row of data) {
-    const date = row.snapshot_date;
-    const group: CreditSnapshot =
-      byDate.get(date) ??
-      { date, totalBalance: 0, missedCount: 0, accounts: [] };
-    const debtId = String(row.moneyapp_debt_id);
-    const balance = Number(row.balance);
-    const missed = Boolean(row.missed_payment);
-    group.accounts.push({
-      debtId,
-      // An account closed in Money App drops out of the export, so its name is
-      // gone even though its old snapshots remain.
-      name: names.get(debtId) ?? "Closed account",
-      balance,
-      missedPayment: missed,
-    });
-    group.totalBalance += balance;
-    if (missed) group.missedCount++;
-    byDate.set(date, group);
-  }
-
-  return [...byDate.values()].map((g) => ({
-    ...g,
-    accounts: g.accounts.sort((a, b) => b.balance - a.balance),
+  if (error || !data) return [];
+  return data.map((row) => ({
+    moneyappDebtId: String(row.moneyapp_debt_id),
+    date: row.snapshot_date,
+    balance: Number(row.balance),
+    missedPayment: Boolean(row.missed_payment),
+    note: row.note ?? null,
   }));
 }
 
