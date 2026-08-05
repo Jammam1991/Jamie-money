@@ -1,48 +1,17 @@
--- Credit Report page: a read-only mirror of the credit data Money App already
--- keeps. Nothing here is typed in by hand — the "Sync from Money App" button
--- refills both tables from Money App's /api/debt/export. Run this once in the
--- Supabase SQL editor.
+-- Superseded by credit_report_setup.sql — run that one instead.
 --
--- Debt balances themselves are NOT mirrored here; the existing Money App sync
--- already writes those into `debts` (keyed by moneyapp_debt_id), and the
--- snapshots below join back to that table for account names.
-
--- ── Credit-score history ──────────────────────────────────────────────────────
--- One row per score check. The date is the key, so a re-sync updates a score
--- in place instead of adding a duplicate.
-create table if not exists public.moneyapp_fico_history (
-  scored_on date primary key,
-  score integer not null check (score between 300 and 850),
-  note text,
-  synced_at timestamptz not null default now()
-);
-
-alter table public.moneyapp_fico_history enable row level security;
-
--- ── Balance snapshots ─────────────────────────────────────────────────────────
--- Money App writes one row per account each time a credit report is imported,
--- so grouping these by date gives back the report history.
-create table if not exists public.moneyapp_debt_snapshots (
-  id uuid primary key default gen_random_uuid(),
-  moneyapp_debt_id text not null,
-  snapshot_date date not null,
-  balance numeric(14,2) not null default 0,
-  missed_payment boolean not null default false,
-  note text,
-  synced_at timestamptz not null default now(),
-  unique (moneyapp_debt_id, snapshot_date)
-);
-
-alter table public.moneyapp_debt_snapshots enable row level security;
-
-create index if not exists moneyapp_debt_snapshots_date_idx
-  on public.moneyapp_debt_snapshots (snapshot_date desc);
-
--- ── Clean up the first attempt ────────────────────────────────────────────────
--- The Credit Report page originally parsed uploaded PDFs itself into these
--- three tables. Money App does that job better, so the page now mirrors it
--- instead. These are dropped rather than left behind to rot; if they were
--- never created, this does nothing.
-drop table if exists public.credit_report_accounts;
-drop table if exists public.fico_scores;
-drop table if exists public.credit_reports;
+-- This file used to create the credit tables and then drop the three tables the
+-- very first version of the page used. Those drops are the problem: a drop that
+-- trips over a dependency fails the whole script, so the tables above it never
+-- got created and the Credit Report page sat empty with no explanation.
+--
+-- credit_report_setup.sql does everything this did, only creating and adding,
+-- and is safe to run over and over.
+--
+-- If the first version's tables are still lying around, they're harmless — the
+-- app never reads them. To clear them out, run these one at a time so a failure
+-- on one doesn't stop the others:
+--
+--   drop table if exists public.credit_report_accounts;
+--   drop table if exists public.fico_scores;
+--   drop table if exists public.credit_reports;
