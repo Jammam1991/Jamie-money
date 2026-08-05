@@ -178,12 +178,16 @@ export async function syncMoneyAppDebts(
           });
 
     let { error } = await write(details);
-    // The detail columns arrive with credit_reports_full.sql. Until that's been
+    // The detail columns arrive with credit_report_setup.sql. Until that's been
     // run they don't exist, and insisting on them would stop the balances from
     // updating too — so drop them and write the numbers anyway.
     if (error && missingSchema(error.message)) {
       const retry = await write({});
-      if (!retry.error) {
+      if (retry.error) {
+        // Report what the plain write hit, not the detail columns — that's the
+        // error actually standing in the way.
+        error = retry.error;
+      } else {
         note(problems, "the account details", error.message);
         error = null;
       }
@@ -219,7 +223,7 @@ function missingSchema(message: string): boolean {
 // far and away the most likely reason a pull saves nothing.
 function note(problems: string[], what: string, message: string) {
   const line = missingSchema(message)
-    ? `Couldn't save ${what} — that table isn't set up yet. Run supabase/credit_reports_full.sql. (${message})`
+    ? `Couldn't save ${what} — the database isn't set up yet. Run supabase/credit_report_setup.sql. (${message})`
     : `Couldn't save ${what} — ${message}`;
   if (!problems.includes(line)) problems.push(line);
 }
