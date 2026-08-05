@@ -118,7 +118,14 @@ function SyncButton({ ready }: { ready: boolean }) {
             `${body.reports} report${body.reports === 1 ? "" : "s"}, ` +
             `${body.scores} score${body.scores === 1 ? "" : "s"}.`,
         );
-        setProblems(body.problems ?? []);
+        setProblems(
+          body.database
+            ? [
+                ...(body.problems ?? []),
+                `This app writes to ${body.database} — make sure that's the project the SQL was run in.`,
+              ]
+            : (body.problems ?? []),
+        );
         router.refresh();
       }
     } catch {

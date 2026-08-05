@@ -36,6 +36,20 @@ export function client(): SupabaseClient | null {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+// Which Supabase project the app is actually writing to, e.g.
+// "abcdefg.supabase.co". Just the host — no keys, nothing secret. Setup SQL run
+// in a different project looks exactly like SQL that never ran, and this is the
+// one thing that tells those two apart.
+export function databaseHost(): string | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  if (!url) return null;
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 export async function getDebts(): Promise<Debt[]> {
   const c = client();
   if (!c) return sampleDebts;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAdmin } from "@/lib/auth";
-import { client } from "@/lib/store";
+import { client, databaseHost } from "@/lib/store";
 import { moneyAppReady, syncMoneyAppDebts } from "@/lib/moneyapp";
 
 export const runtime = "nodejs";
@@ -31,5 +31,8 @@ export async function POST() {
     snapshots: result.snapshots,
     reports: result.reports,
     problems: result.problems,
+    // Only sent when something failed, and only ever the host name — it tells
+    // apart "the SQL never ran" from "the SQL ran in the other project".
+    database: result.problems.length > 0 ? databaseHost() : null,
   });
 }
