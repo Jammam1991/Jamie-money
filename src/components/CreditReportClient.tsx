@@ -99,22 +99,26 @@ function SyncButton({ ready }: { ready: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [problems, setProblems] = useState<string[]>([]);
 
   async function sync() {
     setBusy(true);
     setNote(null);
+    setProblems([]);
     try {
       const res = await fetch("/api/moneyapp/sync", { method: "POST" });
       const body = await res.json();
       if (!res.ok) {
         setNote(body.error ?? "Couldn't reach Money App.");
       } else {
-        const bits = [
-          `${body.synced} account${body.synced === 1 ? "" : "s"}`,
-          body.reports ? `${body.reports} report${body.reports === 1 ? "" : "s"}` : null,
-          body.scores ? `${body.scores} score${body.scores === 1 ? "" : "s"}` : null,
-        ].filter(Boolean);
-        setNote(`Updated ${bits.join(", ")}.`);
+        // Always name all three, zeros included — "11 accounts" alone reads
+        // like a success when the scores and reports quietly saved nothing.
+        setNote(
+          `Updated ${body.synced} account${body.synced === 1 ? "" : "s"}, ` +
+            `${body.reports} report${body.reports === 1 ? "" : "s"}, ` +
+            `${body.scores} score${body.scores === 1 ? "" : "s"}.`,
+        );
+        setProblems(body.problems ?? []);
         router.refresh();
       }
     } catch {
@@ -135,6 +139,11 @@ function SyncButton({ ready }: { ready: boolean }) {
         {busy ? "Getting the latest…" : "Pull latest from Money App"}
       </button>
       {note && <p className="mt-1 text-right text-[11px] text-muted">{note}</p>}
+      {problems.map((p) => (
+        <p key={p} className="mt-1 max-w-xs text-right text-[11px] text-warn">
+          {p}
+        </p>
+      ))}
       {!ready && (
         <p className="mt-1 text-right text-[11px] text-muted">Money App isn&apos;t connected yet.</p>
       )}

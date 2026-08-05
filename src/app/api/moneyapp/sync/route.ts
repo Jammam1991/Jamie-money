@@ -30,5 +30,6 @@ export async function POST() {
     scores: result.scores,
     snapshots: result.snapshots,
     reports: result.reports,
+    problems: result.problems,
   });
 }
