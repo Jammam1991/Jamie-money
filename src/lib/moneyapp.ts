@@ -32,6 +32,10 @@ export type MoneyAppSyncResult = {
   scores: number; // credit scores mirrored into moneyapp_fico_history
   snapshots: number; // balance snapshots mirrored into moneyapp_debt_snapshots
   reports: number; // whole credit reports mirrored into moneyapp_credit_reports
+  // Writes that failed. Money App was reached fine, so this isn't a hard error
+  // — but the page would sit empty with no clue why, which is worse than an
+  // ugly message.
+  problems: string[];
   error?: string;
 };
 
@@ -95,6 +99,7 @@ export async function syncMoneyAppDebts(
       scores: 0,
       snapshots: 0,
       reports: 0,
+      problems: [],
       error: "Money App isn't connected yet.",
     };
   }
@@ -114,6 +119,7 @@ export async function syncMoneyAppDebts(
       scores: 0,
       snapshots: 0,
       reports: 0,
+      problems: [],
       error: err instanceof Error ? err.message : "Couldn't reach Money App.",
     };
   }
@@ -131,6 +137,7 @@ export async function syncMoneyAppDebts(
   );
 
   const base = Math.floor(Date.now() / 1000);
+  const problems: string[] = [];
   let synced = 0;
   for (let i = 0; i < parsed.debts.length; i++) {
     const d = parsed.debts[i];
@@ -144,33 +151,45 @@ export async function syncMoneyAppDebts(
     if (d.creditReportDay !== undefined) details.credit_report_day = d.creditReportDay;
     if (d.notes !== undefined) details.notes = d.notes;
 
-    if (existingId) {
-      await supabase
-        .from("debts")
-        .update({
-          name: d.name,
-          balance: d.balance,
-          apr: d.apr,
-          min_payment: d.minPayment,
-          monthly: d.minPayment,
-          ...details,
-        })
-        .eq("id", existingId);
-    } else {
-      await supabase.from("debts").insert({
-        name: d.name,
-        balance: d.balance,
-        apr: d.apr,
-        min_payment: d.minPayment,
-        monthly: d.minPayment,
-        paid_pct: 0,
-        source: "moneyapp",
-        moneyapp_debt_id: d.id,
-        sort: base + i,
-        ...details,
-      });
+    const write = (extra: Record<string, unknown>) =>
+      existingId
+        ? supabase
+            .from("debts")
+            .update({
+              name: d.name,
+              balance: d.balance,
+              apr: d.apr,
+              min_payment: d.minPayment,
+              monthly: d.minPayment,
+              ...extra,
+            })
+            .eq("id", existingId)
+        : supabase.from("debts").insert({
+            name: d.name,
+            balance: d.balance,
+            apr: d.apr,
+            min_payment: d.minPayment,
+            monthly: d.minPayment,
+            paid_pct: 0,
+            source: "moneyapp",
+            moneyapp_debt_id: d.id,
+            sort: base + i,
+            ...extra,
+          });
+
+    let { error } = await write(details);
+    // The detail columns arrive with credit_reports_full.sql. Until that's been
+    // run they don't exist, and insisting on them would stop the balances from
+    // updating too — so drop them and write the numbers anyway.
+    if (error && missingSchema(error.message)) {
+      const retry = await write({});
+      if (!retry.error) {
+        note(problems, "the account details", error.message);
+        error = null;
+      }
     }
-    synced++;
+    if (error) note(problems, "the accounts", error.message);
+    else synced++;
   }
 
   if (parsed.fico) {
@@ -181,9 +200,28 @@ export async function syncMoneyAppDebts(
     });
   }
 
-  const { scores, snapshots, reports } = await mirrorCreditHistory(supabase, parsed);
+  const { scores, snapshots, reports } = await mirrorCreditHistory(
+    supabase,
+    parsed,
+    problems,
+  );
 
-  return { synced, fico: parsed.fico ?? null, scores, snapshots, reports };
+  return { synced, fico: parsed.fico ?? null, scores, snapshots, reports, problems };
+}
+
+// Postgres/PostgREST for "that table or column isn't there".
+function missingSchema(message: string): boolean {
+  return /does not exist|schema cache|could not find/i.test(message);
+}
+
+// Record a failed write once per kind, in words rather than Postgres-speak.
+// A missing table or column means the setup SQL hasn't been run yet, which is
+// far and away the most likely reason a pull saves nothing.
+function note(problems: string[], what: string, message: string) {
+  const line = missingSchema(message)
+    ? `Couldn't save ${what} — that table isn't set up yet. Run supabase/credit_reports_full.sql. (${message})`
+    : `Couldn't save ${what} — ${message}`;
+  if (!problems.includes(line)) problems.push(line);
 }
 
 // Copy Money App's credit-score history and balance snapshots into our two
@@ -195,6 +233,7 @@ export async function syncMoneyAppDebts(
 async function mirrorCreditHistory(
   supabase: SupabaseClient,
   parsed: ExportResponse,
+  problems: string[],
 ): Promise<{ scores: number; snapshots: number; reports: number }> {
   const now = new Date().toISOString();
   let scores = 0;
@@ -212,7 +251,8 @@ async function mirrorCreditHistory(
       })),
       { onConflict: "scored_on" },
     );
-    if (!error) scores = history.length;
+    if (error) note(problems, "the score history", error.message);
+    else scores = history.length;
   }
 
   const rows = parsed.history ?? [];
@@ -228,7 +268,8 @@ async function mirrorCreditHistory(
       })),
       { onConflict: "moneyapp_debt_id,snapshot_date" },
     );
-    if (!error) snapshots = rows.length;
+    if (error) note(problems, "the balance history", error.message);
+    else snapshots = rows.length;
   }
 
   // The reports themselves — score factors, negative items, the summary, the
@@ -248,7 +289,8 @@ async function mirrorCreditHistory(
       })),
       { onConflict: "report_date" },
     );
-    if (!error) reports = parsedReports.length;
+    if (error) note(problems, "the credit reports", error.message);
+    else reports = parsedReports.length;
   }
 
   return { scores, snapshots, reports };
