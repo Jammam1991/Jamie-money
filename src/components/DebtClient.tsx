@@ -72,6 +72,20 @@ export default function DebtClient({
   const mo = monthlyInterest(debts);
   const minTotal = totalMinimum(debts);
 
+  // New debt added, bucketed by the year of each charge. Newest year first.
+  const byYear = new Map<number, number>();
+  for (const tx of initialTransactions) {
+    // tx_date is YYYY-MM-DD; read the year off the string so a timezone
+    // shift can't push a January 1st charge into the year before.
+    const year = Number(tx.txDate.slice(0, 4));
+    if (!year) continue;
+    byYear.set(year, (byYear.get(year) ?? 0) + tx.amount);
+  }
+  const thisYear = new Date().getFullYear();
+  const priorYears = [...byYear.entries()]
+    .filter(([y]) => y < thisYear)
+    .sort((a, b) => b[0] - a[0]);
+
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
     const tid = String(tempId.current--);
     setDebts((d) => [...d, { ...data, id: tid, monthly: data.minPayment, paidPct: 0 }]);
@@ -139,20 +153,32 @@ export default function DebtClient({
 
   return (
     <div className="space-y-4">
-      {/* Total owed + interest */}
+      {/* New debt added this year, with the years before it underneath */}
       <div className="rounded-2xl bg-warn-bg p-4">
-        <p className="text-[13px] text-warn">You owe in total</p>
-        <p className="text-3xl font-medium text-warn">{money(total)}</p>
-        {mo > 0 && (
-          <p className="mt-1 text-[13px] text-warn">
-            Interest is costing you about {money(mo)}/month.
-          </p>
+        <p className="text-[13px] uppercase tracking-wide text-warn">
+          New debt added this year
+        </p>
+        <p className="text-3xl font-medium text-warn">
+          {money(byYear.get(thisYear) ?? 0)}
+        </p>
+        {priorYears.length > 0 && (
+          <div className="mt-3 space-y-1 border-t border-warn/20 pt-2">
+            {priorYears.map(([year, amount]) => (
+              <div
+                key={year}
+                className="flex items-center justify-between text-[13px] text-warn"
+              >
+                <span>{year}</span>
+                <span>{money(amount)}</span>
+              </div>
+            ))}
+          </div>
         )}
-        {minTotal > 0 && (
-          <p className="text-[13px] text-warn">
-            Estimated payment: about {money(minTotal)}/month.
-          </p>
-        )}
+        <p className="mt-3 text-[13px] text-warn">
+          You owe {money(total)} in total
+          {mo > 0 ? `, about ${money(mo)}/month in interest` : ""}
+          {minTotal > 0 ? ` — payments run about ${money(minTotal)}/month` : ""}.
+        </p>
       </div>
 
       {/* Credit score, last pulled from Money App */}
