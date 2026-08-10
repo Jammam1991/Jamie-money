@@ -26,10 +26,13 @@ import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DebtHistory from "@/components/DebtHistory";
+import DebtByYear from "@/components/DebtByYear";
 import type { DebtTransaction } from "@/lib/store";
 import {
   addDebt,
+  addDebtTransaction,
   deleteDebt,
+  deleteDebtTransaction,
   importDebts,
   updateDebt,
 } from "@/lib/actions";
@@ -53,14 +56,19 @@ export default function DebtClient({
   hasBank,
   fico,
   initialTransactions,
+  currentYear,
 }: {
   initialDebts: Debt[];
   admin: boolean;
   hasBank: boolean;
   fico: { score: number; date: string } | null;
   initialTransactions: DebtTransaction[];
+  currentYear: number;
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
+  // The transactions live up here so the by-year view and the drill-down below
+  // it always show the same numbers when something is added or deleted.
+  const [txs, setTxs] = useState<DebtTransaction[]>(initialTransactions);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -137,6 +145,41 @@ export default function DebtClient({
     });
   }
 
+  function handleAddTransaction(input: {
+    tx_date: string;
+    description: string;
+    amount: number;
+    source?: string;
+  }) {
+    const tid = String(tempId.current--);
+    setTxs((list) => [
+      ...list,
+      {
+        id: tid,
+        txDate: input.tx_date,
+        description: input.description,
+        amount: input.amount,
+        source: input.source,
+      },
+    ]);
+    startTransition(async () => {
+      // Swap the temp id for the real DB id so a later delete works.
+      const res = await addDebtTransaction(input);
+      if (res.ok && res.id) {
+        setTxs((list) => list.map((t) => (t.id === tid ? { ...t, id: res.id! } : t)));
+      } else if (!res.ok) {
+        setTxs((list) => list.filter((t) => t.id !== tid));
+      }
+    });
+  }
+
+  function handleDeleteTransaction(id: string) {
+    setTxs((list) => list.filter((t) => t.id !== id));
+    startTransition(() => {
+      deleteDebtTransaction(id);
+    });
+  }
+
   return (
     <div className="space-y-4">
       {/* Total owed + interest */}
@@ -154,6 +197,9 @@ export default function DebtClient({
           </p>
         )}
       </div>
+
+      {/* Year-by-year: how much got added, and what it costs each month */}
+      <DebtByYear transactions={txs} total={total} currentYear={currentYear} />
 
       {/* Credit score, last pulled from Money App */}
       {fico && (
@@ -267,7 +313,12 @@ export default function DebtClient({
       </Card>
 
       {/* Year -> month -> transaction drill-down */}
-      <DebtHistory initialTransactions={initialTransactions} admin={admin} />
+      <DebtHistory
+        transactions={txs}
+        admin={admin}
+        onAdd={handleAddTransaction}
+        onDelete={handleDeleteTransaction}
+      />
     </div>
   );
 }
