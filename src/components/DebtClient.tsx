@@ -82,16 +82,15 @@ export default function DebtClient({
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
-  for (const tx of initialTransactions) {
+  for (const tx of txs) {
     // tx_date is YYYY-MM-DD; read the year off the string so a timezone
     // shift can't push a January 1st charge into the year before.
     const year = Number(tx.txDate.slice(0, 4));
     if (!year) continue;
     byYear.set(year, (byYear.get(year) ?? 0) + tx.amount);
   }
-  const thisYear = new Date().getFullYear();
   const priorYears = [...byYear.entries()]
-    .filter(([y]) => y < thisYear)
+    .filter(([y]) => y < currentYear)
     .sort((a, b) => b[0] - a[0]);
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
@@ -202,7 +201,7 @@ export default function DebtClient({
           New debt added this year
         </p>
         <p className="text-3xl font-medium text-warn">
-          {money(byYear.get(thisYear) ?? 0)}
+          {money(byYear.get(currentYear) ?? 0)}
         </p>
         {priorYears.length > 0 && (
           <div className="mt-3 space-y-1 border-t border-warn/20 pt-2">
