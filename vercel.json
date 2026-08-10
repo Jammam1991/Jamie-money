@@ -8,6 +8,10 @@
     {
       "path": "/api/reminder",
       "schedule": "0 16 * * 0"
+    },
+    {
+      "path": "/api/moneyapp/cron",
+      "schedule": "0 9 * * *"
     }
   ]
 }

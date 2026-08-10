@@ -25,6 +25,7 @@ export async function POST() {
   }
   return NextResponse.json({
     ok: true,
+    received: result.received,
     synced: result.synced,
     fico: result.fico,
     scores: result.scores,

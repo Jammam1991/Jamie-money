@@ -27,6 +27,10 @@ import type {
 
 export type MoneyAppFico = { score: number; date: string };
 export type MoneyAppSyncResult = {
+  // How many accounts Money App sent us, before any of them were saved. The
+  // one number that tells "Money App has nothing under Jamie" apart from "it
+  // sent plenty and every save failed" — which look identical from `synced`.
+  received: number;
   synced: number;
   fico: MoneyAppFico | null;
   scores: number; // credit scores mirrored into moneyapp_fico_history
@@ -94,6 +98,7 @@ export async function syncMoneyAppDebts(
   const apiKey = process.env.MONEYAPP_API_KEY;
   if (!baseUrl || !apiKey) {
     return {
+      received: 0,
       synced: 0,
       fico: null,
       scores: 0,
@@ -114,6 +119,7 @@ export async function syncMoneyAppDebts(
     parsed = await res.json();
   } catch (err) {
     return {
+      received: 0,
       synced: 0,
       fico: null,
       scores: 0,
@@ -124,8 +130,12 @@ export async function syncMoneyAppDebts(
     };
   }
 
+  // A response that isn't shaped the way we expect is a reachable-but-broken
+  // Money App, not a crash — treat it as "sent nothing" and say so.
+  const debts = Array.isArray(parsed.debts) ? parsed.debts : [];
+
   // Which of these accounts already have a row? Keep it, update in place.
-  const ids = parsed.debts.map((d) => d.id);
+  const ids = debts.map((d) => d.id);
   const { data: existing } = ids.length
     ? await supabase
         .from("debts")
@@ -139,8 +149,8 @@ export async function syncMoneyAppDebts(
   const base = Math.floor(Date.now() / 1000);
   const problems: string[] = [];
   let synced = 0;
-  for (let i = 0; i < parsed.debts.length; i++) {
-    const d = parsed.debts[i];
+  for (let i = 0; i < debts.length; i++) {
+    const d = debts[i];
     const existingId = existingMap.get(d.id);
     // The account details the Credit Report page shows. Sent only by a Money
     // App new enough to have them, so they're left out of the write entirely
@@ -210,7 +220,72 @@ export async function syncMoneyAppDebts(
     problems,
   );
 
-  return { synced, fico: parsed.fico ?? null, scores, snapshots, reports, problems };
+  return {
+    received: debts.length,
+    synced,
+    fico: parsed.fico ?? null,
+    scores,
+    snapshots,
+    reports,
+    problems,
+  };
+}
+
+// ── Pulling on its own, without the button ───────────────────────────────────
+// The Debt page calls this on every load. Money App is the source of truth for
+// the accounts it knows about, so the numbers should be current whether or not
+// anyone remembered to press Sync.
+//
+// It's throttled, because a page load shouldn't wait on another app's API every
+// single time: a good pull holds for an hour, a failed one is retried after ten
+// minutes. The last attempt is remembered in `settings` under
+// "moneyapp_last_sync".
+//
+// Nothing here ever throws. A sync that can't run is a stale number on the
+// page, which is far better than a page that won't load at all.
+
+const SYNC_STATE_KEY = "moneyapp_last_sync";
+const FRESH_FOR_MS = 60 * 60 * 1000; // a good pull holds for an hour
+const RETRY_AFTER_MS = 10 * 60 * 1000; // a failed one is retried sooner
+
+type SyncState = { at: string; ok: boolean };
+
+export async function autoSyncMoneyAppDebts(
+  supabase: SupabaseClient,
+): Promise<void> {
+  if (!moneyAppReady()) return;
+  try {
+    const { data } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", SYNC_STATE_KEY)
+      .maybeSingle();
+
+    if (data?.value) {
+      let state: SyncState | null = null;
+      try {
+        state = JSON.parse(String(data.value)) as SyncState;
+      } catch {
+        state = null; // unreadable marker — just pull again
+      }
+      if (state?.at) {
+        const age = Date.now() - new Date(state.at).getTime();
+        const holdFor = state.ok ? FRESH_FOR_MS : RETRY_AFTER_MS;
+        if (age >= 0 && age < holdFor) return;
+      }
+    }
+
+    const result = await syncMoneyAppDebts(supabase);
+    const ok = !result.error && result.problems.length === 0;
+    await supabase.from("settings").upsert({
+      key: SYNC_STATE_KEY,
+      value: JSON.stringify({ at: new Date().toISOString(), ok } satisfies SyncState),
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // Money App being down, or the settings table not existing yet, must not
+    // take the Debt page down with it.
+  }
 }
 
 // Postgres/PostgREST for "that table or column isn't there".
