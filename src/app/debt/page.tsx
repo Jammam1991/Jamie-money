@@ -30,6 +30,7 @@ export default async function DebtPage() {
         hasBank={hasBank}
         fico={fico}
         initialTransactions={transactions}
+        currentYear={new Date().getFullYear()}
       />
     </div>
   );

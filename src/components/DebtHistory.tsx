@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, History, Plus, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
 import type { DebtTransaction } from "@/lib/store";
-import { addDebtTransaction, deleteDebtTransaction } from "@/lib/actions";
 
 const MONTH_NAMES = [
   "January",
@@ -61,20 +60,26 @@ function groupByYearAndMonth(txs: DebtTransaction[]): YearGroup[] {
 }
 
 export default function DebtHistory({
-  initialTransactions,
+  transactions,
   admin,
+  onAdd,
+  onDelete,
 }: {
-  initialTransactions: DebtTransaction[];
+  transactions: DebtTransaction[];
   admin: boolean;
+  onAdd: (input: {
+    tx_date: string;
+    description: string;
+    amount: number;
+    source?: string;
+  }) => void;
+  onDelete: (id: string) => void;
 }) {
-  const [txs, setTxs] = useState<DebtTransaction[]>(initialTransactions);
   const [openYear, setOpenYear] = useState<number | null>(null);
   const [openMonth, setOpenMonth] = useState<string | null>(null); // "2026-3"
   const [adding, setAdding] = useState(false);
-  const [, startTransition] = useTransition();
-  const tempId = useRef(-1);
 
-  const years = useMemo(() => groupByYearAndMonth(txs), [txs]);
+  const years = useMemo(() => groupByYearAndMonth(transactions), [transactions]);
 
   function handleAdd(input: {
     tx_date: string;
@@ -82,34 +87,8 @@ export default function DebtHistory({
     amount: number;
     source?: string;
   }) {
-    const tid = String(tempId.current--);
-    setTxs((list) => [
-      ...list,
-      {
-        id: tid,
-        txDate: input.tx_date,
-        description: input.description,
-        amount: input.amount,
-        source: input.source,
-      },
-    ]);
     setAdding(false);
-    startTransition(async () => {
-      // Swap the temp id for the real DB id so a later delete works.
-      const res = await addDebtTransaction(input);
-      if (res.ok && res.id) {
-        setTxs((list) => list.map((t) => (t.id === tid ? { ...t, id: res.id! } : t)));
-      } else if (!res.ok) {
-        setTxs((list) => list.filter((t) => t.id !== tid));
-      }
-    });
-  }
-
-  function handleDelete(id: string) {
-    setTxs((list) => list.filter((t) => t.id !== id));
-    startTransition(() => {
-      deleteDebtTransaction(id);
-    });
+    onAdd(input);
   }
 
   return (
@@ -191,7 +170,7 @@ export default function DebtHistory({
                                     </span>
                                     {admin && (
                                       <button
-                                        onClick={() => handleDelete(t.id)}
+                                        onClick={() => onDelete(t.id)}
                                         aria-label={`Delete ${t.description}`}
                                       >
                                         <Trash2 size={14} className="text-muted" />
