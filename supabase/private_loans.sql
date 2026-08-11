@@ -1,6 +1,7 @@
 -- ── Private loans from Money App ─────────────────────────────────────────────
 -- Paste the whole thing into Supabase (SQL Editor → New query → Run).
--- Safe to run again and again — it only creates and adds, never drops.
+-- Safe to run again and again. It drops nothing but an index it rebuilds a
+-- line later — no table and no row is ever removed.
 --
 -- The "New debt added this year" panel reads `debt_transactions`. Until now
 -- that table was filled in by hand and nobody ever filled it, so the panel sat
@@ -31,6 +32,17 @@ alter table public.debt_transactions enable row level security;
 -- updates the same row instead of piling up.
 alter table public.debt_transactions add column if not exists moneyapp_tx_id text;
 
+-- The index has to be a plain one, not `where moneyapp_tx_id is not null`.
+-- Postgres won't match a partial index to an "update the row if it's already
+-- there" write unless the write repeats the index's own condition, which the
+-- sync has no way to do — it fails with "no unique or exclusion constraint
+-- matching the ON CONFLICT specification". A plain unique index still allows
+-- any number of rows with no Money App id, which is what the partial one was
+-- there for, so nothing is lost.
+--
+-- The drop is only ever removing the partial version left by an earlier run of
+-- this file. Dropping an index touches no rows.
+drop index if exists public.debt_transactions_moneyapp_tx_id_key;
+
 create unique index if not exists debt_transactions_moneyapp_tx_id_key
-  on public.debt_transactions (moneyapp_tx_id)
-  where moneyapp_tx_id is not null;
+  on public.debt_transactions (moneyapp_tx_id);
