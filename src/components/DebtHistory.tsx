@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, History, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, History, Landmark, Plus, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
 import type { DebtTransaction } from "@/lib/store";
@@ -98,6 +98,13 @@ export default function DebtHistory({
         Where the debt came from
       </p>
 
+      {years.length > 0 && (
+        <p className="mt-1 text-xs text-muted">
+          Tap a year, then a month, to see every loan — and which account it came
+          out of, so you can check it against a statement.
+        </p>
+      )}
+
       {years.length === 0 ? (
         <p className="mt-2 text-[13px] text-muted">
           Nothing added yet. Add the charges that built the debt and they&apos;ll
@@ -159,14 +166,33 @@ export default function DebtHistory({
                                     <p className="truncate text-[14px]">
                                       {t.description}
                                     </p>
-                                    <p className="text-xs text-muted">
-                                      {t.txDate}
-                                      {t.source ? ` · ${t.source}` : ""}
-                                    </p>
+                                    <p className="text-xs text-muted">{t.txDate}</p>
+                                    {/* The account is the audit trail: it's what
+                                        this line gets checked against on a
+                                        statement, so it gets its own row rather
+                                        than trailing off the date. */}
+                                    {t.source && (
+                                      <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                                        <Landmark size={11} className="shrink-0" />
+                                        <span className="truncate">{t.source}</span>
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="flex shrink-0 items-center gap-2">
-                                    <span className="text-[14px]">
-                                      {money(t.amount)}
+                                    {/* A repayment comes through negative. Left
+                                        as a bare minus it reads like a smaller
+                                        loan, so it's named. */}
+                                    <span className="text-right text-[14px]">
+                                      {t.amount < 0 ? (
+                                        <>
+                                          {money(Math.abs(t.amount))}
+                                          <span className="block text-xs text-muted">
+                                            paid back
+                                          </span>
+                                        </>
+                                      ) : (
+                                        money(t.amount)
+                                      )}
                                     </span>
                                     {admin && (
                                       <button

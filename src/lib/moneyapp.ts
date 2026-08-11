@@ -255,6 +255,9 @@ type ExportLoan = {
   id: string;
   date: string;
   payee: string | null;
+  // Which bank or card the money left from, so a loan can be checked against a
+  // statement. Sent only by a Money App new enough to include it.
+  account?: string | null;
   amount: number; // already flipped: positive = borrowed, negative = repaid
 };
 
@@ -293,7 +296,10 @@ async function mirrorPrivateLoans(
       tx_date: l.date,
       description: l.payee?.trim() || "Private loan",
       amount: l.amount,
-      source: "Private loan",
+      // The account it came out of, so it can be checked against a statement.
+      // An older Money App doesn't send one, and "Private loan" at least says
+      // where the row came from.
+      source: l.account?.trim() || "Private loan",
     })),
     { onConflict: "moneyapp_tx_id" },
   );
