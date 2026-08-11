@@ -281,6 +281,7 @@ async function mirrorPrivateLoans(
   problems: string[],
 ): Promise<number> {
   let loans: ExportLoan[];
+  let spending: ExportLoan[];
   try {
     const res = await fetch(
       `${baseUrl.replace(/\/$/, "")}/api/debt/private-loans?person=jamie`,
@@ -292,6 +293,8 @@ async function mirrorPrivateLoans(
     if (!res.ok) throw new Error(`Money App returned ${res.status}`);
     const body = await res.json();
     loans = Array.isArray(body?.loans) ? body.loans : [];
+    // Sent only by a Money App new enough to have it.
+    spending = Array.isArray(body?.spending) ? body.spending : [];
   } catch (err) {
     note(
       problems,
@@ -300,6 +303,10 @@ async function mirrorPrivateLoans(
     );
     return 0;
   }
+
+  // Spending is written whether or not there are loans — the two are separate
+  // lists and one being empty says nothing about the other.
+  await mirrorJamieSpending(supabase, spending, problems);
 
   if (loans.length === 0) return 0;
 
@@ -321,6 +328,32 @@ async function mirrorPrivateLoans(
     return 0;
   }
   return loans.length;
+}
+
+// The money spent on Jamie that was never treated as a loan — gifts and the
+// like. It lives in its own table because it isn't debt: kept in
+// `debt_transactions` it would have to be filtered out of every sum on the
+// page, and the one place it got missed would quietly inflate what he owes.
+async function mirrorJamieSpending(
+  supabase: SupabaseClient,
+  spending: ExportLoan[],
+  problems: string[],
+): Promise<void> {
+  if (spending.length === 0) return;
+
+  const { error } = await supabase.from("jamie_spending").upsert(
+    firstPerKey(spending, (s) => s.id).map((s) => ({
+      moneyapp_tx_id: s.id,
+      tx_date: s.date,
+      description: s.payee?.trim() || "Spending",
+      amount: s.amount,
+      source: lenderAccount(s.account),
+    })),
+    { onConflict: "moneyapp_tx_id" },
+  );
+  if (error) {
+    note(problems, "the non-loan spending", error.message, "jamie_spending.sql");
+  }
 }
 
 // ── Pulling on its own, without the button ───────────────────────────────────
