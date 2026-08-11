@@ -1,0 +1,193 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown, Landmark, Scale } from "lucide-react";
+import { Card } from "@/components/ui";
+import { money } from "@/lib/data";
+import type { PayMonth } from "@/lib/gymPay";
+import type { DebtTransaction } from "@/lib/store";
+
+// ── Earned, took, and the difference ─────────────────────────────────────────
+// Three numbers a month, in that order, because that's the order the question
+// gets asked in: what was the job worth, what came out, who covered the rest.
+//
+// The private loans for the same month sit underneath, since they're the other
+// half of what he owes and splitting them across two screens makes the total
+// something you have to work out yourself.
+
+function monthKey(date: string): string {
+  return date.slice(0, 7); // YYYY-MM
+}
+
+export default function EarnedVsTook({
+  months,
+  loans,
+}: {
+  months: PayMonth[];
+  loans: DebtTransaction[];
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+
+  if (months.length === 0) return null;
+
+  // Private loans bucketed by month, to show beside that month's pay.
+  const loansByMonth = new Map<string, DebtTransaction[]>();
+  for (const l of loans) {
+    const key = monthKey(l.txDate);
+    loansByMonth.set(key, [...(loansByMonth.get(key) ?? []), l]);
+  }
+
+  // What every month's gap adds up to. This is the headline: one month being
+  // over is a rounding error, twenty months of it is the actual story.
+  const totalGap = months.reduce((sum, m) => sum + m.difference, 0);
+
+  return (
+    <Card>
+      <p className="flex items-center gap-1.5 text-[13px] text-muted">
+        <Scale size={15} />
+        What you earned vs what you took
+      </p>
+
+      <div
+        className="mt-3 rounded-xl p-3"
+        style={{
+          background: totalGap > 0 ? "var(--warn-bg)" : "var(--good-bg)",
+          color: totalGap > 0 ? "var(--warn)" : "var(--good)",
+        }}
+      >
+        <p className="text-[13px]">
+          {totalGap > 0 ? "Taken above what you earned" : "Taken below what you earned"}
+        </p>
+        <p className="text-2xl font-medium">{money(Math.abs(totalGap))}</p>
+        <p className="mt-1 text-[13px]">
+          {totalGap > 0
+            ? "Chris put in the difference to cover it."
+            : "You took less out than the work was worth."}
+        </p>
+      </div>
+
+      <p className="mt-3 text-xs text-muted">
+        What you earned comes from the gym dashboard — training, classes, showed
+        leads, commission, your hours managing, and your share of the profit.
+        Tap a month to see how it was worked out.
+      </p>
+
+      <div className="mt-3 space-y-2">
+        {months.map((m) => {
+          const isOpen = open === m.month;
+          const monthLoans = loansByMonth.get(monthKey(m.month)) ?? [];
+          const loanTotal = monthLoans.reduce((sum, l) => sum + l.amount, 0);
+          const over = m.difference > 0;
+          return (
+            <div key={m.month} className="rounded-xl bg-tint p-3">
+              <button
+                className="w-full text-left"
+                onClick={() => setOpen(isOpen ? null : m.month)}
+                aria-expanded={isOpen}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 text-[15px] font-medium">
+                    <ChevronDown
+                      size={16}
+                      className={`text-muted transition-transform ${isOpen ? "rotate-180" : "-rotate-90"}`}
+                    />
+                    {m.label}
+                    {m.isCurrentMonth && (
+                      <span className="text-[13px] font-normal text-muted">so far</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="mt-2 space-y-1 text-[14px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">You earned</span>
+                    <span>{money(m.earned)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">You took</span>
+                    <span>{money(m.took)}</span>
+                  </div>
+                  <div
+                    className="flex items-center justify-between border-t pt-1 font-medium"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <span>{over ? "Difference owed" : "Under what you earned"}</span>
+                    <span style={{ color: over ? "var(--warn)" : "var(--good)" }}>
+                      {money(Math.abs(m.difference))}
+                    </span>
+                  </div>
+                  {loanTotal !== 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted">Private loans this month</span>
+                      <span>{money(loanTotal)}</span>
+                    </div>
+                  )}
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="mt-3 space-y-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                  <div>
+                    <p className="text-xs font-medium">How the earnings add up</p>
+                    <ul className="mt-1 space-y-1 text-xs text-muted">
+                      {(
+                        [
+                          ["Personal training", m.earnedParts.pt],
+                          ["Classes", m.earnedParts.classes],
+                          ["Leads that showed", m.earnedParts.showedLeads],
+                          ["Commission", m.earnedParts.commission],
+                          ["Managing the gym", m.earnedParts.management],
+                          ["Share of profit", m.earnedParts.profitShare],
+                        ] as const
+                      )
+                        .filter(([, amount]) => amount !== 0)
+                        .map(([label, amount]) => (
+                          <li key={label} className="flex justify-between">
+                            <span>{label}</span>
+                            <span>{money(amount)}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+
+                  {m.tookFrom.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium">Where what you took came from</p>
+                      <ul className="mt-1 space-y-1 text-xs text-muted">
+                        {m.tookFrom.map((a) => (
+                          <li key={a.name} className="flex justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-1">
+                              <Landmark size={11} className="shrink-0" />
+                              <span className="truncate">{a.name}</span>
+                            </span>
+                            <span className="shrink-0">{money(a.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {monthLoans.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium">Private loans from Chris</p>
+                      <ul className="mt-1 space-y-1 text-xs text-muted">
+                        {monthLoans.map((l) => (
+                          <li key={l.id} className="flex justify-between gap-2">
+                            <span className="truncate">
+                              {l.description} · {l.txDate}
+                            </span>
+                            <span className="shrink-0">{money(l.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}

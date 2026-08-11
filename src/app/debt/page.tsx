@@ -9,6 +9,7 @@ import {
   hasPlaidItems,
 } from "@/lib/store";
 import { autoSyncMoneyAppDebts } from "@/lib/moneyapp";
+import { getPayMonths } from "@/lib/gymPay";
 import { pageGate } from "@/lib/visibility";
 import ComingSoon from "@/components/ComingSoon";
 
@@ -25,12 +26,13 @@ export default async function DebtPage() {
   const c = client();
   if (c) await autoSyncMoneyAppDebts(c);
 
-  const [debts, hasBank, fico, transactions, spending] = await Promise.all([
+  const [debts, hasBank, fico, transactions, spending, payMonths] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
     getMoneyAppFico(),
     getDebtTransactions(),
     getJamieSpending(),
+    getPayMonths(),
   ]);
 
   return (
@@ -43,6 +45,7 @@ export default async function DebtPage() {
         fico={fico}
         initialTransactions={transactions}
         spending={spending}
+        payMonths={payMonths}
         currentYear={new Date().getFullYear()}
       />
     </div>
