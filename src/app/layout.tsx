@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import TopNav from "@/components/TopNav";
 import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
@@ -69,11 +70,16 @@ export default async function RootLayout({
             👁️ Viewing as Jamie
           </div>
         )}
-        <main
-          className="mx-auto min-h-screen max-w-md px-4 pt-6 pb-24"
-          // Keep the last card clear of the fixed nav plus the home indicator.
-          style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
-        >
+        {/* On a desktop the tabs move up here, where a mouse expects them.
+            Below `md` this is hidden and the fixed bottom bar takes over —
+            a thumb reaches the bottom of a phone, not the top. */}
+        <TopNav showPastDue={showPastDue} />
+        {/* `app-shell` carries the bottom padding: it has to clear the fixed
+            nav and the home indicator on a phone, and neither exists on a
+            desktop. It lives in CSS rather than an inline style because an
+            inline style beats a responsive class and would keep the phone
+            spacing on every screen. */}
+        <main className="app-shell mx-auto min-h-screen max-w-md px-4 pt-6 md:max-w-3xl md:px-6">
           <AdminBar admin={role === "admin"} loggedIn={role !== null} viewingAsJamie={viewingAsJamie} />
           <Header />
           <UpdateNotice />
