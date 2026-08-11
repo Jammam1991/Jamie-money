@@ -38,6 +38,19 @@ function gymUrl(): string | undefined {
   return process.env.GYM_DASHBOARD_URL;
 }
 
+// A key pasted into a hosting dashboard often arrives with a trailing space or
+// newline. A space is a legal header character, so it gets sent and the far end
+// simply doesn't match it — an invisible character reads back as "wrong key".
+// A control character is worse: fetch() throws outright.
+//
+// Same guard Money App uses for its own calls into the gym dashboard.
+function headerSafe(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (!v || /[^\t\x20-\x7e]/.test(v)) return null;
+  return v;
+}
+
 // The scheme + host of whatever was pasted in, with any path, query or trailing
 // slash dropped. A bare "gym-dashboard-v2.vercel.app" is accepted too — leaving
 // off https:// is the other easy way to get this wrong.
@@ -65,7 +78,7 @@ export type PayMonthsResult = { months: PayMonth[]; problem: string | null };
 
 export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
   const baseUrl = gymUrl();
-  const apiKey = process.env.GYM_DASHBOARD_API_KEY;
+  const apiKey = headerSafe(process.env.GYM_DASHBOARD_API_KEY);
   if (!baseUrl || !apiKey) {
     const missing = [
       !baseUrl && "GYM_DASHBOARD_URL",
@@ -100,7 +113,7 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
       return {
         months: [],
         problem:
-          "The gym dashboard rejected the key. GYM_DASHBOARD_API_KEY has to be the same value as MONEYAPP_API_KEY over there.",
+          "The gym dashboard rejected the key. Money App already calls it with the right one — copy its GYM_DASHBOARD_API_KEY across (same variable name), or take MONEYAPP_API_KEY from the gym dashboard itself.",
       };
     }
     if (res.status === 404) {
