@@ -20,6 +20,7 @@ import {
   duration,
   financeCharge,
   monthlyInterest,
+  personalLoanBalance,
   simulate,
   totalBalance,
   totalMinimum,
@@ -49,13 +50,20 @@ function ficoLabel(score: number): string {
   return "Needs work";
 }
 
-// "You owe $20,274 on credit card debt, $86,767 on Car loan and a total of
-// $127,526." A kind with nothing owed on it drops out of the sentence rather
-// than reading "$0 on Car loan", and if neither applies it's just the total.
-function owedSentence(cards: number, carLoans: number, total: number): string {
+// "You owe $36,759 on credit card debt, $86,767 on Car loan, $4,000 on
+// personal loan and a total of $127,526." A kind with nothing owed on it drops
+// out rather than reading "$0 on Car loan", and if none apply it's the total
+// on its own.
+function owedSentence(
+  cards: number,
+  carLoans: number,
+  personalLoans: number,
+  total: number,
+): string {
   const parts: string[] = [];
   if (cards > 0) parts.push(`${money(cards)} on credit card debt`);
   if (carLoans > 0) parts.push(`${money(carLoans)} on Car loan`);
+  if (personalLoans > 0) parts.push(`${money(personalLoans)} on personal loan`);
   if (parts.length === 0) return `You owe ${money(total)}.`;
   return `You owe ${parts.join(", ")} and a total of ${money(total)}.`;
 }
@@ -96,6 +104,7 @@ export default function DebtClient({
   const mo = monthlyInterest(debts);
   const cards = cardBalance(debts);
   const carLoans = carLoanBalance(debts);
+  const personalLoans = personalLoanBalance(debts);
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
@@ -234,7 +243,7 @@ export default function DebtClient({
           </div>
         )}
         <p className="mt-3 text-[13px] text-warn">
-          {owedSentence(cards, carLoans, total)}
+          {owedSentence(cards, carLoans, personalLoans, total)}
         </p>
       </div>
 
