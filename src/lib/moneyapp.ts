@@ -303,6 +303,29 @@ function note(problems: string[], what: string, message: string) {
   if (!problems.includes(line)) problems.push(line);
 }
 
+// Keep the first row for each key and drop the rest.
+//
+// An upsert is one statement, and Postgres refuses to let one statement touch
+// the same row twice — two rows sharing a conflict key fail the whole batch
+// with "ON CONFLICT DO UPDATE command cannot affect row a second time". Money
+// App legitimately has repeats: two credit reports pulled on one day, or an
+// account listed twice on the same report. So the duplicates are thinned here
+// rather than treated as bad data.
+//
+// First wins, so callers hand these over newest-first and the surviving row is
+// the most recent reading.
+function firstPerKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const seen = new Set<string>();
+  const kept: T[] = [];
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(row);
+  }
+  return kept;
+}
+
 // Copy Money App's credit-score history and balance snapshots into our two
 // mirror tables, which is everything the Credit Report page reads.
 //
@@ -319,7 +342,9 @@ async function mirrorCreditHistory(
   let snapshots = 0;
   let reports = 0;
 
-  const history = parsed.ficoHistory ?? [];
+  // Money App sends the scores oldest-first, so it's reversed before thinning —
+  // two readings on one date keep the later one.
+  const history = firstPerKey([...(parsed.ficoHistory ?? [])].reverse(), (h) => h.date);
   if (history.length > 0) {
     const { error } = await supabase.from("moneyapp_fico_history").upsert(
       history.map((h) => ({
@@ -334,7 +359,9 @@ async function mirrorCreditHistory(
     else scores = history.length;
   }
 
-  const rows = parsed.history ?? [];
+  // Already newest-first. One account can appear twice on the same date — two
+  // reports imported in one day — and that pair would fail the whole batch.
+  const rows = firstPerKey(parsed.history ?? [], (r) => `${r.debtId}|${r.date}`);
   if (rows.length > 0) {
     const { error } = await supabase.from("moneyapp_debt_snapshots").upsert(
       rows.map((r) => ({
@@ -353,7 +380,7 @@ async function mirrorCreditHistory(
 
   // The reports themselves — score factors, negative items, the summary, the
   // inquiries and the bureau's account list, stored as Money App parsed them.
-  const parsedReports = parsed.creditReports ?? [];
+  const parsedReports = firstPerKey(parsed.creditReports ?? [], (r) => r.date);
   if (parsedReports.length > 0) {
     const { error } = await supabase.from("moneyapp_credit_reports").upsert(
       parsedReports.map((r) => ({
