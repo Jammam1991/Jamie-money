@@ -16,7 +16,6 @@ import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
   duration,
-  monthlyInterest,
   simulate,
   totalBalance,
   totalMinimum,
@@ -77,7 +76,6 @@ export default function DebtClient({
   const tempId = useRef(-1);
 
   const total = totalBalance(debts);
-  const mo = monthlyInterest(debts);
   const minTotal = totalMinimum(debts);
 
   // New debt added, bucketed by the year of each charge. Newest year first.
@@ -217,9 +215,8 @@ export default function DebtClient({
           </div>
         )}
         <p className="mt-3 text-[13px] text-warn">
-          You owe {money(total)} in total
-          {mo > 0 ? `, about ${money(mo)}/month in interest` : ""}
-          {minTotal > 0 ? ` — payments run about ${money(minTotal)}/month` : ""}.
+          You and Chris owe a shared total of {money(total)} in debt
+          {minTotal > 0 ? ` with payments of ${money(minTotal)}/month` : ""}.
         </p>
       </div>
 
