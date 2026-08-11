@@ -261,6 +261,19 @@ type ExportLoan = {
   amount: number; // already flipped: positive = borrowed, negative = repaid
 };
 
+// Whose account the money came out of. Money App names accounts from its own
+// point of view — "Personal 5788", "Quicksilver" — which on Jamie's page reads
+// like one of his. Saying so is the difference between a list he can audit and
+// a list of unfamiliar account names.
+//
+// The check for a name that already says Chris keeps a re-sync from stacking up
+// "Chris's Chris's Personal 5788".
+function lenderAccount(account: string | null | undefined): string {
+  const name = account?.trim();
+  if (!name) return "Private loan";
+  return /^chris/i.test(name) ? name : `Chris's ${name}`;
+}
+
 async function mirrorPrivateLoans(
   supabase: SupabaseClient,
   baseUrl: string,
@@ -299,7 +312,7 @@ async function mirrorPrivateLoans(
       // The account it came out of, so it can be checked against a statement.
       // An older Money App doesn't send one, and "Private loan" at least says
       // where the row came from.
-      source: l.account?.trim() || "Private loan",
+      source: lenderAccount(l.account),
     })),
     { onConflict: "moneyapp_tx_id" },
   );
