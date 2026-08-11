@@ -63,3 +63,17 @@ body {
 /* NOTE: do not put a transform on <body>. A transformed ancestor becomes the
    containing block for position: fixed children, which un-pins the bottom nav
    and the slide-out menu so they scroll with the page instead of staying put. */
+
+/* The page shell's bottom padding.
+   Phone: clear the fixed bottom nav plus the home indicator underneath it.
+   Desktop (md and up): the tabs sit at the top instead, so that room is just
+   a gap at the end of every page. */
+.app-shell {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 768px) {
+  .app-shell {
+    padding-bottom: 2.5rem;
+  }
+}
