@@ -42,6 +42,10 @@ export type Debt = {
   paidPct: number; // 0-100
   apr: number; // yearly interest rate as a percent, e.g. 22.9
   minPayment: number; // smallest payment allowed each month
+  // What kind of debt it is, straight from Money App: "credit_card",
+  // "auto_loan", "mortgage", "personal_loan", "student_loan",
+  // "line_of_credit" or "other". Missing on rows typed in by hand.
+  debtType?: string;
 };
 
 // A single recurring bill Jamie owes (rent, phone, etc.).
