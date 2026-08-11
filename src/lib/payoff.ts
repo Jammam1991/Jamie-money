@@ -21,17 +21,26 @@ export function financeCharge(debt: Debt): number {
   return debt.balance * (debt.apr / 100 / 12);
 }
 
-// ── Splitting the pile into the two kinds worth naming ───────────────────────
+// ── Splitting the pile into the kinds worth naming ───────────────────────────
 // Money App tags each account, so its rows sort themselves. Rows typed in by
 // hand carry no tag, so they fall back to reading the name — rough, but the
 // alternative is leaving them out of a total that claims to be everything.
-
-function looksLikeCard(name: string): boolean {
-  return /\b(card|amex|visa|mastercard)\b/i.test(name);
-}
+//
+// A closed card that's now a fixed loan is a personal loan, not a card, even
+// though its name still says "Card". Money App's tag is what decides that, so
+// the name check is only ever a last resort for untagged rows.
 
 function looksLikeCarLoan(name: string): boolean {
   return /\b(car|auto|vehicle)\b/i.test(name);
+}
+
+function looksLikeCard(name: string): boolean {
+  if (looksLikeCarLoan(name) || /\bloan\b/i.test(name)) return false;
+  return /\b(card|amex|visa|mastercard)\b/i.test(name);
+}
+
+function looksLikePersonalLoan(name: string): boolean {
+  return /\bloan\b/i.test(name) && !looksLikeCarLoan(name);
 }
 
 // What's owed on credit cards.
@@ -48,6 +57,16 @@ export function carLoanBalance(debts: Debt[]): number {
   return debts
     .filter((d) =>
       d.debtType ? d.debtType === "auto_loan" : looksLikeCarLoan(d.name),
+    )
+    .reduce((sum, d) => sum + d.balance, 0);
+}
+
+// What's owed on personal loans — including the closed cards that have since
+// turned into fixed loans.
+export function personalLoanBalance(debts: Debt[]): number {
+  return debts
+    .filter((d) =>
+      d.debtType ? d.debtType === "personal_loan" : looksLikePersonalLoan(d.name),
     )
     .reduce((sum, d) => sum + d.balance, 0);
 }
