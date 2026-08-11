@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
     scores: result.scores,
     snapshots: result.snapshots,
     reports: result.reports,
+    loans: result.loans,
     problems: result.problems,
   });
 }

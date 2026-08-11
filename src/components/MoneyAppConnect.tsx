@@ -27,11 +27,14 @@ export default function MoneyAppConnect() {
       // which.
       const received = Number(data.received ?? data.synced ?? 0);
       const synced = Number(data.synced ?? 0);
+      const loans = Number(data.loans ?? 0);
+      const loanNote =
+        loans > 0 ? ` Plus ${loans} private loan${loans === 1 ? "" : "s"}.` : "";
       setNote(
-        received === 0
+        (received === 0
           ? "Money App has no open debts filed under Jamie."
           : `Money App sent ${received} account${received === 1 ? "" : "s"} — ` +
-            `saved ${synced}.`,
+            `saved ${synced}.`) + loanNote,
       );
       setProblems(
         data.database

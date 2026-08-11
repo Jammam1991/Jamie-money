@@ -36,6 +36,7 @@ export type MoneyAppSyncResult = {
   scores: number; // credit scores mirrored into moneyapp_fico_history
   snapshots: number; // balance snapshots mirrored into moneyapp_debt_snapshots
   reports: number; // whole credit reports mirrored into moneyapp_credit_reports
+  loans: number; // private loans mirrored into debt_transactions
   // Writes that failed. Money App was reached fine, so this isn't a hard error
   // — but the page would sit empty with no clue why, which is worse than an
   // ugly message.
@@ -104,6 +105,7 @@ export async function syncMoneyAppDebts(
       scores: 0,
       snapshots: 0,
       reports: 0,
+      loans: 0,
       problems: [],
       error: "Money App isn't connected yet.",
     };
@@ -125,6 +127,7 @@ export async function syncMoneyAppDebts(
       scores: 0,
       snapshots: 0,
       reports: 0,
+      loans: 0,
       problems: [],
       error: err instanceof Error ? err.message : "Couldn't reach Money App.",
     };
@@ -220,6 +223,8 @@ export async function syncMoneyAppDebts(
     problems,
   );
 
+  const loans = await mirrorPrivateLoans(supabase, baseUrl, apiKey, problems);
+
   return {
     received: debts.length,
     synced,
@@ -227,8 +232,76 @@ export async function syncMoneyAppDebts(
     scores,
     snapshots,
     reports,
+    loans,
     problems,
   };
+}
+
+// ── The money lent to Jamie privately ────────────────────────────────────────
+// These aren't credit accounts, so they're nowhere in the credit report and
+// nowhere in the debt export — they only exist as "Private Loans:Jamie"
+// transactions in Money App's ledger. They're what the "New debt added this
+// year" panel is meant to show, and why it read $0: the table behind it was
+// filled in by hand and never filled.
+//
+// Each row is keyed to the Money App transaction it came from, so re-syncing
+// updates in place instead of adding another copy of every loan.
+//
+// A repayment comes through as a negative amount. It's kept rather than
+// dropped, because a year's figure should be what was actually borrowed net of
+// what went back.
+
+type ExportLoan = {
+  id: string;
+  date: string;
+  payee: string | null;
+  amount: number; // already flipped: positive = borrowed, negative = repaid
+};
+
+async function mirrorPrivateLoans(
+  supabase: SupabaseClient,
+  baseUrl: string,
+  apiKey: string,
+  problems: string[],
+): Promise<number> {
+  let loans: ExportLoan[];
+  try {
+    const res = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/debt/private-loans?person=jamie`,
+      { headers: { "x-api-key": apiKey }, cache: "no-store" },
+    );
+    // A Money App too old to have this endpoint 404s. That's not a failure
+    // worth shouting about — everything else synced fine.
+    if (res.status === 404) return 0;
+    if (!res.ok) throw new Error(`Money App returned ${res.status}`);
+    const body = await res.json();
+    loans = Array.isArray(body?.loans) ? body.loans : [];
+  } catch (err) {
+    note(
+      problems,
+      "the private loans",
+      err instanceof Error ? err.message : "couldn't reach Money App",
+    );
+    return 0;
+  }
+
+  if (loans.length === 0) return 0;
+
+  const { error } = await supabase.from("debt_transactions").upsert(
+    firstPerKey(loans, (l) => l.id).map((l) => ({
+      moneyapp_tx_id: l.id,
+      tx_date: l.date,
+      description: l.payee?.trim() || "Private loan",
+      amount: l.amount,
+      source: "Private loan",
+    })),
+    { onConflict: "moneyapp_tx_id" },
+  );
+  if (error) {
+    note(problems, "the private loans", error.message, "private_loans.sql");
+    return 0;
+  }
+  return loans.length;
 }
 
 // ── Pulling on its own, without the button ───────────────────────────────────
@@ -295,10 +368,16 @@ function missingSchema(message: string): boolean {
 
 // Record a failed write once per kind, in words rather than Postgres-speak.
 // A missing table or column means the setup SQL hasn't been run yet, which is
-// far and away the most likely reason a pull saves nothing.
-function note(problems: string[], what: string, message: string) {
+// far and away the most likely reason a pull saves nothing — so the message
+// names the file to run, and it has to be the right file for what failed.
+function note(
+  problems: string[],
+  what: string,
+  message: string,
+  sqlFile = "credit_report_setup.sql",
+) {
   const line = missingSchema(message)
-    ? `Couldn't save ${what} — the database isn't set up yet. Run supabase/credit_report_setup.sql. (${message})`
+    ? `Couldn't save ${what} — the database isn't set up yet. Run supabase/${sqlFile}. (${message})`
     : `Couldn't save ${what} — ${message}`;
   if (!problems.includes(line)) problems.push(line);
 }
