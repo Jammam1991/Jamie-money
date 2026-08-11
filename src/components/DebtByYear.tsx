@@ -1,9 +1,15 @@
 "use client";
 
-import { CalendarDays } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CalendarDays, ChevronDown, Landmark, Plus, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
 import type { DebtTransaction } from "@/lib/store";
+
+// One card, one list of years. This used to be two — a "Debt by year" summary
+// and a separate "Where the debt came from" drill-down — which meant scrolling
+// past the same years twice to get from a total to the transactions behind it.
+// The years are now the drill-down: tap one and it opens.
 
 // How far back the year list goes. Any year with nothing logged says
 // "Coming soon" instead of pretending we know the numbers.
@@ -18,33 +24,67 @@ export function monthlyAt15(balance: number): number {
   return Math.max(0, balance) * MONTHLY_RATE;
 }
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const inputClass =
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
+
+type MonthGroup = { month: number; total: number; items: DebtTransaction[] };
+
 type YearRow = {
   year: number;
   added: number;
   owed: number; // what was owed at the end of that year
   known: boolean; // false -> "Coming soon"
+  months: MonthGroup[];
 };
 
-// Build one row per year, newest first. We know today's total, so we walk
-// backwards: last year's total is this year's total minus what got added.
+// Build one row per year, newest first, each carrying the months inside it.
+// We know today's total, so we walk backwards: last year's total is this
+// year's total minus what got added.
 function buildRows(
   txs: DebtTransaction[],
   total: number,
-  currentYear: number
+  currentYear: number,
 ): YearRow[] {
-  const added = new Map<number, number>();
+  // tx_date is stored as YYYY-MM-DD, so read the parts off the string instead
+  // of `new Date()` — that would shift the day by the timezone.
+  const byYear = new Map<number, Map<number, DebtTransaction[]>>();
   for (const tx of txs) {
-    const year = Number(tx.txDate.slice(0, 4));
-    if (!year) continue;
-    added.set(year, (added.get(year) ?? 0) + tx.amount);
+    const [y, m] = tx.txDate.split("-").map(Number);
+    if (!y || !m) continue;
+    const months = byYear.get(y) ?? new Map<number, DebtTransaction[]>();
+    months.set(m, [...(months.get(m) ?? []), tx]);
+    byYear.set(y, months);
   }
 
   const rows: YearRow[] = [];
   let owed = total;
   for (let year = currentYear; year >= FIRST_YEAR; year--) {
-    const thisYear = added.get(year) ?? 0;
-    rows.push({ year, added: thisYear, owed, known: added.has(year) });
-    owed -= thisYear;
+    const months = byYear.get(year);
+    const grouped: MonthGroup[] = [...(months?.entries() ?? [])]
+      .sort((a, b) => b[0] - a[0])
+      .map(([month, items]) => ({
+        month,
+        total: items.reduce((sum, t) => sum + t.amount, 0),
+        items: [...items].sort((a, b) => b.txDate.localeCompare(a.txDate)),
+      }));
+    const added = grouped.reduce((sum, g) => sum + g.total, 0);
+    rows.push({ year, added, owed, known: Boolean(months), months: grouped });
+    owed -= added;
   }
   return rows;
 }
@@ -53,12 +93,30 @@ export default function DebtByYear({
   transactions,
   total,
   currentYear,
+  admin,
+  onAdd,
+  onDelete,
 }: {
   transactions: DebtTransaction[];
   total: number;
   currentYear: number;
+  admin: boolean;
+  onAdd: (input: {
+    tx_date: string;
+    description: string;
+    amount: number;
+    source?: string;
+  }) => void;
+  onDelete: (id: string) => void;
 }) {
-  const rows = buildRows(transactions, total, currentYear);
+  const [openYear, setOpenYear] = useState<number | null>(null);
+  const [openMonth, setOpenMonth] = useState<string | null>(null); // "2026-3"
+  const [adding, setAdding] = useState(false);
+
+  const rows = useMemo(
+    () => buildRows(transactions, total, currentYear),
+    [transactions, total, currentYear],
+  );
   const maxOwed = Math.max(...rows.map((r) => r.owed), 1);
   const thisYear = rows[0];
   const addedThisYear = thisYear?.known ? thisYear.added : 0;
@@ -81,43 +139,167 @@ export default function DebtByYear({
         </p>
       )}
 
+      <p className="mt-1 text-xs text-muted">
+        Tap a year to see the months, then a month to see every transaction — and
+        which account it came out of, so you can check it against a statement.
+      </p>
+
       <div className="mt-3 divide-y divide-border border-t border-border">
-        {rows.map((r) => (
-          <div key={r.year} className="py-3">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[15px] font-medium">
-                {r.year}
-                {r.year === currentYear ? " so far" : ""}
-              </span>
-              {r.known ? (
-                <span className="text-[15px] text-warn">
-                  +{money(r.added)} added
-                </span>
-              ) : (
-                <span className="text-[13px] text-muted">Coming soon</span>
+        {rows.map((r) => {
+          const yearOpen = openYear === r.year;
+          // A year with nothing logged has nothing to open.
+          const canOpen = r.known && r.months.length > 0;
+          return (
+            <div key={r.year} className="py-3">
+              <button
+                className="w-full text-left disabled:cursor-default"
+                onClick={() => setOpenYear(yearOpen ? null : r.year)}
+                disabled={!canOpen}
+                aria-expanded={canOpen ? yearOpen : undefined}
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="flex items-center gap-1.5 text-[15px] font-medium">
+                    {canOpen && (
+                      <ChevronDown
+                        size={16}
+                        className={`text-muted transition-transform ${yearOpen ? "rotate-180" : "-rotate-90"}`}
+                      />
+                    )}
+                    {r.year}
+                    {r.year === currentYear ? " so far" : ""}
+                  </span>
+                  {r.known ? (
+                    <span className="text-[15px] text-warn">
+                      +{money(r.added)} added
+                    </span>
+                  ) : (
+                    <span className="text-[13px] text-muted">Coming soon</span>
+                  )}
+                </div>
+
+                {r.known && (
+                  <>
+                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-tint">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${(r.owed / maxOwed) * 100}%`,
+                          background: "var(--warn)",
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted">
+                      Owed {money(r.owed)} · about{" "}
+                      {money(monthlyAt15(r.owed))}/month to keep up
+                    </p>
+                  </>
+                )}
+              </button>
+
+              {yearOpen && (
+                <div className="mt-2 pl-4">
+                  {r.months.map((m) => {
+                    const key = `${r.year}-${m.month}`;
+                    const monthOpen = openMonth === key;
+                    return (
+                      <div key={key}>
+                        <button
+                          className="flex w-full items-center justify-between py-2"
+                          onClick={() => setOpenMonth(monthOpen ? null : key)}
+                          aria-expanded={monthOpen}
+                        >
+                          <span className="flex items-center gap-1.5 text-[14px]">
+                            <ChevronDown
+                              size={14}
+                              className={`text-muted transition-transform ${monthOpen ? "rotate-180" : "-rotate-90"}`}
+                            />
+                            {MONTH_NAMES[m.month - 1]}
+                          </span>
+                          <span className="text-[14px] text-muted">
+                            {money(m.total)}
+                          </span>
+                        </button>
+
+                        {monthOpen && (
+                          <ul className="space-y-2 pb-2 pl-5">
+                            {m.items.map((t) => (
+                              <li
+                                key={t.id}
+                                className="flex items-start justify-between gap-2"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-[14px]">
+                                    {t.description}
+                                  </p>
+                                  <p className="text-xs text-muted">{t.txDate}</p>
+                                  {/* The account is the audit trail: it's what
+                                      this line gets checked against on a
+                                      statement, so it gets its own row rather
+                                      than trailing off the date. */}
+                                  {t.source && (
+                                    <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                                      <Landmark size={11} className="shrink-0" />
+                                      <span className="truncate">{t.source}</span>
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  {/* A repayment comes through negative. Left
+                                      as a bare minus it reads like a smaller
+                                      loan, so it's named. */}
+                                  <span className="text-right text-[14px]">
+                                    {t.amount < 0 ? (
+                                      <>
+                                        {money(Math.abs(t.amount))}
+                                        <span className="block text-xs text-muted">
+                                          paid back
+                                        </span>
+                                      </>
+                                    ) : (
+                                      money(t.amount)
+                                    )}
+                                  </span>
+                                  {admin && (
+                                    <button
+                                      onClick={() => onDelete(t.id)}
+                                      aria-label={`Delete ${t.description}`}
+                                    >
+                                      <Trash2 size={14} className="text-muted" />
+                                    </button>
+                                  )}
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-
-            {r.known && (
-              <>
-                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-tint">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${(r.owed / maxOwed) * 100}%`,
-                      background: "var(--warn)",
-                    }}
-                  />
-                </div>
-                <p className="mt-1.5 text-xs text-muted">
-                  Owed {money(r.owed)} · about{" "}
-                  {money(monthlyAt15(r.owed))}/month to keep up
-                </p>
-              </>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {admin &&
+        (adding ? (
+          <AddTransactionForm
+            onCancel={() => setAdding(false)}
+            onSave={(input) => {
+              setAdding(false);
+              onAdd(input);
+            }}
+          />
+        ) : (
+          <button
+            className="mt-3 flex items-center gap-1.5 text-[13px] text-muted"
+            onClick={() => setAdding(true)}
+          >
+            <Plus size={14} />
+            Add a transaction
+          </button>
+        ))}
 
       <p className="mt-3 text-xs text-muted">
         &quot;To keep up&quot; means one month of interest at 15% plus 1% of what
@@ -126,5 +308,81 @@ export default function DebtByYear({
         off.
       </p>
     </Card>
+  );
+}
+
+function AddTransactionForm({
+  onCancel,
+  onSave,
+}: {
+  onCancel: () => void;
+  onSave: (input: {
+    tx_date: string;
+    description: string;
+    amount: number;
+    source?: string;
+  }) => void;
+}) {
+  const [date, setDate] = useState("");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [source, setSource] = useState("");
+
+  const valid = date !== "" && description.trim() !== "" && Number(amount) > 0;
+
+  return (
+    <div className="mt-3 space-y-2 rounded-xl border border-border p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] text-muted">New transaction</span>
+        <button onClick={onCancel} aria-label="Cancel">
+          <X size={16} className="text-muted" />
+        </button>
+      </div>
+      <input
+        type="date"
+        className={inputClass}
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        aria-label="Date"
+      />
+      <input
+        className={inputClass}
+        placeholder="What was it for?"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        aria-label="Description"
+      />
+      <input
+        type="number"
+        inputMode="decimal"
+        className={inputClass}
+        placeholder="Amount"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        aria-label="Amount"
+      />
+      <input
+        className={inputClass}
+        placeholder="Card or loan (optional)"
+        value={source}
+        onChange={(e) => setSource(e.target.value)}
+        aria-label="Card or loan"
+      />
+      <button
+        className="w-full rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+        style={{ background: "var(--good)" }}
+        disabled={!valid}
+        onClick={() =>
+          onSave({
+            tx_date: date,
+            description: description.trim(),
+            amount: Number(amount),
+            source: source.trim() || undefined,
+          })
+        }
+      >
+        Save
+      </button>
+    </div>
   );
 }

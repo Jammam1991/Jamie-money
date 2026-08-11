@@ -30,7 +30,6 @@ import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DuplicateCleanup from "@/components/DuplicateCleanup";
-import DebtHistory from "@/components/DebtHistory";
 import DebtByYear from "@/components/DebtByYear";
 import type { DebtTransaction } from "@/lib/store";
 import {
@@ -89,8 +88,8 @@ export default function DebtClient({
   currentYear: number;
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
-  // The transactions live up here so the by-year view and the drill-down below
-  // it always show the same numbers when something is added or deleted.
+  // The transactions live up here so the headline and the year card always
+  // show the same numbers when something is added or deleted.
   const [txs, setTxs] = useState<DebtTransaction[]>(initialTransactions);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -115,9 +114,6 @@ export default function DebtClient({
     if (!year) continue;
     byYear.set(year, (byYear.get(year) ?? 0) + tx.amount);
   }
-  const priorYears = [...byYear.entries()]
-    .filter(([y]) => y < currentYear)
-    .sort((a, b) => b[0] - a[0]);
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
     const tid = String(tempId.current--);
@@ -221,7 +217,9 @@ export default function DebtClient({
 
   return (
     <div className="space-y-4">
-      {/* New debt added this year, with the years before it underneath */}
+      {/* This year's headline. The years before it used to be listed here too,
+          but they're the same rows the card below opens with — so they live in
+          one place now instead of being scrolled past twice. */}
       <div className="rounded-2xl bg-warn-bg p-4">
         <p className="text-[13px] uppercase tracking-wide text-warn">
           New debt added this year
@@ -229,26 +227,21 @@ export default function DebtClient({
         <p className="text-3xl font-medium text-warn">
           {money(byYear.get(currentYear) ?? 0)}
         </p>
-        {priorYears.length > 0 && (
-          <div className="mt-3 space-y-1 border-t border-warn/20 pt-2">
-            {priorYears.map(([year, amount]) => (
-              <div
-                key={year}
-                className="flex items-center justify-between text-[13px] text-warn"
-              >
-                <span>{year}</span>
-                <span>{money(amount)}</span>
-              </div>
-            ))}
-          </div>
-        )}
         <p className="mt-3 text-[13px] text-warn">
           {owedSentence(cards, carLoans, personalLoans, total)}
         </p>
       </div>
 
-      {/* Year-by-year: how much got added, and what it costs each month */}
-      <DebtByYear transactions={txs} total={total} currentYear={currentYear} />
+      {/* Year by year: what got added, what it costs each month, and — once a
+          year is opened — the months and transactions behind it. */}
+      <DebtByYear
+        transactions={txs}
+        total={total}
+        currentYear={currentYear}
+        admin={admin}
+        onAdd={handleAddTransaction}
+        onDelete={handleDeleteTransaction}
+      />
 
       {/* Credit score, last pulled from Money App */}
       {fico && (
@@ -387,13 +380,6 @@ export default function DebtClient({
           ))}
       </Card>
 
-      {/* Year -> month -> transaction drill-down */}
-      <DebtHistory
-        transactions={txs}
-        admin={admin}
-        onAdd={handleAddTransaction}
-        onDelete={handleDeleteTransaction}
-      />
     </div>
   );
 }
