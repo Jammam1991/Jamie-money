@@ -1,9 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarDays, ChevronDown, Landmark, Plus, Trash2, X } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  Gift,
+  Landmark,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
+import { yearColor, yearInk, yearTint } from "@/lib/debtColors";
+import DebtGrowthChart from "@/components/DebtGrowthChart";
 import type { DebtTransaction } from "@/lib/store";
 
 // One card, one list of years. This used to be two — a "Debt by year" summary
@@ -171,20 +181,26 @@ export default function DebtByYear({
         which account it came out of, so you can check it against a statement.
       </p>
 
-      <div className="mt-3 divide-y divide-border border-t border-border">
-        {rows.map((r) => {
+      <div className="mt-3 space-y-2">
+        {rows.map((r, i) => {
           const yearOpen = openYear === r.year;
           // A year with nothing logged has nothing to open.
           const canOpen = r.known && r.months.length > 0;
+          // This year's colour, used by its bar in the chart below too.
+          const color = yearColor(i, rows.length);
           return (
-            <div key={r.year} className="py-3">
+            <div
+              key={r.year}
+              className="rounded-xl p-3"
+              style={{ background: yearTint(i, rows.length) }}
+            >
               <button
                 className="w-full text-left disabled:cursor-default"
                 onClick={() => setOpenYear(yearOpen ? null : r.year)}
                 disabled={!canOpen}
                 aria-expanded={canOpen ? yearOpen : undefined}
               >
-                <div className="flex items-baseline justify-between">
+                <div className="flex items-baseline justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-[15px] font-medium">
                     {canOpen && (
                       <ChevronDown
@@ -196,9 +212,24 @@ export default function DebtByYear({
                     {r.year === currentYear ? " so far" : ""}
                   </span>
                   {r.known ? (
-                    <span className="text-[15px] text-warn">
-                      +{money(r.added)} added
-                    </span>
+                    // A year where more went back than went out is good news,
+                    // and "+$-3,138 added" buried it. It gets said plainly, in
+                    // the colour the rest of the app uses for good news.
+                    r.added < 0 ? (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[13px] font-medium"
+                        style={{ background: "var(--good-bg)", color: "var(--good)" }}
+                      >
+                        {money(Math.abs(r.added))} paid off
+                      </span>
+                    ) : (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[13px] font-medium"
+                        style={{ background: color, color: yearInk(i, rows.length) }}
+                      >
+                        +{money(r.added)} added
+                      </span>
+                    )
                   ) : (
                     <span className="text-[13px] text-muted">Coming soon</span>
                   )}
@@ -206,12 +237,12 @@ export default function DebtByYear({
 
                 {r.known && (
                   <>
-                    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-tint">
+                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-card">
                       <div
                         className="h-full rounded-full"
                         style={{
                           width: `${(r.owed / maxOwed) * 100}%`,
-                          background: "var(--warn)",
+                          background: color,
                         }}
                       />
                     </div>
@@ -229,15 +260,20 @@ export default function DebtByYear({
               {r.spent > 0 && (
                 <>
                   <button
-                    className="mt-1.5 flex w-full items-center gap-1 text-left text-xs text-muted underline decoration-dotted underline-offset-2"
+                    className="mt-2 flex w-full items-center gap-1 rounded-lg bg-card px-2 py-1.5 text-left text-xs"
                     onClick={() => setOpenSpend(openSpend === r.year ? null : r.year)}
                     aria-expanded={openSpend === r.year}
                   >
+                    <Gift size={12} className="shrink-0" style={{ color: "var(--accent)" }} />
+                    <span className="flex-1">
+                      Chris spent{" "}
+                      <span className="font-medium">{money(r.spent)}</span> not
+                      assigned as a loan
+                    </span>
                     <ChevronDown
                       size={12}
-                      className={`shrink-0 transition-transform ${openSpend === r.year ? "rotate-180" : "-rotate-90"}`}
+                      className={`shrink-0 text-muted transition-transform ${openSpend === r.year ? "rotate-180" : "-rotate-90"}`}
                     />
-                    Chris spent {money(r.spent)} not assigned as a loan
                   </button>
 
                   {openSpend === r.year && (
@@ -371,6 +407,14 @@ export default function DebtByYear({
             Add a transaction
           </button>
         ))}
+
+      {/* The same years as a shape. The rows carry the exact figures, so this
+          is here to show the trend at a glance, not to be read off. */}
+      <DebtGrowthChart
+        points={rows
+          .filter((r) => r.known)
+          .map((r) => ({ year: r.year, owed: r.owed }))}
+      />
 
       <p className="mt-3 text-xs text-muted">
         &quot;To keep up&quot; means one month of interest at 15% plus 1% of what

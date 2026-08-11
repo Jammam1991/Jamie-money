@@ -222,14 +222,19 @@ export default function DebtClient({
       {/* This year's headline. The years before it used to be listed here too,
           but they're the same rows the card below opens with — so they live in
           one place now instead of being scrolled past twice. */}
-      <div className="rounded-2xl bg-warn-bg p-4">
-        <p className="text-[13px] uppercase tracking-wide text-warn">
+      <div
+        className="rounded-2xl p-4 text-white"
+        style={{
+          background: "linear-gradient(135deg, #a56814 0%, #7d4a0b 100%)",
+        }}
+      >
+        <p className="text-[13px] uppercase tracking-wide opacity-80">
           New debt added this year
         </p>
-        <p className="text-3xl font-medium text-warn">
+        <p className="text-3xl font-medium">
           {money(byYear.get(currentYear) ?? 0)}
         </p>
-        <p className="mt-3 text-[13px] text-warn">
+        <p className="mt-3 text-[13px] opacity-90">
           {owedSentence(cards, carLoans, personalLoans, total)}
         </p>
       </div>
