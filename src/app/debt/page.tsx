@@ -45,7 +45,8 @@ export default async function DebtPage() {
         fico={fico}
         initialTransactions={transactions}
         spending={spending}
-        payMonths={payMonths}
+        payMonths={payMonths.months}
+        payProblem={payMonths.problem}
         currentYear={new Date().getFullYear()}
       />
     </div>
