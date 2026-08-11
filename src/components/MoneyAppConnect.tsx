@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { unhideMoneyAppDebts } from "@/lib/actions";
 
 // Pulls Jamie's debts + credit score from Money App. Admin-only — the parent
 // only renders this for a logged-in Chris.
@@ -11,6 +12,22 @@ export default function MoneyAppConnect() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
+  const [hidden, setHidden] = useState(0);
+
+  // Undo for a delete that shouldn't have happened. Nothing else can bring a
+  // hidden account back, so without this one mis-click loses it for good.
+  async function unhide() {
+    setBusy(true);
+    const result = await unhideMoneyAppDebts();
+    setBusy(false);
+    if (!result.ok) {
+      setNote(result.error ?? "Couldn't bring them back.");
+      return;
+    }
+    setHidden(0);
+    setNote("Brought back — syncing again will fill them in.");
+    router.refresh();
+  }
 
   async function sync() {
     setBusy(true);
@@ -30,11 +47,22 @@ export default function MoneyAppConnect() {
       const loans = Number(data.loans ?? 0);
       const loanNote =
         loans > 0 ? ` Plus ${loans} private loan${loans === 1 ? "" : "s"}.` : "";
+      // Accounts left out because they were deleted here — Chris's own, which
+      // Money App sends along with Jamie's. Saying so is the difference between
+      // "the sync is working" and "the sync is missing things".
+      const hiddenCount = Number(data.hidden ?? 0);
+      setHidden(hiddenCount);
+      const hiddenNote =
+        hiddenCount > 0
+          ? ` ${hiddenCount} account${hiddenCount === 1 ? "" : "s"} left out — deleted here, so not Jamie's.`
+          : "";
       setNote(
         (received === 0
           ? "Money App has no open debts filed under Jamie."
           : `Money App sent ${received} account${received === 1 ? "" : "s"} — ` +
-            `saved ${synced}.`) + loanNote,
+            `saved ${synced}.`) +
+          loanNote +
+          hiddenNote,
       );
       setProblems(
         data.database
@@ -63,6 +91,15 @@ export default function MoneyAppConnect() {
         Sync from Money App
       </button>
       {note && <p className="mt-2 text-center text-xs text-muted">{note}</p>}
+      {hidden > 0 && (
+        <button
+          className="mt-1 w-full text-center text-xs text-muted underline disabled:opacity-50"
+          onClick={unhide}
+          disabled={busy}
+        >
+          Bring the left-out accounts back
+        </button>
+      )}
       {problems.map((p) => (
         <p key={p} className="mt-1 text-center text-xs text-warn">
           {p}

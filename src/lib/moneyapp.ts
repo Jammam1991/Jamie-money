@@ -32,6 +32,9 @@ export type MoneyAppSyncResult = {
   // sent plenty and every save failed" — which look identical from `synced`.
   received: number;
   synced: number;
+  // Accounts Money App sent that were left out because Chris deleted them here
+  // — his own accounts, riding along on the joint scope.
+  hidden: number;
   fico: MoneyAppFico | null;
   scores: number; // credit scores mirrored into moneyapp_fico_history
   snapshots: number; // balance snapshots mirrored into moneyapp_debt_snapshots
@@ -92,6 +95,62 @@ export function moneyAppReady(): boolean {
   return Boolean(apiUrl() && process.env.MONEYAPP_API_KEY);
 }
 
+// ── Accounts of Chris's that shouldn't be on Jamie's page ────────────────────
+// Money App exports Jamie's accounts *and* the joint ones, so things that are
+// only Chris's — the TD Bank mortgage — arrive with them. There's no flag in
+// the feed that tells them apart, so the deletion Chris already makes on the
+// page is what marks them: delete once, and every later sync leaves it out.
+//
+// The list lives in `settings` rather than a table of its own, so it needs no
+// setup SQL to start working.
+
+const IGNORE_KEY = "moneyapp_ignored_debts";
+
+export async function ignoredMoneyAppDebts(
+  supabase: SupabaseClient,
+): Promise<Set<string>> {
+  try {
+    const { data } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", IGNORE_KEY)
+      .maybeSingle();
+    if (!data?.value) return new Set();
+    const list = JSON.parse(String(data.value));
+    return new Set(Array.isArray(list) ? list.map(String) : []);
+  } catch {
+    // An unreadable list must not stop the sync — it just hides nothing.
+    return new Set();
+  }
+}
+
+export async function ignoreMoneyAppDebt(
+  supabase: SupabaseClient,
+  moneyAppDebtId: string,
+): Promise<void> {
+  const ids = await ignoredMoneyAppDebts(supabase);
+  if (ids.has(moneyAppDebtId)) return;
+  ids.add(moneyAppDebtId);
+  await supabase.from("settings").upsert({
+    key: IGNORE_KEY,
+    value: JSON.stringify([...ids]),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+// Un-hide everything. Returns a message when the write failed, so a mis-click
+// can always be undone and the button can say if it couldn't be.
+export async function clearIgnoredMoneyAppDebts(
+  supabase: SupabaseClient,
+): Promise<string | null> {
+  const { error } = await supabase.from("settings").upsert({
+    key: IGNORE_KEY,
+    value: "[]",
+    updated_at: new Date().toISOString(),
+  });
+  return error ? error.message : null;
+}
+
 export async function syncMoneyAppDebts(
   supabase: SupabaseClient,
 ): Promise<MoneyAppSyncResult> {
@@ -101,6 +160,7 @@ export async function syncMoneyAppDebts(
     return {
       received: 0,
       synced: 0,
+      hidden: 0,
       fico: null,
       scores: 0,
       snapshots: 0,
@@ -123,6 +183,7 @@ export async function syncMoneyAppDebts(
     return {
       received: 0,
       synced: 0,
+      hidden: 0,
       fico: null,
       scores: 0,
       snapshots: 0,
@@ -135,7 +196,22 @@ export async function syncMoneyAppDebts(
 
   // A response that isn't shaped the way we expect is a reachable-but-broken
   // Money App, not a crash — treat it as "sent nothing" and say so.
-  const debts = Array.isArray(parsed.debts) ? parsed.debts : [];
+  const sent = Array.isArray(parsed.debts) ? parsed.debts : [];
+
+  // Accounts Chris has deleted here. Money App exports Jamie's scope together
+  // with the joint one, so Chris's own accounts come along with them — his TD
+  // Bank mortgage being the obvious one. Deleting the row used to last until
+  // the next sync put it right back.
+  const ignored = await ignoredMoneyAppDebts(supabase);
+  const debts = sent.filter((d) => !ignored.has(String(d.id)));
+  const hidden = sent.length - debts.length;
+
+  // A row can outlive the deletion that hid it — an auto-sync that landed in
+  // the same moment, or an id added to the list some other way. Clearing them
+  // every pull is what makes "hidden" mean gone from the page.
+  if (ignored.size > 0) {
+    await supabase.from("debts").delete().in("moneyapp_debt_id", [...ignored]);
+  }
 
   // Which of these accounts already have a row? Keep it, update in place.
   const ids = debts.map((d) => d.id);
@@ -220,6 +296,7 @@ export async function syncMoneyAppDebts(
   const { scores, snapshots, reports } = await mirrorCreditHistory(
     supabase,
     parsed,
+    ignored,
     problems,
   );
 
@@ -228,6 +305,7 @@ export async function syncMoneyAppDebts(
   return {
     received: debts.length,
     synced,
+    hidden,
     fico: parsed.fico ?? null,
     scores,
     snapshots,
@@ -466,6 +544,7 @@ function firstPerKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
 async function mirrorCreditHistory(
   supabase: SupabaseClient,
   parsed: ExportResponse,
+  ignored: Set<string>,
   problems: string[],
 ): Promise<{ scores: number; snapshots: number; reports: number }> {
   const now = new Date().toISOString();
@@ -492,7 +571,12 @@ async function mirrorCreditHistory(
 
   // Already newest-first. One account can appear twice on the same date — two
   // reports imported in one day — and that pair would fail the whole batch.
-  const rows = firstPerKey(parsed.history ?? [], (r) => `${r.debtId}|${r.date}`);
+  // A hidden account's balance history is hidden too, or the Credit Report page
+  // would go on charting Chris's mortgage after the account itself is gone.
+  const rows = firstPerKey(
+    (parsed.history ?? []).filter((r) => !ignored.has(String(r.debtId))),
+    (r) => `${r.debtId}|${r.date}`,
+  );
   if (rows.length > 0) {
     const { error } = await supabase.from("moneyapp_debt_snapshots").upsert(
       rows.map((r) => ({
