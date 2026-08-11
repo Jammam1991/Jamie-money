@@ -15,6 +15,8 @@ import {
 import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
+  carLoanBalance,
+  cardBalance,
   duration,
   financeCharge,
   monthlyInterest,
@@ -45,6 +47,17 @@ function ficoLabel(score: number): string {
   if (score >= 670) return "Good";
   if (score >= 580) return "Fair";
   return "Needs work";
+}
+
+// "You owe $20,274 on credit card debt, $86,767 on Car loan and a total of
+// $127,526." A kind with nothing owed on it drops out of the sentence rather
+// than reading "$0 on Car loan", and if neither applies it's just the total.
+function owedSentence(cards: number, carLoans: number, total: number): string {
+  const parts: string[] = [];
+  if (cards > 0) parts.push(`${money(cards)} on credit card debt`);
+  if (carLoans > 0) parts.push(`${money(carLoans)} on Car loan`);
+  if (parts.length === 0) return `You owe ${money(total)}.`;
+  return `You owe ${parts.join(", ")} and a total of ${money(total)}.`;
 }
 
 const inputClass =
@@ -81,6 +94,8 @@ export default function DebtClient({
   const total = totalBalance(debts);
   const minTotal = totalMinimum(debts);
   const mo = monthlyInterest(debts);
+  const cards = cardBalance(debts);
+  const carLoans = carLoanBalance(debts);
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
@@ -219,8 +234,7 @@ export default function DebtClient({
           </div>
         )}
         <p className="mt-3 text-[13px] text-warn">
-          You and Chris owe a shared total of {money(total)} in debt
-          {minTotal > 0 ? ` with payments of ${money(minTotal)}/month` : ""}.
+          {owedSentence(cards, carLoans, total)}
         </p>
       </div>
 

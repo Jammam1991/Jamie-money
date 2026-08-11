@@ -21,6 +21,37 @@ export function financeCharge(debt: Debt): number {
   return debt.balance * (debt.apr / 100 / 12);
 }
 
+// ── Splitting the pile into the two kinds worth naming ───────────────────────
+// Money App tags each account, so its rows sort themselves. Rows typed in by
+// hand carry no tag, so they fall back to reading the name — rough, but the
+// alternative is leaving them out of a total that claims to be everything.
+
+function looksLikeCard(name: string): boolean {
+  return /\b(card|amex|visa|mastercard)\b/i.test(name);
+}
+
+function looksLikeCarLoan(name: string): boolean {
+  return /\b(car|auto|vehicle)\b/i.test(name);
+}
+
+// What's owed on credit cards.
+export function cardBalance(debts: Debt[]): number {
+  return debts
+    .filter((d) =>
+      d.debtType ? d.debtType === "credit_card" : looksLikeCard(d.name),
+    )
+    .reduce((sum, d) => sum + d.balance, 0);
+}
+
+// What's owed on car loans.
+export function carLoanBalance(debts: Debt[]): number {
+  return debts
+    .filter((d) =>
+      d.debtType ? d.debtType === "auto_loan" : looksLikeCarLoan(d.name),
+    )
+    .reduce((sum, d) => sum + d.balance, 0);
+}
+
 // The interest Jamie is on track to pay next month if nothing changes.
 export function monthlyInterest(debts: Debt[]): number {
   return debts.reduce((sum, d) => sum + financeCharge(d), 0);
