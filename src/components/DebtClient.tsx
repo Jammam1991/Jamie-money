@@ -16,6 +16,8 @@ import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
   duration,
+  financeCharge,
+  monthlyInterest,
   simulate,
   totalBalance,
   totalMinimum,
@@ -78,6 +80,7 @@ export default function DebtClient({
 
   const total = totalBalance(debts);
   const minTotal = totalMinimum(debts);
+  const mo = monthlyInterest(debts);
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
@@ -313,12 +316,37 @@ export default function DebtClient({
                 </div>
                 <p className="mb-2 mt-1 text-xs text-muted">
                   {d.apr}% interest · {money(d.minPayment)}/mo minimum
+                  {financeCharge(d) > 0 && (
+                    <> · {money(financeCharge(d))}/mo finance charge</>
+                  )}
                 </p>
                 {d.paidPct > 0 && <Bar pct={d.paidPct} />}
               </div>
             )
           )}
         </div>
+
+        {/* What the whole list costs each month: what has to be paid, and how
+            much of that is pure interest. */}
+        {debts.length > 0 && (
+          <div className="mt-3 space-y-1 border-t border-border pt-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted">Minimum payments</span>
+              <span>{money(minTotal)}/mo</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">Finance charges</span>
+              <span className="text-warn">{money(mo)}/mo</span>
+            </div>
+            {minTotal > 0 && mo > 0 && (
+              <p className="pt-1 text-muted">
+                {mo >= minTotal
+                  ? "Paying the minimums doesn't cover the interest — the balance grows."
+                  : `${money(minTotal - mo)}/mo of the minimums actually comes off what you owe.`}
+              </p>
+            )}
+          </div>
+        )}
 
         {admin &&
           (adding ? (
