@@ -82,6 +82,7 @@ export default function DebtClient({
   initialTransactions,
   spending,
   payMonths,
+  payProblem,
   currentYear,
 }: {
   initialDebts: Debt[];
@@ -91,6 +92,7 @@ export default function DebtClient({
   initialTransactions: DebtTransaction[];
   spending: DebtTransaction[];
   payMonths: PayMonth[];
+  payProblem: string | null;
   currentYear: number;
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
@@ -259,7 +261,12 @@ export default function DebtClient({
           the debt because it's the same question from the other side: this is
           where a good part of that debt came from. Renders nothing when the
           dashboard isn't reachable or has no pay model configured. */}
-      <EarnedVsTook months={payMonths} loans={txs} />
+      <EarnedVsTook
+        months={payMonths}
+        loans={txs}
+        problem={payProblem}
+        admin={admin}
+      />
 
       {/* Credit score, last pulled from Money App */}
       {fico && (

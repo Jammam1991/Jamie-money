@@ -22,13 +22,35 @@ function monthKey(date: string): string {
 export default function EarnedVsTook({
   months,
   loans,
+  problem,
+  admin,
 }: {
   months: PayMonth[];
   loans: DebtTransaction[];
+  // Why there's nothing to show, when there's nothing to show.
+  problem: string | null;
+  admin: boolean;
 }) {
   const [open, setOpen] = useState<string | null>(null);
 
-  if (months.length === 0) return null;
+  if (months.length === 0) {
+    // Jamie sees nothing at all — a half-built section is worse than no
+    // section. Chris gets the reason, since he's the one who can fix it.
+    if (!admin || !problem) return null;
+    return (
+      <Card>
+        <p className="flex items-center gap-1.5 text-[13px] text-muted">
+          <Scale size={15} />
+          What you earned vs what you took
+        </p>
+        <p className="mt-2 text-[13px] text-warn">{problem}</p>
+        <p className="mt-1 text-xs text-muted">
+          Only you can see this note — the section stays hidden for Jamie until
+          it has numbers.
+        </p>
+      </Card>
+    );
+  }
 
   // Private loans bucketed by month, to show beside that month's pay.
   const loansByMonth = new Map<string, DebtTransaction[]>();
