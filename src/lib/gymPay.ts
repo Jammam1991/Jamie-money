@@ -38,6 +38,20 @@ function gymUrl(): string | undefined {
   return process.env.GYM_DASHBOARD_URL;
 }
 
+// The scheme + host of whatever was pasted in, with any path, query or trailing
+// slash dropped. A bare "gym-dashboard-v2.vercel.app" is accepted too — leaving
+// off https:// is the other easy way to get this wrong.
+function originOf(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme).origin;
+  } catch {
+    return null;
+  }
+}
+
 export function gymPayReady(): boolean {
   return Boolean(gymUrl() && process.env.GYM_DASHBOARD_API_KEY);
 }
@@ -65,7 +79,18 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
     };
   }
 
-  const url = `${baseUrl.replace(/\/$/, "")}/api/payroll/jamie-monthly?months=${months}`;
+  // Only the origin matters. A URL copied out of the browser usually has a
+  // path on it ("…vercel.app/manager"), and gluing the endpoint onto the end of
+  // that asks for "/manager/api/payroll/…" — a 404 that looks exactly like a
+  // missing deploy, because the host in the error is still right.
+  const origin = originOf(baseUrl);
+  if (!origin) {
+    return {
+      months: [],
+      problem: `GYM_DASHBOARD_URL doesn't look like a web address: "${baseUrl}". It should be like https://gym-dashboard-v2.vercel.app`,
+    };
+  }
+  const url = `${origin}/api/payroll/jamie-monthly?months=${months}`;
   try {
     const res = await fetch(url, {
       headers: { "x-api-key": apiKey },
@@ -79,9 +104,11 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
       };
     }
     if (res.status === 404) {
+      // The whole address, not just the host — the host is usually right and
+      // the path is what's wrong, so naming only the host hides the answer.
       return {
         months: [],
-        problem: `No pay endpoint at ${new URL(url).host}. Either that isn't the gym dashboard's address, or its latest deploy hasn't gone out yet.`,
+        problem: `Nothing at ${url.split("?")[0]} — either that isn't the gym dashboard's address, or its latest deploy hasn't gone out yet.`,
       };
     }
     if (!res.ok) {
