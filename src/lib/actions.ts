@@ -13,6 +13,7 @@ import {
 } from "./store";
 import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
 import type { BillDocument, BillPayment, CashKind } from "./data";
+import { findCleanupCandidates, type CleanupCandidate } from "./duplicateDebts";
 
 export type ActionResult = {
   ok: boolean;
@@ -453,6 +454,61 @@ export async function deleteDebt(id: string): Promise<ActionResult> {
   const c = client();
   if (!c) return NOT_CONNECTED;
   const { error } = await c.from("debts").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  return { ok: true };
+}
+
+// ── Clearing out the hand-entered rows Money App now covers ──────────────────
+// The sync never deletes, so accounts typed in before Money App was connected
+// sit alongside the synced copies and the total counts both. These two power
+// the "Clean up duplicates" button: one to see what would go, one to remove
+// exactly the rows that were ticked.
+
+export async function listCleanupCandidates(): Promise<{
+  ok: boolean;
+  error?: string;
+  candidates?: CleanupCandidate[];
+}> {
+  const denied = await guard();
+  if (denied) return { ok: false, error: denied.error };
+  const c = client();
+  if (!c) return { ok: false, error: NOT_CONNECTED.error };
+
+  const { data, error } = await c
+    .from("debts")
+    .select("id, name, balance, min_payment, moneyapp_debt_id");
+  if (error) return { ok: false, error: error.message };
+
+  return {
+    ok: true,
+    candidates: findCleanupCandidates(
+      (data ?? []).map((row) => ({
+        id: String(row.id),
+        name: String(row.name),
+        balance: Number(row.balance ?? 0),
+        minPayment: Number(row.min_payment ?? 0),
+        fromMoneyApp: Boolean(row.moneyapp_debt_id),
+      })),
+    ),
+  };
+}
+
+// Deletes only the ids handed in, and only ones that aren't Money App's — a
+// synced row deleted here would come straight back on the next pull, so the
+// button would look broken. Belt and braces: the UI never offers them.
+export async function deleteManualDebts(ids: string[]): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  if (ids.length === 0) return { ok: true };
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const { error } = await c
+    .from("debts")
+    .delete()
+    .in("id", ids)
+    .is("moneyapp_debt_id", null);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
   return { ok: true };

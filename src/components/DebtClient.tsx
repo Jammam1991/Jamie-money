@@ -24,6 +24,7 @@ import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
+import DuplicateCleanup from "@/components/DuplicateCleanup";
 import DebtHistory from "@/components/DebtHistory";
 import DebtByYear from "@/components/DebtByYear";
 import type { DebtTransaction } from "@/lib/store";
@@ -251,6 +252,7 @@ export default function DebtClient({
           <div className="space-y-2">
             <PlaidConnect hasBank={hasBank} />
             <MoneyAppConnect />
+            <DuplicateCleanup />
             <button
               className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
               onClick={() => setImporting(true)}
