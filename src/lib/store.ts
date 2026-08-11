@@ -94,6 +94,28 @@ export async function getDebtTransactions(): Promise<DebtTransaction[]> {
   }));
 }
 
+// What Chris spent on Jamie that was never treated as a loan — gifts and the
+// like. Same shape as a debt transaction, but deliberately a separate list: it
+// is not debt and must never be added to a debt total.
+export async function getJamieSpending(): Promise<DebtTransaction[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("jamie_spending")
+    .select("*")
+    .order("tx_date", { ascending: false });
+  // The table arrives with jamie_spending.sql. Until that's run there's simply
+  // nothing to show, which is not worth breaking the page over.
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: String(row.id),
+    txDate: row.tx_date,
+    description: row.description,
+    amount: Number(row.amount),
+    source: row.source ?? undefined,
+  }));
+}
+
 // The Home page's cash log, newest first. An empty list is a legitimate state
 // (nothing logged yet) — only fall back to the sample when there's no database.
 export async function getCashLog(): Promise<CashEntry[]> {

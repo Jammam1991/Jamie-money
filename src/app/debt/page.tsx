@@ -4,6 +4,7 @@ import {
   client,
   getDebtTransactions,
   getDebts,
+  getJamieSpending,
   getMoneyAppFico,
   hasPlaidItems,
 } from "@/lib/store";
@@ -24,11 +25,12 @@ export default async function DebtPage() {
   const c = client();
   if (c) await autoSyncMoneyAppDebts(c);
 
-  const [debts, hasBank, fico, transactions] = await Promise.all([
+  const [debts, hasBank, fico, transactions, spending] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
     getMoneyAppFico(),
     getDebtTransactions(),
+    getJamieSpending(),
   ]);
 
   return (
@@ -40,6 +42,7 @@ export default async function DebtPage() {
         hasBank={hasBank}
         fico={fico}
         initialTransactions={transactions}
+        spending={spending}
         currentYear={new Date().getFullYear()}
       />
     </div>

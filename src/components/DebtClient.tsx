@@ -78,6 +78,7 @@ export default function DebtClient({
   hasBank,
   fico,
   initialTransactions,
+  spending,
   currentYear,
 }: {
   initialDebts: Debt[];
@@ -85,6 +86,7 @@ export default function DebtClient({
   hasBank: boolean;
   fico: { score: number; date: string } | null;
   initialTransactions: DebtTransaction[];
+  spending: DebtTransaction[];
   currentYear: number;
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
@@ -236,6 +238,7 @@ export default function DebtClient({
           year is opened — the months and transactions behind it. */}
       <DebtByYear
         transactions={txs}
+        spending={spending}
         total={total}
         currentYear={currentYear}
         admin={admin}

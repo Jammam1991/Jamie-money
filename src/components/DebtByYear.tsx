@@ -50,6 +50,11 @@ type YearRow = {
   owed: number; // what was owed at the end of that year
   known: boolean; // false -> "Coming soon"
   months: MonthGroup[];
+  // Spent on Jamie that year but never treated as a loan. Deliberately kept
+  // out of `added` and `owed` — it isn't debt and nothing here may add it to a
+  // debt figure.
+  spent: number;
+  spentItems: DebtTransaction[];
 };
 
 // Build one row per year, newest first, each carrying the months inside it.
@@ -57,9 +62,17 @@ type YearRow = {
 // year's total minus what got added.
 function buildRows(
   txs: DebtTransaction[],
+  spending: DebtTransaction[],
   total: number,
   currentYear: number,
 ): YearRow[] {
+  const spentByYear = new Map<number, DebtTransaction[]>();
+  for (const s of spending) {
+    const year = Number(s.txDate.slice(0, 4));
+    if (!year) continue;
+    spentByYear.set(year, [...(spentByYear.get(year) ?? []), s]);
+  }
+
   // tx_date is stored as YYYY-MM-DD, so read the parts off the string instead
   // of `new Date()` — that would shift the day by the timezone.
   const byYear = new Map<number, Map<number, DebtTransaction[]>>();
@@ -83,7 +96,18 @@ function buildRows(
         items: [...items].sort((a, b) => b.txDate.localeCompare(a.txDate)),
       }));
     const added = grouped.reduce((sum, g) => sum + g.total, 0);
-    rows.push({ year, added, owed, known: Boolean(months), months: grouped });
+    const spentItems = [...(spentByYear.get(year) ?? [])].sort((a, b) =>
+      b.txDate.localeCompare(a.txDate),
+    );
+    rows.push({
+      year,
+      added,
+      owed,
+      known: Boolean(months),
+      months: grouped,
+      spent: spentItems.reduce((sum, s) => sum + s.amount, 0),
+      spentItems,
+    });
     owed -= added;
   }
   return rows;
@@ -91,6 +115,7 @@ function buildRows(
 
 export default function DebtByYear({
   transactions,
+  spending,
   total,
   currentYear,
   admin,
@@ -98,6 +123,7 @@ export default function DebtByYear({
   onDelete,
 }: {
   transactions: DebtTransaction[];
+  spending: DebtTransaction[];
   total: number;
   currentYear: number;
   admin: boolean;
@@ -111,11 +137,12 @@ export default function DebtByYear({
 }) {
   const [openYear, setOpenYear] = useState<number | null>(null);
   const [openMonth, setOpenMonth] = useState<string | null>(null); // "2026-3"
+  const [openSpend, setOpenSpend] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
 
   const rows = useMemo(
-    () => buildRows(transactions, total, currentYear),
-    [transactions, total, currentYear],
+    () => buildRows(transactions, spending, total, currentYear),
+    [transactions, spending, total, currentYear],
   );
   const maxOwed = Math.max(...rows.map((r) => r.owed), 1);
   const thisYear = rows[0];
@@ -195,6 +222,50 @@ export default function DebtByYear({
                   </>
                 )}
               </button>
+
+              {/* Spent on Jamie that year but never called a loan — gifts and
+                  the like. Its own line, outside the year button, because it
+                  isn't part of the debt above it and opens separately. */}
+              {r.spent > 0 && (
+                <>
+                  <button
+                    className="mt-1.5 flex w-full items-center gap-1 text-left text-xs text-muted underline decoration-dotted underline-offset-2"
+                    onClick={() => setOpenSpend(openSpend === r.year ? null : r.year)}
+                    aria-expanded={openSpend === r.year}
+                  >
+                    <ChevronDown
+                      size={12}
+                      className={`shrink-0 transition-transform ${openSpend === r.year ? "rotate-180" : "-rotate-90"}`}
+                    />
+                    Chris spent {money(r.spent)} not assigned as a loan
+                  </button>
+
+                  {openSpend === r.year && (
+                    <ul className="mt-1 space-y-2 pl-5">
+                      {r.spentItems.map((s) => (
+                        <li
+                          key={s.id}
+                          className="flex items-start justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[14px]">{s.description}</p>
+                            <p className="text-xs text-muted">{s.txDate}</p>
+                            {s.source && (
+                              <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+                                <Landmark size={11} className="shrink-0" />
+                                <span className="truncate">{s.source}</span>
+                              </p>
+                            )}
+                          </div>
+                          <span className="shrink-0 text-[14px]">
+                            {money(s.amount)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
 
               {yearOpen && (
                 <div className="mt-2 pl-4">
