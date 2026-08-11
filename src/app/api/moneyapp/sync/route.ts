@@ -31,6 +31,7 @@ export async function POST() {
     scores: result.scores,
     snapshots: result.snapshots,
     reports: result.reports,
+    loans: result.loans,
     problems: result.problems,
     // Only sent when something failed, and only ever the host name — it tells
     // apart "the SQL never ran" from "the SQL ran in the other project".
