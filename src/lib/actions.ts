@@ -14,6 +14,7 @@ import {
 import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
 import type { BillDocument, BillPayment, CashKind } from "./data";
 import { findCleanupCandidates, type CleanupCandidate } from "./duplicateDebts";
+import { clearIgnoredMoneyAppDebts, ignoreMoneyAppDebt } from "./moneyapp";
 
 export type ActionResult = {
   ok: boolean;
@@ -453,8 +454,35 @@ export async function deleteDebt(id: string): Promise<ActionResult> {
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
+
+  // If this row came from Money App, deleting it isn't enough: the next sync
+  // pulls the same account straight back in. Money App exports Jamie's scope
+  // *and* the joint one, so Chris's own accounts (the TD Bank mortgage) ride
+  // along. Remembering the deletion is what makes it stay gone.
+  const { data: row } = await c
+    .from("debts")
+    .select("moneyapp_debt_id")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await c.from("debts").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
+  if (row?.moneyapp_debt_id) {
+    await ignoreMoneyAppDebt(c, String(row.moneyapp_debt_id));
+  }
+  revalidatePath("/debt");
+  return { ok: true };
+}
+
+// Bring back every account that was deleted out of the Money App sync. Without
+// this, one mis-click hides a real account of Jamie's for good.
+export async function unhideMoneyAppDebts(): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const error = await clearIgnoredMoneyAppDebts(c);
+  if (error) return { ok: false, error };
   revalidatePath("/debt");
   return { ok: true };
 }

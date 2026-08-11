@@ -27,6 +27,7 @@ export async function POST() {
     ok: true,
     received: result.received,
     synced: result.synced,
+    hidden: result.hidden,
     fico: result.fico,
     scores: result.scores,
     snapshots: result.snapshots,
