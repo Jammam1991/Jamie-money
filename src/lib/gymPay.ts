@@ -42,6 +42,25 @@ export type PayMonth = {
     profitShare: number;
   };
   tookFrom: { name: string; amount: number }[];
+  // The individual sessions, classes and leads behind the earnings. Null when
+  // the gym dashboard is too old to send them.
+  earnedDetails: EarnedDetails | null;
+};
+
+// One row behind an earnings line — a session, a class, a lead.
+export type EarnLine = {
+  date: string | null;
+  label: string;
+  meta: string | null;
+  amount: number;
+};
+
+export type EarnedDetails = {
+  pt: EarnLine[];
+  classes: EarnLine[];
+  showedLeads: EarnLine[];
+  commission: EarnLine[];
+  management: EarnLine[];
 };
 
 function gymUrl(): string | undefined {
@@ -113,7 +132,7 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
       problem: `GYM_DASHBOARD_URL doesn't look like a web address: "${baseUrl}". It should be like https://gym-dashboard-v2.vercel.app`,
     };
   }
-  const url = `${origin}/api/payroll/jamie-monthly?months=${months}`;
+  const url = `${origin}/api/payroll/jamie-monthly?months=${months}&details=1`;
   try {
     const res = await fetch(url, {
       headers: { "x-api-key": apiKey },
