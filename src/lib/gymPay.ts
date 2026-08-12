@@ -109,11 +109,23 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
       headers: { "x-api-key": apiKey },
       cache: "no-store",
     });
+    // The gym dashboard tells these two apart: 503 means it has no key of its
+    // own set, so it rejects everything no matter what's sent; 401 means the
+    // key sent doesn't match the one it has. Different fixes, different ends.
+    if (res.status === 503) {
+      const body = await res.json().catch(() => null);
+      return {
+        months: [],
+        problem:
+          body?.detail ??
+          "The gym dashboard has no MONEYAPP_API_KEY set, so it rejects every key. Set one there and use the same value here.",
+      };
+    }
     if (res.status === 401) {
       return {
         months: [],
         problem:
-          "The gym dashboard rejected the key. Money App already calls it with the right one — copy its GYM_DASHBOARD_API_KEY across (same variable name), or take MONEYAPP_API_KEY from the gym dashboard itself.",
+          "The gym dashboard has a key set, and this one doesn't match it. Copy MONEYAPP_API_KEY from the gym dashboard into GYM_DASHBOARD_API_KEY here.",
       };
     }
     if (res.status === 404) {
