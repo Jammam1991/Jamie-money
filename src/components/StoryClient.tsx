@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
+import StoryIntroSection from "@/components/StoryIntroSection";
 import type { Story, StoryChapter, StoryLine } from "@/lib/story";
 
 // ── The Debt Story ───────────────────────────────────────────────────────────
@@ -59,6 +60,19 @@ export default function StoryClient({ story }: { story: Story | null }) {
           Here&apos;s how that number got here.
         </p>
       </div>
+
+      {/* The two things that run underneath every chapter, above them, as
+          Money App has it. */}
+      {story.intro.length > 0 && (
+        <>
+          <p className="px-1 text-[13px] font-medium">
+            Two things run underneath every year below
+          </p>
+          {story.intro.map((s) => (
+            <StoryIntroSection key={s.key} section={s} />
+          ))}
+        </>
+      )}
 
       {story.chapters.map((c, i) => (
         <Chapter key={c.id} chapter={c} index={i + 1} />
