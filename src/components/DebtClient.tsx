@@ -32,7 +32,7 @@ import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DuplicateCleanup from "@/components/DuplicateCleanup";
 import DebtByYear from "@/components/DebtByYear";
 import EarnedVsTook from "@/components/EarnedVsTook";
-import type { DebtTransaction } from "@/lib/store";
+import type { DebtSnapshotRow, DebtTransaction } from "@/lib/store";
 import type { PayMonth } from "@/lib/gymPay";
 import {
   addDebt,
@@ -81,6 +81,7 @@ export default function DebtClient({
   fico,
   initialTransactions,
   spending,
+  snapshots,
   payMonths,
   payProblem,
   currentYear,
@@ -91,6 +92,7 @@ export default function DebtClient({
   fico: { score: number; date: string } | null;
   initialTransactions: DebtTransaction[];
   spending: DebtTransaction[];
+  snapshots: DebtSnapshotRow[];
   payMonths: PayMonth[];
   payProblem: string | null;
   currentYear: number;
@@ -250,6 +252,7 @@ export default function DebtClient({
       <DebtByYear
         transactions={txs}
         spending={spending}
+        snapshots={snapshots}
         total={total}
         currentYear={currentYear}
         admin={admin}
