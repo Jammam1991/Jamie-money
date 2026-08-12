@@ -14,7 +14,7 @@ import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
 import { yearColor, yearInk, yearTint } from "@/lib/debtColors";
 import DebtGrowthChart from "@/components/DebtGrowthChart";
-import type { DebtTransaction } from "@/lib/store";
+import type { DebtSnapshotRow, DebtTransaction } from "@/lib/store";
 
 // One card, one list of years. This used to be two — a "Debt by year" summary
 // and a separate "Where the debt came from" drill-down — which meant scrolling
@@ -67,10 +67,18 @@ const inputClass =
 
 type MonthGroup = { month: number; total: number; items: DebtTransaction[] };
 
+// Where a year's "owed" figure comes from. `added` is always real — it's that
+// year's transactions added up — but `owed` is only real for the years a credit
+// report actually recorded, and worked backwards for the rest.
+type OwedSource =
+  | { kind: "actual"; asOf: string } // a real recorded balance, on this date
+  | { kind: "estimated" };
+
 type YearRow = {
   year: number;
   added: number;
   owed: number; // what was owed at the end of that year
+  owedSource: OwedSource;
   known: boolean; // false -> "Coming soon"
   months: MonthGroup[];
   // Spent on Jamie that year but never treated as a loan. Deliberately kept
@@ -80,15 +88,45 @@ type YearRow = {
   spentItems: DebtTransaction[];
 };
 
+// The last real balance recorded in each year.
+//
+// Every credit report Money App imports writes one row per account on the
+// report date, so adding up a single date's rows gives what was genuinely owed
+// that day. The newest date inside a year is the closest thing to a proven
+// year-end figure — everything else has to be worked out backwards.
+function actualByYear(snapshots: DebtSnapshotRow[]): Map<number, { total: number; asOf: string }> {
+  // One running total per report date.
+  const byDate = new Map<string, number>();
+  for (const s of snapshots) {
+    byDate.set(s.date, (byDate.get(s.date) ?? 0) + s.balance);
+  }
+
+  const best = new Map<number, { total: number; asOf: string }>();
+  for (const [date, total] of byDate) {
+    const year = yearOf(date);
+    if (year === null) continue;
+    const held = best.get(year);
+    // Latest date in the year wins — it's the closest to year end.
+    if (!held || date > held.asOf) best.set(year, { total, asOf: date });
+  }
+  return best;
+}
+
 // Build one row per year, newest first, each carrying the months inside it.
+//
 // We know today's total, so we walk backwards: last year's total is this
-// year's total minus what got added.
+// year's total minus what got added. Where a year has a real recorded balance
+// the walk re-anchors to it, so an error in the transaction history can't
+// compound all the way down — the recent years stay tight and only the years
+// past the last credit report drift.
 function buildRows(
   txs: DebtTransaction[],
   spending: DebtTransaction[],
+  snapshots: DebtSnapshotRow[],
   total: number,
   currentYear: number,
 ): YearRow[] {
+  const actuals = actualByYear(snapshots);
   const spentByYear = new Map<number, DebtTransaction[]>();
   for (const s of spending) {
     const year = Number(s.txDate.slice(0, 4));
@@ -129,19 +167,33 @@ function buildRows(
     const spentItems = [...(spentByYear.get(year) ?? [])].sort((a, b) =>
       b.txDate.localeCompare(a.txDate),
     );
+    // This year's balance is today's, straight from Money App — proven, not
+    // derived. Any earlier year is proven only if a credit report recorded it.
+    const recorded = actuals.get(year);
+    const proven =
+      year === currentYear
+        ? { total, asOf: new Date().toISOString().slice(0, 10) }
+        : recorded;
+
     rows.push({
       year,
       added,
       // Walking back can run past zero once the history reaches further back
       // than today's balance can explain — old loans since repaid, or accounts
       // that have closed. "Owed -$12,000" is nonsense, so it floors at zero.
-      owed: Math.max(0, owed),
+      owed: Math.max(0, proven ? proven.total : owed),
+      owedSource: proven
+        ? { kind: "actual", asOf: proven.asOf }
+        : { kind: "estimated" },
       known: Boolean(months),
       months: grouped,
       spent: spentItems.reduce((sum, s) => sum + s.amount, 0),
       spentItems,
     });
-    owed -= added;
+    // Step to the year before. Starting from a proven figure where there is
+    // one is the whole point: without it, one bad year's transactions would
+    // skew every year below it.
+    owed = (proven ? proven.total : owed) - added;
   }
   return rows;
 }
@@ -149,6 +201,7 @@ function buildRows(
 export default function DebtByYear({
   transactions,
   spending,
+  snapshots,
   total,
   currentYear,
   admin,
@@ -157,6 +210,7 @@ export default function DebtByYear({
 }: {
   transactions: DebtTransaction[];
   spending: DebtTransaction[];
+  snapshots: DebtSnapshotRow[];
   total: number;
   currentYear: number;
   admin: boolean;
@@ -174,8 +228,8 @@ export default function DebtByYear({
   const [adding, setAdding] = useState(false);
 
   const rows = useMemo(
-    () => buildRows(transactions, spending, total, currentYear),
-    [transactions, spending, total, currentYear],
+    () => buildRows(transactions, spending, snapshots, total, currentYear),
+    [transactions, spending, snapshots, total, currentYear],
   );
   const maxOwed = Math.max(...rows.map((r) => r.owed), 1);
   const thisYear = rows[0];
@@ -269,9 +323,31 @@ export default function DebtByYear({
                         }}
                       />
                     </div>
-                    <p className="mt-1.5 text-xs text-muted">
-                      Owed {money(r.owed)} · about{" "}
-                      {money(monthlyAt15(r.owed))}/month to keep up
+                    <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted">
+                      <span>
+                        Owed {money(r.owed)} · about{" "}
+                        {money(monthlyAt15(r.owed))}/month to keep up
+                      </span>
+                      {/* Whether that balance is a recorded fact or worked out
+                          backwards. Only the "owed" figure is in question —
+                          "added" is always the year's real transactions. */}
+                      {r.owedSource.kind === "actual" ? (
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                          style={{ background: "var(--good-bg)", color: "var(--good)" }}
+                          title={`A real balance recorded on ${r.owedSource.asOf}`}
+                        >
+                          Actual
+                        </span>
+                      ) : (
+                        <span
+                          className="rounded px-1.5 py-0.5 text-[11px] font-medium"
+                          style={{ background: "var(--tint)", color: "var(--faint)" }}
+                          title="Worked out backwards from a later known balance — no credit report recorded this year"
+                        >
+                          Estimated
+                        </span>
+                      )}
                     </p>
                   </>
                 )}
