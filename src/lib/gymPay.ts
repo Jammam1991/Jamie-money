@@ -105,6 +105,10 @@ export function gymPayReady(): boolean {
 // shows it to Chris only.
 export type PayMonthsResult = { months: PayMonth[]; problem: string | null };
 
+// How long a good answer is reused for, and how long we'll wait for one.
+const GYM_CACHE_SECONDS = 300; // 5 minutes
+const GYM_TIMEOUT_MS = 8000;
+
 export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
   const baseUrl = gymUrl();
   const apiKey = headerSafe(process.env.GYM_DASHBOARD_API_KEY);
@@ -136,7 +140,20 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
   try {
     const res = await fetch(url, {
       headers: { "x-api-key": apiKey },
-      cache: "no-store",
+      // This is the slowest thing on the Debt page by a distance: another app's
+      // serverless function, cold half the time, working out two years of pay
+      // down to the individual session. Two guards on it —
+      //
+      // `revalidate` keeps the answer for a few minutes, so opening Debt twice
+      // in a row (or Jamie tapping back and forth) only pays for it once. Pay
+      // figures move when the gym dashboard's own data does, which is nothing
+      // like every few minutes.
+      //
+      // `signal` stops a gym dashboard that never answers from holding the page
+      // open until Vercel kills the whole request. Past the timeout we show the
+      // page without the business half rather than not showing the page.
+      next: { revalidate: GYM_CACHE_SECONDS },
+      signal: AbortSignal.timeout(GYM_TIMEOUT_MS),
     });
     // The gym dashboard tells these two apart: 503 means it has no key of its
     // own set, so it rejects everything no matter what's sent; 401 means the
@@ -217,12 +234,19 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
           : null,
     };
   } catch (err) {
-    // The gym dashboard being down must not take the Debt page with it.
+    // The gym dashboard being down — or just slow — must not take the Debt page
+    // with it. A timeout says so in those words: "TimeoutError" on the screen
+    // reads like this app broke, when the truth is the other one didn't answer.
+    const timedOut = err instanceof Error && err.name === "TimeoutError";
     return {
       months: [],
-      problem: `Couldn't reach the gym dashboard — ${
-        err instanceof Error ? err.message : "no answer"
-      }.`,
+      problem: timedOut
+        ? `The gym dashboard didn't answer within ${
+            GYM_TIMEOUT_MS / 1000
+          } seconds, so the page loaded without the business half. Open it again in a moment.`
+        : `Couldn't reach the gym dashboard — ${
+            err instanceof Error ? err.message : "no answer"
+          }.`,
     };
   }
 }
