@@ -46,9 +46,38 @@ export type StoryChapter = {
   rollups: { label: string; amount: number }[];
 };
 
+// The two sections above the chapters. Not chapters — worked out from the
+// statements rather than listed in the evidence file — and their sentences
+// arrive already written, so this page can't phrase them differently.
+export type StoryIntro = {
+  key: string;
+  era: string;
+  emoji: string;
+  tone: string;
+  title: string;
+  bullets: string[];
+  figure?: number;
+  caption?: string;
+  drill?: {
+    label: string;
+    hint: string;
+    rows: {
+      year: number;
+      income: number;
+      bankPayments: number;
+      rentOut: number | null;
+      coveredPct: number;
+    }[];
+    note: string;
+  };
+  months?: { month: string; amount: number }[];
+  gap?: { from: string; to: string; months: number };
+};
+
 export type Story = {
   total: number;
   lastUpdated: string;
+  intro: StoryIntro[];
   chapters: StoryChapter[];
 };
 
@@ -71,6 +100,9 @@ export async function getStory(): Promise<Story | null> {
     return {
       total: Number(body.total ?? 0),
       lastUpdated: String(body.lastUpdated ?? ""),
+      // Absent from a Money App too old to send them — the page just shows the
+      // chapters in that case rather than breaking.
+      intro: Array.isArray(body.intro) ? (body.intro as StoryIntro[]) : [],
       chapters: body.chapters as StoryChapter[],
     };
   } catch {
