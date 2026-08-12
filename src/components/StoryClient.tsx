@@ -4,26 +4,21 @@ import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
-import type { Story, StoryChapter } from "@/lib/story";
+import type { Story, StoryChapter, StoryLine } from "@/lib/story";
 
 // ── The Debt Story ───────────────────────────────────────────────────────────
-// The same chapters, in the same order, with the same figures as Money App's
-// /divorce/story — because it's the same file, read over the API. This page
-// only decides how it looks on a phone.
+// Money App decides what each chapter says — which lines go on the face and in
+// what order, what counts, what's excluded. This page draws that and decides
+// nothing. Every time it decided something itself, it decided differently and
+// the two pages disagreed.
 //
 // Amounts arrive signed the way the evidence file records them: negative is
-// money Chris paid out or is owed back. Every figure here is shown as a plain
-// positive amount, because on Jamie's side the sign carries no information —
-// it's all money he owes, and a page of minus signs reads as an accusation
-// rather than a record.
-
-// How many lines a chapter shows before "See all N lines".
-const PREVIEW_LINES = 3;
+// money Chris paid out or is owed back. Shown here as plain positive amounts,
+// because on Jamie's side the sign carries no information — it's all money he
+// owes — and a page of minus signs reads as an accusation rather than a record.
 
 // Money App tints each chapter by `tone`; these are the same five hues stepped
-// for a light background rather than its dark one. Matching the palette rather
-// than the exact hex is the point — the two pages should look like the same
-// document, not like one is a screenshot of the other.
+// for a light background rather than its dark one.
 const TONE_COLOR: Record<string, string> = {
   violet: "#6d28d9",
   sky: "#0369a1",
@@ -77,13 +72,9 @@ export default function StoryClient({ story }: { story: Story | null }) {
 }
 
 function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
-  const [allLines, setAllLines] = useState(false);
-  const [background, setBackground] = useState(false);
-
-  const lines = allLines ? chapter.entries : chapter.entries.slice(0, PREVIEW_LINES);
-  const hidden = chapter.entries.length - lines.length;
-
+  const [open, setOpen] = useState<string | null>(null);
   const accent = toneColor(chapter.tone);
+  const toggle = (k: string) => setOpen(open === k ? null : k);
 
   return (
     <Card className="border-l-4" style={{ borderLeftColor: accent }}>
@@ -103,87 +94,187 @@ function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
         {chapter.emoji} {chapter.title}
       </p>
 
-      {chapter.total !== 0 && (
+      {chapter.net !== 0 && (
         <p className="mt-1 text-3xl font-medium" style={{ color: accent }}>
-          {money(Math.abs(chapter.total))}
+          {money(Math.abs(chapter.net))}
         </p>
       )}
 
-      {/* Money App's own caption — the sentence that says what the figure above
-          actually is. The narrative is background, behind a tap. */}
       {chapter.caption && (
         <p className="mt-1 text-[14px] text-muted">{chapter.caption}</p>
       )}
 
-      {chapter.rollups.length > 0 && (
-        <ul className="mt-3 space-y-1 text-[14px]">
-          {chapter.rollups.map((r) => (
-            <li key={r.label} className="flex justify-between gap-3">
-              <span className="text-muted">{r.label}</span>
-              <span className="shrink-0">{money(Math.abs(r.amount))}</span>
-            </li>
-          ))}
-        </ul>
+      {/* Money out, money back, and the net — only where some came back, which
+          is Money App's call, not this page's. */}
+      {chapter.showTiles && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          <Tile label="Chris paid out" value={money(Math.abs(chapter.paidOut))} />
+          <Tile
+            label="Came back"
+            value={money(Math.abs(chapter.cameBack))}
+            color="var(--good)"
+          />
+          <Tile label="Net" value={money(Math.abs(chapter.entryNet))} color={accent} />
+        </div>
       )}
 
-      {lines.length > 0 && (
+      {chapter.preview.length > 0 && (
         <ul className="mt-3 space-y-2 text-[14px]">
-          {lines.map((e, i) => (
-            <li key={`${e.label}-${i}`} className="flex justify-between gap-3">
-              <span className="min-w-0">
-                <span className="block">{e.label}</span>
-                {(e.date || e.estimate) && (
-                  <span className="block text-xs text-muted">
-                    {e.date}
-                    {e.date && e.estimate ? " · " : ""}
-                    {e.estimate ? `worked out from ${e.estimate.basis}` : ""}
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0">{money(Math.abs(e.amount))}</span>
-            </li>
+          {chapter.preview.map((e, i) => (
+            <Line key={`${e.label}-${i}`} line={e} />
           ))}
         </ul>
       )}
 
-      {hidden > 0 && (
-        <button
-          className="mt-3 flex w-full items-center justify-between rounded-xl border border-border px-3 py-2 text-[14px]"
-          onClick={() => setAllLines(true)}
+      {chapter.entries.length > 0 && (
+        <Drill
+          label={`See all ${chapter.entries.length} ${chapter.entries.length === 1 ? "line" : "lines"}`}
+          hint={`${chapter.actualCount} actual · ${chapter.estimateCount} estimate`}
+          open={open === "lines"}
+          onClick={() => toggle("lines")}
         >
-          See all {chapter.entries.length} lines
-          <ChevronDown size={16} className="-rotate-90 text-muted" />
-        </button>
+          <ul className="space-y-2 text-[14px]">
+            {chapter.entries.map((e, i) => (
+              <Line key={`${e.label}-${i}`} line={e} />
+            ))}
+          </ul>
+          <p className="mt-2 flex justify-between border-t border-border pt-2 text-[14px] font-medium">
+            <span>Total for this chapter</span>
+            <span>{money(Math.abs(chapter.entryNet))}</span>
+          </p>
+        </Drill>
+      )}
+
+      {chapter.rollups.length > 0 && (
+        <Drill
+          label={`See the ${chapter.rollups.length} rolled-up item${chapter.rollups.length === 1 ? "" : "s"}`}
+          hint={money(Math.abs(chapter.rollupNet))}
+          open={open === "rollups"}
+          onClick={() => toggle("rollups")}
+        >
+          <ul className="space-y-2 text-[14px]">
+            {chapter.rollups.map((r) => (
+              <li key={r.label} className="flex justify-between gap-3">
+                <span>{r.label}</span>
+                <span className="shrink-0">{money(Math.abs(r.amount))}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted">
+            These are summary figures rather than itemised transactions, so there
+            are no statement lines behind them.
+          </p>
+        </Drill>
+      )}
+
+      {chapter.chrisOnly.length > 0 && (
+        <Drill
+          label={`Chris's own costs — not counted here (${chapter.chrisOnly.length})`}
+          hint={money(Math.abs(chapter.chrisOnlyNet))}
+          open={open === "chrisOnly"}
+          onClick={() => toggle("chrisOnly")}
+        >
+          <p className="mb-2 text-xs text-muted">
+            These are real costs Chris carried, but you aren&apos;t answerable for
+            them — so they&apos;re left out of the figure above and out of
+            anything owed back. They&apos;re kept on the record rather than
+            deleted.
+          </p>
+          <ul className="space-y-2 text-[14px]">
+            {chapter.chrisOnly.map((e, i) => (
+              <Line key={`${e.label}-${i}`} line={e} />
+            ))}
+          </ul>
+        </Drill>
       )}
 
       {chapter.narrative.length > 0 && (
-        <>
-          <button
-            className="mt-2 flex w-full items-center justify-between rounded-xl border border-border px-3 py-2 text-[14px]"
-            onClick={() => setBackground(!background)}
-            aria-expanded={background}
-          >
-            Read the background
-            <ChevronDown
-              size={16}
-              className={`text-muted transition-transform ${background ? "rotate-180" : "-rotate-90"}`}
-            />
-          </button>
-          {background && (
-            <div className="mt-2 space-y-2 text-[14px] text-muted">
-              {chapter.narrative.map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {background && chapter.evidence.length > 0 && (
-        <p className="mt-2 text-xs text-muted">
-          Source: {chapter.evidence.join("; ")}
-        </p>
+        <Drill
+          label="Read the background"
+          open={open === "background"}
+          onClick={() => toggle("background")}
+        >
+          <div className="space-y-2 text-[14px] text-muted">
+            {chapter.narrative.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+            {chapter.evidence.length > 0 && (
+              <p className="text-xs">Evidence: {chapter.evidence.join(" · ")}</p>
+            )}
+          </div>
+        </Drill>
       )}
     </Card>
+  );
+}
+
+function Line({ line }: { line: StoryLine }) {
+  return (
+    <li className="flex justify-between gap-3">
+      <span className="min-w-0">
+        <span className="block">{line.label}</span>
+        {(line.date || line.estimate) && (
+          <span className="block text-xs text-muted">
+            {line.date}
+            {line.date && line.estimate ? " · " : ""}
+            {line.estimate ? `worked out from ${line.estimate.basis}` : ""}
+          </span>
+        )}
+      </span>
+      <span className="shrink-0">{money(Math.abs(line.amount))}</span>
+    </li>
+  );
+}
+
+function Tile({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  return (
+    <div className="rounded-xl bg-tint p-2">
+      <p className="text-[11px] text-muted">{label}</p>
+      <p className="text-[15px] font-semibold" style={color ? { color } : undefined}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function Drill({
+  label,
+  hint,
+  open,
+  onClick,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  open: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <button
+        className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-left text-[14px]"
+        onClick={onClick}
+        aria-expanded={open}
+      >
+        <span className="min-w-0 truncate">{label}</span>
+        <span className="flex shrink-0 items-center gap-1.5 text-muted">
+          {hint && <span className="text-xs">{hint}</span>}
+          <ChevronDown
+            size={16}
+            className={`transition-transform ${open ? "rotate-180" : "-rotate-90"}`}
+          />
+        </span>
+      </button>
+      {open && <div className="mt-2 px-1">{children}</div>}
+    </>
   );
 }
