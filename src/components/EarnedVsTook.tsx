@@ -11,9 +11,11 @@ import type { DebtTransaction } from "@/lib/store";
 // Three numbers a month, in that order, because that's the order the question
 // gets asked in: what was the job worth, what came out, who covered the rest.
 //
-// The private loans for the same month sit underneath, since they're the other
-// half of what he owes and splitting them across two screens makes the total
-// something you have to work out yourself.
+// Each month is split in two, named: what Chris lent personally on top, what
+// came out of the business below. Run together as one list of figures they
+// read as a single pot of money, which is the one thing this card exists to
+// stop — the loans are Chris's own money, the distributions are the
+// business's, and only the second half has an "earned" to measure against.
 
 function monthKey(date: string): string {
   return date.slice(0, 7); // YYYY-MM
@@ -136,35 +138,66 @@ export default function EarnedVsTook({
                   </span>
                 </div>
 
-                <div className="mt-2 space-y-1 text-[14px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">You earned</span>
-                    <span>{money(m.earned)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">You took</span>
-                    <span>{money(m.took)}</span>
-                  </div>
-                  <div
-                    className="flex items-center justify-between border-t pt-1 font-medium"
-                    style={{ borderColor: "var(--border)" }}
-                  >
-                    <span>{over ? "Difference owed" : "Under what you earned"}</span>
-                    <span style={{ color: over ? "var(--warn)" : "var(--good)" }}>
-                      {money(Math.abs(m.difference))}
-                    </span>
-                  </div>
-                  {loanTotal !== 0 && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted">Private loans this month</span>
-                      <span>{money(loanTotal)}</span>
+                {/* Two separate stories in one month, and running them
+                    together as four lines invited exactly the confusion it
+                    caused: money Chris lent personally is not the same thing
+                    as money taken out of the business. Each gets its own
+                    block, named. */}
+                <div className="mt-2 space-y-2">
+                  <div className="rounded-lg bg-card p-2.5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted">
+                      Chris lent you
+                    </p>
+                    <div className="mt-1 flex items-center justify-between text-[14px]">
+                      <span className="text-muted">Private loans</span>
+                      <span className="font-medium">{money(loanTotal)}</span>
                     </div>
-                  )}
+                  </div>
+
+                  <div className="rounded-lg bg-card p-2.5">
+                    <p className="text-[11px] uppercase tracking-wide text-muted">
+                      Business pay
+                    </p>
+                    <div className="mt-1 space-y-1 text-[14px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted">You earned</span>
+                        <span>{money(m.earned)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted">You took</span>
+                        <span>{money(m.took)}</span>
+                      </div>
+                      <div
+                        className="flex items-center justify-between border-t pt-1 font-medium"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <span>{over ? "Difference owed" : "Under what you earned"}</span>
+                        <span style={{ color: over ? "var(--warn)" : "var(--good)" }}>
+                          {money(Math.abs(m.difference))}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </button>
 
               {isOpen && (
                 <div className="mt-3 space-y-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                  {monthLoans.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium">Chris lent you — every loan this month</p>
+                      <ul className="mt-1 space-y-1 text-xs text-muted">
+                        {monthLoans.map((l) => (
+                          <li key={l.id} className="flex justify-between gap-2">
+                            <span className="truncate">
+                              {l.description} · {l.txDate}
+                            </span>
+                            <span className="shrink-0">{money(l.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div>
                     <p className="text-xs font-medium">How the earnings add up</p>
                     <ul className="mt-1 space-y-1 text-xs text-muted">
@@ -264,21 +297,6 @@ export default function EarnedVsTook({
                     </div>
                   )}
 
-                  {monthLoans.length > 0 && (
-                    <div>
-                      <p className="text-xs font-medium">Private loans from Chris</p>
-                      <ul className="mt-1 space-y-1 text-xs text-muted">
-                        {monthLoans.map((l) => (
-                          <li key={l.id} className="flex justify-between gap-2">
-                            <span className="truncate">
-                              {l.description} · {l.txDate}
-                            </span>
-                            <span className="shrink-0">{money(l.amount)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
