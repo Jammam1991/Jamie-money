@@ -26,6 +26,12 @@ export type StoryChapter = {
   entries: StoryEntry[];
   rollups: { label: string; amount: number }[];
   evidence: string[];
+  // How Money App draws the chapter. The caption in particular is the sentence
+  // that says what the number on the card is — without it this page fell back
+  // to the narrative's opening line and the two read differently.
+  emoji: string;
+  tone: string;
+  caption: string;
 };
 
 export type Story = {
