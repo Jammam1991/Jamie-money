@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 // ── What Jamie earned vs what he took, month by month ────────────────────────
 // The gym dashboard already works this out — it has the pay model (hourly PT,
 // per class, per showed lead, commission, a management rate for hours in the
@@ -14,6 +16,14 @@
 //   GYM_DASHBOARD_URL      the dashboard's base URL
 //   GYM_DASHBOARD_API_KEY  its MONEYAPP_API_KEY value — the same shared key the
 //                          other cross-app endpoints there use
+
+// The first 8 hex characters of the key's SHA-256. Enough to tell two values
+// apart at a glance, and it gives nothing away about the key: the same command
+// run against the gym dashboard's value produces the same 8 characters if — and
+// only if — the two are identical.
+function fingerprint(key: string): string {
+  return createHash("sha256").update(key).digest("hex").slice(0, 8);
+}
 
 export type PayMonth = {
   month: string; // YYYY-MM-01
@@ -122,10 +132,17 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
       };
     }
     if (res.status === 401) {
+      // Two rounds of "copy the value across" haven't fixed it, so name the
+      // key this app is actually sending — its length and a fingerprint. Both
+      // are safe: the note is admin-only, and a SHA-256 prefix reveals nothing
+      // about the key itself. Chris can fingerprint the gym dashboard's value
+      // the same way and see in one glance whether they differ, instead of
+      // squinting at two long strings.
       return {
         months: [],
         problem:
-          "The gym dashboard has a key set, and this one doesn't match it. Copy MONEYAPP_API_KEY from the gym dashboard into GYM_DASHBOARD_API_KEY here.",
+          `The gym dashboard has a key set, and this one doesn't match it. This app is sending a ${apiKey.length}-character key, fingerprint ${fingerprint(apiKey)}. ` +
+          `Run: echo -n 'THE_GYM_VALUE' | shasum -a 256 — if the first 8 characters differ, the two values aren't the same. Also check you edited the same environment (Production vs Preview) as the deployment you're looking at.`,
       };
     }
     if (res.status === 404) {
