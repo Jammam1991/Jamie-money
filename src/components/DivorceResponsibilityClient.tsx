@@ -63,9 +63,16 @@ function shortDate(it: SpendItem): string {
 
 export default function DivorceResponsibilityClient({
   admin = false,
+  storyHidden = false,
 }: {
   admin?: boolean;
+  storyHidden?: boolean;
 }) {
+  // The story itself now comes from Money App — one evidence file, read rather
+  // than re-written here. This component is kept for the Chris-only spending
+  // history below it; `storyHidden` renders that and nothing else.
+  if (storyHidden) return admin ? <SpendingHistory /> : null;
+
   const now = new Date();
   const settle = gymSettleUp(now);
   const total = bill(now);
