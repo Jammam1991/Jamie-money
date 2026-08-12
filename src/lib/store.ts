@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   bills as sampleBills,
@@ -27,13 +28,22 @@ import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
 // automatically by the integration) and fall back to a classic service-role
 // key. Both have full database access; anon/publishable keys are never used
 // here because row-level security would block writes.
+// Built once and reused. Every reader below calls this, so a page that asks for
+// nine things was building nine clients — and each one sets up its own auth and
+// realtime machinery that none of this uses. There's nothing per-visitor in it
+// (no session is kept, the key is the same server key every time), so one is
+// correct as well as cheaper.
+let cachedClient: SupabaseClient | null = null;
+
 export function client(): SupabaseClient | null {
+  if (cachedClient) return cachedClient;
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key =
     process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key, { auth: { persistSession: false } });
+  cachedClient = createClient(url, key, { auth: { persistSession: false } });
+  return cachedClient;
 }
 
 // Which Supabase project the app is actually writing to, e.g.
@@ -170,7 +180,14 @@ export async function getMoneyAppFico(): Promise<{ score: number; date: string }
 // the page just shows a placeholder instead of its content. Kept as one JSON
 // list in the existing key/value settings table (no new table to create), under
 // the original `hidden_pages` key so earlier choices carry over.
-export async function getComingSoonPages(): Promise<string[]> {
+//
+// `cache` because the layout asks (to decide the Past Due tab) and then the
+// page asks again through pageGate — two round trips to the database for the
+// same short list on every single page view. Wrapped, the second one is free,
+// and it still re-reads on the next request.
+export const getComingSoonPages = cache(async function getComingSoonPages(): Promise<
+  string[]
+> {
   const c = client();
   if (!c) return [];
   const { data, error } = await c
@@ -185,7 +202,7 @@ export async function getComingSoonPages(): Promise<string[]> {
   } catch {
     return [];
   }
-}
+});
 
 export async function getBills(): Promise<Bill[]> {
   const c = client();

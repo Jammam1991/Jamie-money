@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import crypto from "node:crypto";
 
@@ -39,7 +40,12 @@ function eq(a: string, b: string): boolean {
 }
 
 // Which role is the current visitor, if any.
-export async function getRole(): Promise<Role | null> {
+//
+// `cache` because a single page view asks four times over — the layout checks
+// it, then checks "viewing as Jamie" which checks it again, and the page repeats
+// both through pageGate. The answer can't change mid-request, so it's worked out
+// once and handed back after that. The next request starts fresh.
+export const getRole = cache(async function getRole(): Promise<Role | null> {
   const store = await cookies();
   const value = store.get(AUTH_COOKIE)?.value;
   if (!value) return null;
@@ -48,7 +54,7 @@ export async function getRole(): Promise<Role | null> {
   const vt = viewerToken();
   if (vt && eq(value, vt)) return "viewer";
   return null;
-}
+});
 
 export async function isAdmin(): Promise<boolean> {
   return (await getRole()) === "admin";

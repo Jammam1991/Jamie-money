@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { PageTitle } from "@/components/ui";
 import DebtClient from "@/components/DebtClient";
 import {
@@ -20,12 +21,17 @@ export default async function DebtPage() {
   const { role, comingSoon } = await pageGate("debt");
   if (comingSoon) return <ComingSoon title="Debt" />;
 
-  // Pull Jamie's balances from Money App before reading them, so the page is
-  // current without anyone pressing Sync. Throttled to once an hour inside, and
-  // it swallows its own failures — a quiet Money App just means the numbers
-  // below are the ones from last time.
+  // Pull Jamie's balances from Money App, so the page stays current without
+  // anyone pressing Sync. Throttled to once an hour inside, and it swallows its
+  // own failures — a quiet Money App just means the numbers are last time's.
+  //
+  // This runs *after* the page has been sent, not before it. Waiting on it made
+  // opening Debt sit on a blank screen for as long as Money App took to answer,
+  // and for nothing: the throttle already means what's on screen can be an hour
+  // old, so a pull that lands one page-view later costs no freshness. A nightly
+  // cron (/api/moneyapp/cron) is the real backstop either way.
   const c = client();
-  if (c) await autoSyncMoneyAppDebts(c);
+  if (c) after(() => autoSyncMoneyAppDebts(c));
 
   const [debts, hasBank, fico, transactions, spending, snapshots, payMonths] =
     await Promise.all([
