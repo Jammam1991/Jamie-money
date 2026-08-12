@@ -1,7 +1,7 @@
-import { PageTitle } from "@/components/ui";
-import StoryClient from "@/components/StoryClient";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { PageTitle, Card } from "@/components/ui";
 import SpendingHistory from "@/components/SpendingHistory";
-import { getStory } from "@/lib/story";
 import { isJamieView, pageGate } from "@/lib/visibility";
 import ComingSoon from "@/components/ComingSoon";
 
@@ -16,21 +16,34 @@ export default async function DivorceResponsibilityPage() {
   // real check on what Jamie sees, not just a nav preview.
   const jamieView = await isJamieView();
 
-  // The story is Money App's evidence file, read over the API — the same
-  // chapters and figures Chris sees at /divorce/story.
-  //
-  // Framing Money App's actual page was tried and reverted: that page builds
-  // its data from the signed-in Money App user, and Jamie has no Money App
-  // account, so it rendered its own error page inside the frame.
-  const story = await getStory();
-
   return (
     <div className="space-y-4">
       <PageTitle>The Debt Story</PageTitle>
-      <StoryClient story={story} />
-      {/* Chris's own working material. Off for Jamie, and off for Chris while
-          "View as Jamie" is on, so the toggle is a real check on what Jamie
-          sees rather than a nav preview. */}
+
+      {/* The story itself lives in Money App. This page used to redraw it from
+          an export and kept getting it subtly wrong — preview lines in a
+          different order, sections missing, a chapter understated by $2,500.
+          Now it opens the real one, on a pass that grants that page and
+          nothing else. */}
+      <Card>
+        <p className="text-[15px]">
+          The full record — what Chris covered, what you owe, and where every
+          number comes from.
+        </p>
+        <p className="mt-1 text-[13px] text-muted">
+          It opens in Money App, where the record is kept, so what you read is
+          always the current version.
+        </p>
+        <Link
+          href="/story"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-sm font-medium text-white"
+          style={{ background: "linear-gradient(135deg, #a56814 0%, #7d4a0b 100%)" }}
+        >
+          Read the story
+          <ArrowUpRight size={16} />
+        </Link>
+      </Card>
+
       {role === "admin" && !jamieView && <SpendingHistory />}
     </div>
   );
