@@ -19,6 +19,21 @@ function monthKey(date: string): string {
   return date.slice(0, 7); // YYYY-MM
 }
 
+// "Mar 14" from an ISO timestamp. The gym dashboard sends these in UTC, so the
+// date is read off the string rather than through the browser's timezone —
+// otherwise a late-evening session slides to the wrong day.
+function shortDate(iso: string | null): string {
+  if (!iso) return "";
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return `${MONTHS_SHORT[m - 1]} ${d}`;
+}
+
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 export default function EarnedVsTook({
   months,
   loans,
@@ -32,6 +47,7 @@ export default function EarnedVsTook({
   admin: boolean;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const [openLine, setOpenLine] = useState<string | null>(null);
 
   if (months.length === 0) {
     // Jamie sees nothing at all — a half-built section is worse than no
@@ -154,21 +170,80 @@ export default function EarnedVsTook({
                     <ul className="mt-1 space-y-1 text-xs text-muted">
                       {(
                         [
-                          ["Personal training", m.earnedParts.pt],
-                          ["Classes", m.earnedParts.classes],
-                          ["Leads that showed", m.earnedParts.showedLeads],
-                          ["Commission", m.earnedParts.commission],
-                          ["Managing the gym", m.earnedParts.management],
-                          ["Share of profit", m.earnedParts.profitShare],
+                          ["Personal training", m.earnedParts.pt, m.earnedDetails?.pt],
+                          ["Classes", m.earnedParts.classes, m.earnedDetails?.classes],
+                          [
+                            "Leads that showed",
+                            m.earnedParts.showedLeads,
+                            m.earnedDetails?.showedLeads,
+                          ],
+                          [
+                            "Commission",
+                            m.earnedParts.commission,
+                            m.earnedDetails?.commission,
+                          ],
+                          [
+                            "Managing the gym",
+                            m.earnedParts.management,
+                            m.earnedDetails?.management,
+                          ],
+                          // Profit share is a formula on the month's profit,
+                          // not a list of things that happened, so there's
+                          // nothing to open.
+                          ["Share of profit", m.earnedParts.profitShare, undefined],
                         ] as const
                       )
                         .filter(([, amount]) => amount !== 0)
-                        .map(([label, amount]) => (
-                          <li key={label} className="flex justify-between">
-                            <span>{label}</span>
-                            <span>{money(amount)}</span>
-                          </li>
-                        ))}
+                        .map(([label, amount, lines]) => {
+                          const key = `${m.month}:${label}`;
+                          const canOpen = Boolean(lines && lines.length > 0);
+                          const lineOpen = openLine === key;
+                          return (
+                            <li key={label}>
+                              <button
+                                className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default"
+                                onClick={() => setOpenLine(lineOpen ? null : key)}
+                                disabled={!canOpen}
+                                aria-expanded={canOpen ? lineOpen : undefined}
+                              >
+                                <span className="flex items-center gap-1">
+                                  {canOpen && (
+                                    <ChevronDown
+                                      size={11}
+                                      className={`shrink-0 transition-transform ${lineOpen ? "rotate-180" : "-rotate-90"}`}
+                                    />
+                                  )}
+                                  {label}
+                                  {canOpen && (
+                                    <span className="text-faint">({lines!.length})</span>
+                                  )}
+                                </span>
+                                <span>{money(amount)}</span>
+                              </button>
+
+                              {lineOpen && lines && (
+                                <ul className="mt-1 space-y-1 border-l pl-3" style={{ borderColor: "var(--border)" }}>
+                                  {lines.map((l, i) => (
+                                    <li
+                                      key={`${l.date ?? ""}-${l.label}-${i}`}
+                                      className="flex items-start justify-between gap-2"
+                                    >
+                                      <span className="min-w-0">
+                                        <span className="block truncate">{l.label}</span>
+                                        <span className="block text-faint">
+                                          {[shortDate(l.date), l.meta]
+                                            .filter(Boolean)
+                                            .join(" · ")}
+                                        </span>
+                                      </span>
+                                      <span className="shrink-0">{money(l.amount)}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          );
+                        })}
                     </ul>
                   </div>
 
