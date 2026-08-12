@@ -31,7 +31,6 @@ import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DuplicateCleanup from "@/components/DuplicateCleanup";
 import DebtByYear from "@/components/DebtByYear";
-import EarnedVsTook from "@/components/EarnedVsTook";
 import type { DebtSnapshotRow, DebtTransaction } from "@/lib/store";
 import type { PayMonth } from "@/lib/gymPay";
 import {
@@ -253,6 +252,8 @@ export default function DebtClient({
         transactions={txs}
         spending={spending}
         snapshots={snapshots}
+        payMonths={payMonths}
+        payProblem={payProblem}
         total={total}
         currentYear={currentYear}
         admin={admin}
@@ -260,16 +261,6 @@ export default function DebtClient({
         onDelete={handleDeleteTransaction}
       />
 
-      {/* Earned vs took, from the gym dashboard's pay model. Sits right under
-          the debt because it's the same question from the other side: this is
-          where a good part of that debt came from. Renders nothing when the
-          dashboard isn't reachable or has no pay model configured. */}
-      <EarnedVsTook
-        months={payMonths}
-        loans={txs}
-        problem={payProblem}
-        admin={admin}
-      />
 
       {/* Credit score, last pulled from Money App */}
       {fico && (

@@ -14,7 +14,9 @@ import { Card } from "@/components/ui";
 import { money } from "@/lib/data";
 import { yearColor, yearInk, yearTint } from "@/lib/debtColors";
 import DebtGrowthChart from "@/components/DebtGrowthChart";
+import BusinessPayMonth from "@/components/BusinessPayMonth";
 import type { DebtSnapshotRow, DebtTransaction } from "@/lib/store";
+import type { PayMonth } from "@/lib/gymPay";
 
 // One card, one list of years. This used to be two — a "Debt by year" summary
 // and a separate "Where the debt came from" drill-down — which meant scrolling
@@ -250,6 +252,8 @@ export default function DebtByYear({
   transactions,
   spending,
   snapshots,
+  payMonths,
+  payProblem,
   total,
   currentYear,
   admin,
@@ -259,6 +263,10 @@ export default function DebtByYear({
   transactions: DebtTransaction[];
   spending: DebtTransaction[];
   snapshots: DebtSnapshotRow[];
+  // Business pay, keyed by month, shown inside the month it belongs to rather
+  // than in a card of its own repeating the same months.
+  payMonths: PayMonth[];
+  payProblem: string | null;
   total: number;
   currentYear: number;
   admin: boolean;
@@ -280,6 +288,14 @@ export default function DebtByYear({
     [transactions, spending, snapshots, total, currentYear],
   );
   const maxOwed = Math.max(...rows.map((r) => r.owed), 1);
+
+  // "2026-3" -> that month's business pay.
+  const payByMonth = new Map(
+    payMonths.map((p) => [`${Number(p.month.slice(0, 4))}-${Number(p.month.slice(5, 7))}`, p]),
+  );
+  // Every month's gap added up. One month over is a rounding error; two years
+  // of it is the story, so it leads.
+  const totalGap = payMonths.reduce((sum, p) => sum + p.difference, 0);
   const thisYear = rows[0];
   const addedThisYear = thisYear?.known ? thisYear.added : 0;
 
@@ -301,9 +317,40 @@ export default function DebtByYear({
         </p>
       )}
 
+      {/* What the business side adds up to across every month. It used to head
+          its own card, which repeated these same months underneath — so it
+          moved here and the duplicate card went. */}
+      {payMonths.length > 0 && (
+        <div
+          className="mt-3 rounded-xl p-3"
+          style={{
+            background: totalGap > 0 ? "var(--warn-bg)" : "var(--good-bg)",
+            color: totalGap > 0 ? "var(--warn)" : "var(--good)",
+          }}
+        >
+          <p className="text-[13px]">
+            {totalGap > 0
+              ? "Taken from the business above what you earned"
+              : "Taken from the business below what you earned"}
+          </p>
+          <p className="text-2xl font-medium">{money(Math.abs(totalGap))}</p>
+          <p className="mt-1 text-[13px]">
+            {totalGap > 0
+              ? "Chris put in the difference to cover it."
+              : "You took less out than the work was worth."}
+          </p>
+        </div>
+      )}
+
+      {/* Admin-only: why the business half is missing, when it is. */}
+      {payMonths.length === 0 && payProblem && admin && (
+        <p className="mt-3 text-[13px] text-warn">{payProblem}</p>
+      )}
+
       <p className="mt-1 text-xs text-muted">
-        Tap a year to see the months, then a month to see every transaction — and
-        which account it came out of, so you can check it against a statement.
+        Tap a year to see the months, then a month to see every transaction —
+        what Chris lent you and what the business paid, with the account each
+        came out of so you can check it against a statement.
       </p>
 
       <div className="mt-3 space-y-2">
@@ -475,7 +522,11 @@ export default function DebtByYear({
                         </button>
 
                         {monthOpen && (
-                          <ul className="space-y-2 pb-2 pl-5">
+                          <div className="pb-2 pl-5">
+                          <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">
+                            Chris lent you
+                          </p>
+                          <ul className="space-y-2">
                             {m.items.map((t) => (
                               <li
                                 key={t.id}
@@ -525,6 +576,10 @@ export default function DebtByYear({
                               </li>
                             ))}
                           </ul>
+                          {payByMonth.get(key) && (
+                            <BusinessPayMonth pay={payByMonth.get(key)!} />
+                          )}
+                          </div>
                         )}
                       </div>
                     );
