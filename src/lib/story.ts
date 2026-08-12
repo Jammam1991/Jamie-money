@@ -1,15 +1,17 @@
-// ── The settlement story, straight from Money App ────────────────────────────
-// The Debt Story page used to be written here, with its own chapters and its
-// own figures. Money App keeps the real evidence file — every line compiled
-// from statements and the Divorce workbook — and the two disagreed: $316,680
-// here against $158,025 there, for the same claim.
+// ── The settlement story, as Money App reads it ──────────────────────────────
+// Not the raw evidence file — the worked-out view of it. Money App decides
+// which lines go on the face and in what order, what counts toward a chapter's
+// figure, which rows sit outside the arithmetic, and how much rests on
+// documents rather than recollection.
 //
-// So this page no longer holds an opinion. It reads Money App's file and shows
-// it. One document, two readers.
+// That matters because this page used to re-derive those rules and got them
+// wrong every time: preview lines in the wrong order, a chapter understated by
+// $2,500, Chris's own costs counted into a total they're meant to be outside
+// of. Now there is one answer and this page only draws it.
 //
 // Uses the same MONEYAPP_API_URL / MONEYAPP_API_KEY as the debt sync.
 
-export type StoryEntry = {
+export type StoryLine = {
   date: string | null;
   amount: number; // negative = money Chris paid out or is owed back
   label: string;
@@ -22,16 +24,26 @@ export type StoryChapter = {
   era: string;
   title: string;
   narrative: string[];
-  total: number;
-  entries: StoryEntry[];
-  rollups: { label: string; amount: number }[];
   evidence: string[];
-  // How Money App draws the chapter. The caption in particular is the sentence
-  // that says what the number on the card is — without it this page fell back
-  // to the narrative's opening line and the two read differently.
+
   emoji: string;
   tone: string;
   caption: string;
+
+  net: number; // the figure on the face
+  entryNet: number; // entries only, for the total inside the drill-down
+  paidOut: number;
+  cameBack: number;
+  showTiles: boolean;
+  rollupNet: number;
+  chrisOnlyNet: number;
+  actualCount: number;
+  estimateCount: number;
+
+  preview: StoryLine[]; // already sorted and cut — render, don't decide
+  entries: StoryLine[];
+  chrisOnly: StoryLine[];
+  rollups: { label: string; amount: number }[];
 };
 
 export type Story = {
@@ -41,7 +53,7 @@ export type Story = {
 };
 
 // Null when Money App isn't reachable or isn't configured. The page says so
-// rather than falling back to numbers of its own — a second set of figures is
+// rather than falling back to figures of its own — a second set of numbers is
 // exactly what this replaced.
 export async function getStory(): Promise<Story | null> {
   const baseUrl = process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
