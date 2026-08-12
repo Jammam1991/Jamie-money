@@ -121,7 +121,10 @@ function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
       {chapter.preview.length > 0 && (
         <ul className="mt-3 space-y-2 text-[14px]">
           {chapter.preview.map((e, i) => (
-            <Line key={`${e.label}-${i}`} line={e} />
+            // The face stays readable: label, date, amount. An estimate's
+            // reasoning can run to a paragraph, and it belongs where someone
+            // has chosen to look at it.
+            <Line key={`${e.label}-${i}`} line={e} compact />
           ))}
         </ul>
       )}
@@ -208,7 +211,7 @@ function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
   );
 }
 
-function Line({ line }: { line: StoryLine }) {
+function Line({ line, compact = false }: { line: StoryLine; compact?: boolean }) {
   return (
     <li className="flex justify-between gap-3">
       <span className="min-w-0">
@@ -217,7 +220,10 @@ function Line({ line }: { line: StoryLine }) {
           <span className="block text-xs text-muted">
             {line.date}
             {line.date && line.estimate ? " · " : ""}
-            {line.estimate ? `worked out from ${line.estimate.basis}` : ""}
+            {/* On the face, an estimate is marked and nothing more — the
+                reasoning behind one runs to a paragraph and would bury the
+                three lines it sits among. */}
+            {line.estimate ? (compact ? "estimate" : `worked out from ${line.estimate.basis}`) : ""}
           </span>
         )}
       </span>
