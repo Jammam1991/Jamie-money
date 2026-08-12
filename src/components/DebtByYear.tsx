@@ -21,9 +21,22 @@ import type { DebtTransaction } from "@/lib/store";
 // past the same years twice to get from a total to the transactions behind it.
 // The years are now the drill-down: tap one and it opens.
 
-// How far back the year list goes. Any year with nothing logged says
-// "Coming soon" instead of pretending we know the numbers.
-const FIRST_YEAR = 2023;
+// How far back the year list goes when there's nothing to go on. The real
+// starting point is the oldest transaction on record — this is only the
+// fallback for an empty page, so it doesn't sit there showing a single year.
+//
+// It used to be a fixed 2023, from before the loans came across from Money
+// App and that was genuinely as far back as anything went. Once years of
+// history synced in, a hardcoded floor just hid most of it.
+const FALLBACK_FIRST_YEAR = 2023;
+
+// A year read off a YYYY-MM-DD string, or null if it isn't one. Read off the
+// string rather than via `new Date()`, which would shift a January 1st charge
+// into the year before depending on the timezone.
+function yearOf(date: string): number | null {
+  const year = Number(date.slice(0, 4));
+  return Number.isFinite(year) && year > 1900 ? year : null;
+}
 
 // What debt at 15% costs to keep up with each month: one month of interest
 // (15% ÷ 12) plus 1% of the balance — the way a credit card sets its minimum.
@@ -94,9 +107,16 @@ function buildRows(
     byYear.set(y, months);
   }
 
+  // Start from the oldest year anything happened in, so the list covers the
+  // whole history rather than a fixed window that quietly cuts it off.
+  const years = [...txs, ...spending]
+    .map((t) => yearOf(t.txDate))
+    .filter((y): y is number => y !== null && y <= currentYear);
+  const firstYear = years.length > 0 ? Math.min(...years) : FALLBACK_FIRST_YEAR;
+
   const rows: YearRow[] = [];
   let owed = total;
-  for (let year = currentYear; year >= FIRST_YEAR; year--) {
+  for (let year = currentYear; year >= firstYear; year--) {
     const months = byYear.get(year);
     const grouped: MonthGroup[] = [...(months?.entries() ?? [])]
       .sort((a, b) => b[0] - a[0])
@@ -112,7 +132,10 @@ function buildRows(
     rows.push({
       year,
       added,
-      owed,
+      // Walking back can run past zero once the history reaches further back
+      // than today's balance can explain — old loans since repaid, or accounts
+      // that have closed. "Owed -$12,000" is nonsense, so it floors at zero.
+      owed: Math.max(0, owed),
       known: Boolean(months),
       months: grouped,
       spent: spentItems.reduce((sum, s) => sum + s.amount, 0),
