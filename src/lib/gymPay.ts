@@ -132,17 +132,29 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
       };
     }
     if (res.status === 401) {
-      // Two rounds of "copy the value across" haven't fixed it, so name the
-      // key this app is actually sending — its length and a fingerprint. Both
-      // are safe: the note is admin-only, and a SHA-256 prefix reveals nothing
-      // about the key itself. Chris can fingerprint the gym dashboard's value
-      // the same way and see in one glance whether they differ, instead of
-      // squinting at two long strings.
+      // Both ends fingerprint their key the same way, so the mismatch can be
+      // read off the screen instead of guessed at. Same fingerprints with a
+      // 401 still means the gym dashboard is running an older build — the
+      // value it holds only changes when it redeploys.
+      const body = await res.json().catch(() => null);
+      const mine = `${apiKey.length} chars, ${fingerprint(apiKey)}`;
+      const theirs =
+        body?.expectedFingerprint && body?.expectedLength
+          ? `${body.expectedLength} chars, ${body.expectedFingerprint}`
+          : null;
+
+      if (!theirs) {
+        return {
+          months: [],
+          problem: `The gym dashboard rejected this key (${mine}). Its own deploy may predate the version that reports which key it expects — redeploy the gym dashboard and look again.`,
+        };
+      }
       return {
         months: [],
         problem:
-          `The gym dashboard has a key set, and this one doesn't match it. This app is sending a ${apiKey.length}-character key, fingerprint ${fingerprint(apiKey)}. ` +
-          `Run: echo -n 'THE_GYM_VALUE' | shasum -a 256 — if the first 8 characters differ, the two values aren't the same. Also check you edited the same environment (Production vs Preview) as the deployment you're looking at.`,
+          theirs === mine
+            ? `Both ends hold the same key (${mine}) and it's still being rejected — so the gym dashboard is serving an older build. Redeploy it and make sure the new deployment becomes the live one.`
+            : `The keys don't match. This app sends ${mine}; the gym dashboard expects ${theirs}. Paste the same value into both, then redeploy both.`,
       };
     }
     if (res.status === 404) {
