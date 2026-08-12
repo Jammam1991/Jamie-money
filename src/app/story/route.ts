@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { createHmac } from "node:crypto";
 import { isLoggedIn } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -11,18 +10,19 @@ export const dynamic = "force-dynamic";
 // drifting — different preview lines, missing sections, a chapter understated
 // by $2,500 — so this hands the reader over instead.
 //
-// Jamie has no Money App account, so this mints a short-lived pass with the
-// shared key. Money App swaps it for a cookie at its door and it grants that
-// one page: not a session, not the rest of Money App.
+// Jamie has no Money App account, so we ask Money App for a pass using the API
+// key, server-side, and send him through its door with it. Money App does the
+// signing: it stores API keys hashed, so it can't verify a signature we make
+// with one. That was the first attempt, and it sent everyone to a login page.
 //
-// The pass is minted per click and lives about a second in the address bar, so
-// it isn't something to bookmark or share — which is the point.
-const PASS_TTL_SECONDS = 60 * 60 * 12;
+// The key never leaves this server. The pass is minted per click, lasts 12
+// hours, and grants that one page.
+export async function GET(request: Request) {
+  const here = new URL(request.url).origin;
 
-export async function GET() {
   // Same gate as every page here. The story is not public.
   if (!(await isLoggedIn())) {
-    return NextResponse.redirect(new URL("/login", process.env.APP_URL ?? "http://localhost:3000"));
+    return NextResponse.redirect(new URL("/login", here));
   }
 
   const baseUrl = process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
@@ -31,13 +31,28 @@ export async function GET() {
     return new NextResponse("Money App isn't connected yet.", { status: 503 });
   }
 
-  // Money App verifies this with the same key and the same recipe.
-  const expiry = Math.floor(Date.now() / 1000) + PASS_TTL_SECONDS;
-  const signature = createHmac("sha256", apiKey)
-    .update(`story:${expiry}`)
-    .digest("hex");
+  const origin = baseUrl.replace(/\/$/, "");
+  try {
+    const res = await fetch(`${origin}/api/divorce/story/pass`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      return new NextResponse(
+        `Money App wouldn't issue a pass to the story (${res.status}).`,
+        { status: 502 },
+      );
+    }
+    const { pass } = await res.json();
+    if (!pass) {
+      return new NextResponse("Money App sent no pass.", { status: 502 });
+    }
 
-  const url = new URL("/divorce/story/enter", baseUrl.replace(/\/$/, ""));
-  url.searchParams.set("pass", `${expiry}.${signature}`);
-  return NextResponse.redirect(url);
+    const url = new URL("/divorce/story/enter", origin);
+    url.searchParams.set("pass", pass);
+    return NextResponse.redirect(url);
+  } catch {
+    return new NextResponse("Couldn't reach Money App.", { status: 502 });
+  }
 }
