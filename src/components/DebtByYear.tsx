@@ -68,11 +68,36 @@ const inputClass =
 type MonthGroup = { month: number; total: number; items: DebtTransaction[] };
 
 // Where a year's "owed" figure comes from. `added` is always real — it's that
-// year's transactions added up — but `owed` is only real for the years a credit
-// report actually recorded, and worked backwards for the rest.
+// year's transactions added up — but `owed` is only real for the years
+// something actually recorded a balance, and worked backwards for the rest.
+type Evidence = "statement" | "credit report" | "recorded";
+
 type OwedSource =
-  | { kind: "actual"; asOf: string } // a real recorded balance, on this date
+  | { kind: "actual"; asOf: string; from: Evidence }
   | { kind: "estimated" };
+
+// How strong a recorded balance is, read off the note Money App saved with it.
+//
+// A statement is the account itself telling us what was owed that day. A credit
+// report is a bureau's copy, filed weeks later and missing anything the lender
+// didn't report — close, but not the source. Anything else was typed in.
+//
+// Ranked, because a year can hold several records and the best one should win
+// even when it isn't the latest.
+const EVIDENCE_RANK: Record<Evidence, number> = {
+  statement: 3,
+  "credit report": 2,
+  recorded: 1,
+};
+
+function evidenceOf(note: string | null): Evidence {
+  const n = (note ?? "").toLowerCase();
+  if (n.includes("statement")) return "statement";
+  if (n.includes("cr update") || n.includes("credit report") || n.includes("bureau")) {
+    return "credit report";
+  }
+  return "recorded";
+}
 
 type YearRow = {
   year: number;
@@ -90,24 +115,41 @@ type YearRow = {
 
 // The last real balance recorded in each year.
 //
-// Every credit report Money App imports writes one row per account on the
-// report date, so adding up a single date's rows gives what was genuinely owed
-// that day. The newest date inside a year is the closest thing to a proven
-// year-end figure — everything else has to be worked out backwards.
-function actualByYear(snapshots: DebtSnapshotRow[]): Map<number, { total: number; asOf: string }> {
-  // One running total per report date.
-  const byDate = new Map<string, number>();
+// Applying a statement, and importing a credit report, both write one balance
+// row per account on the date they cover — so adding up a single date's rows
+// gives what was genuinely owed that day.
+//
+// Two things decide which date represents a year: how strong the evidence is,
+// then how close to year end it falls. Strength comes first — a statement in
+// June beats a credit report in December, because the bureau's copy can miss an
+// account the lender never reported, and a missing account silently understates
+// the total.
+type Recorded = { total: number; asOf: string; from: Evidence };
+
+function actualByYear(snapshots: DebtSnapshotRow[]): Map<number, Recorded> {
+  // One running total per date, remembering the weakest evidence behind it —
+  // a date is only as trustworthy as its shakiest row.
+  const byDate = new Map<string, { total: number; from: Evidence }>();
   for (const s of snapshots) {
-    byDate.set(s.date, (byDate.get(s.date) ?? 0) + s.balance);
+    const held = byDate.get(s.date);
+    const from = evidenceOf(s.note);
+    byDate.set(s.date, {
+      total: (held?.total ?? 0) + s.balance,
+      from:
+        held && EVIDENCE_RANK[held.from] < EVIDENCE_RANK[from] ? held.from : from,
+    });
   }
 
-  const best = new Map<number, { total: number; asOf: string }>();
-  for (const [date, total] of byDate) {
+  const best = new Map<number, Recorded>();
+  for (const [date, { total, from }] of byDate) {
     const year = yearOf(date);
     if (year === null) continue;
     const held = best.get(year);
-    // Latest date in the year wins — it's the closest to year end.
-    if (!held || date > held.asOf) best.set(year, { total, asOf: date });
+    const better =
+      !held ||
+      EVIDENCE_RANK[from] > EVIDENCE_RANK[held.from] ||
+      (EVIDENCE_RANK[from] === EVIDENCE_RANK[held.from] && date > held.asOf);
+    if (better) best.set(year, { total, asOf: date, from });
   }
   return best;
 }
@@ -172,7 +214,13 @@ function buildRows(
     const recorded = actuals.get(year);
     const proven =
       year === currentYear
-        ? { total, asOf: new Date().toISOString().slice(0, 10) }
+        ? // Today's balance comes straight from the lenders via Money App —
+          // the strongest evidence there is, and no older than this morning.
+          {
+            total,
+            asOf: new Date().toISOString().slice(0, 10),
+            from: "statement" as Evidence,
+          }
         : recorded;
 
     rows.push({
@@ -183,7 +231,7 @@ function buildRows(
       // that have closed. "Owed -$12,000" is nonsense, so it floors at zero.
       owed: Math.max(0, proven ? proven.total : owed),
       owedSource: proven
-        ? { kind: "actual", asOf: proven.asOf }
+        ? { kind: "actual", asOf: proven.asOf, from: proven.from }
         : { kind: "estimated" },
       known: Boolean(months),
       months: grouped,
@@ -335,9 +383,9 @@ export default function DebtByYear({
                         <span
                           className="rounded px-1.5 py-0.5 text-[11px] font-medium"
                           style={{ background: "var(--good-bg)", color: "var(--good)" }}
-                          title={`A real balance recorded on ${r.owedSource.asOf}`}
+                          title={`A real balance, from a ${r.owedSource.from} dated ${r.owedSource.asOf}`}
                         >
-                          Actual
+                          Actual · {r.owedSource.from}
                         </span>
                       ) : (
                         <span
