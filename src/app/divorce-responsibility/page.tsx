@@ -1,6 +1,6 @@
 import { PageTitle } from "@/components/ui";
-import DivorceResponsibilityClient from "@/components/DivorceResponsibilityClient";
 import StoryClient from "@/components/StoryClient";
+import SpendingHistory from "@/components/SpendingHistory";
 import { getStory } from "@/lib/story";
 import { isJamieView, pageGate } from "@/lib/visibility";
 import ComingSoon from "@/components/ComingSoon";
@@ -25,10 +25,10 @@ export default async function DivorceResponsibilityPage() {
     <div className="space-y-4">
       <PageTitle>The Debt Story</PageTitle>
       <StoryClient story={story} />
-      <DivorceResponsibilityClient
-        admin={role === "admin" && !jamieView}
-        storyHidden
-      />
+      {/* Chris's own working material. Off for Jamie, and off for Chris while
+          "View as Jamie" is on, so the toggle is a real check on what Jamie
+          sees rather than a nav preview. */}
+      {role === "admin" && !jamieView && <SpendingHistory />}
     </div>
   );
 }
