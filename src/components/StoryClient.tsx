@@ -20,6 +20,22 @@ import type { Story, StoryChapter } from "@/lib/story";
 // How many lines a chapter shows before "See all N lines".
 const PREVIEW_LINES = 3;
 
+// Money App tints each chapter by `tone`; these are the same five hues stepped
+// for a light background rather than its dark one. Matching the palette rather
+// than the exact hex is the point — the two pages should look like the same
+// document, not like one is a screenshot of the other.
+const TONE_COLOR: Record<string, string> = {
+  violet: "#6d28d9",
+  sky: "#0369a1",
+  amber: "#b45309",
+  teal: "#0f766e",
+  rose: "#be123c",
+};
+
+function toneColor(tone: string): string {
+  return TONE_COLOR[tone] ?? TONE_COLOR.violet;
+}
+
 export default function StoryClient({ story }: { story: Story | null }) {
   if (!story) {
     return (
@@ -67,30 +83,36 @@ function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
   const lines = allLines ? chapter.entries : chapter.entries.slice(0, PREVIEW_LINES);
   const hidden = chapter.entries.length - lines.length;
 
+  const accent = toneColor(chapter.tone);
+
   return (
-    <Card>
+    <Card className="border-l-4" style={{ borderLeftColor: accent }}>
       <div className="flex items-center gap-2">
         <span
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-          style={{ background: "var(--accent)" }}
+          style={{ background: accent }}
         >
           {index}
         </span>
-        <span className="text-[13px] text-muted">{chapter.era}</span>
+        <span className="text-[13px]" style={{ color: accent }}>
+          {chapter.era}
+        </span>
       </div>
 
-      <p className="mt-2 text-[17px] font-medium">{chapter.title}</p>
+      <p className="mt-2 text-[17px] font-medium">
+        {chapter.emoji} {chapter.title}
+      </p>
 
       {chapter.total !== 0 && (
-        <p className="mt-1 text-3xl font-medium text-warn">
+        <p className="mt-1 text-3xl font-medium" style={{ color: accent }}>
           {money(Math.abs(chapter.total))}
         </p>
       )}
 
-      {/* The first line of the narrative reads as the caption for the figure;
-          the rest is background, behind a tap. */}
-      {chapter.narrative[0] && (
-        <p className="mt-1 text-[14px] text-muted">{chapter.narrative[0]}</p>
+      {/* Money App's own caption — the sentence that says what the figure above
+          actually is. The narrative is background, behind a tap. */}
+      {chapter.caption && (
+        <p className="mt-1 text-[14px] text-muted">{chapter.caption}</p>
       )}
 
       {chapter.rollups.length > 0 && (
@@ -134,7 +156,7 @@ function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
         </button>
       )}
 
-      {chapter.narrative.length > 1 && (
+      {chapter.narrative.length > 0 && (
         <>
           <button
             className="mt-2 flex w-full items-center justify-between rounded-xl border border-border px-3 py-2 text-[14px]"
@@ -149,7 +171,7 @@ function Chapter({ chapter, index }: { chapter: StoryChapter; index: number }) {
           </button>
           {background && (
             <div className="mt-2 space-y-2 text-[14px] text-muted">
-              {chapter.narrative.slice(1).map((p, i) => (
+              {chapter.narrative.map((p, i) => (
                 <p key={i}>{p}</p>
               ))}
             </div>
