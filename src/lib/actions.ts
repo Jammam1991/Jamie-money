@@ -796,3 +796,46 @@ export async function deleteDebtTransaction(id: string): Promise<ActionResult> {
   revalidatePath("/debt");
   return { ok: true };
 }
+
+// ── Tax documents (Google Drive links) ───────────────────────────────────────
+// The one piece of the Tax Center that lives here rather than in the Money
+// App — Chris adds the link once he's got a redacted return saved to Drive.
+export async function addTaxDocument(input: {
+  year: number;
+  driveUrl: string;
+  label?: string;
+}): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const url = input.driveUrl.trim();
+  if (!/^https:\/\//i.test(url)) {
+    return { ok: false, error: "That doesn't look like a link (needs to start with https://)." };
+  }
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data, error } = await c
+    .from("tax_documents")
+    .insert({
+      tax_year: input.year,
+      drive_url: url,
+      label: input.label?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/tax-center");
+  return { ok: true, id: data.id };
+}
+
+export async function deleteTaxDocument(id: string): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("tax_documents").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/tax-center");
+  return { ok: true };
+}

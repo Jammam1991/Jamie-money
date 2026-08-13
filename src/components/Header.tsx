@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Scale, CreditCard, FileText, BookOpen, Building2 } from "lucide-react";
+import { Menu, X, Scale, CreditCard, FileText, BookOpen, Building2, Landmark } from "lucide-react";
 
 // The slide-out menu. Every row always shows — a page parked as "Coming Soon"
 // on the Settings screen keeps its link and says so when Jamie opens it.
@@ -11,6 +11,7 @@ const links = [
   { href: "/debt", label: "Debt", Icon: CreditCard },
   { href: "/credit-report", label: "Credit Report", Icon: FileText },
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },
+  { href: "/tax-center", label: "Tax Center", Icon: Landmark },
   { href: "/divorce", label: "Divorce", Icon: Scale },
   {
     href: "/story",
