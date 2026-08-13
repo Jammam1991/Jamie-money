@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Gauge,
   X,
+  AlertCircle,
 } from "lucide-react";
 import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
@@ -73,6 +74,29 @@ const inputClass =
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
+// Business debt keywords
+const BUSINESS_KEYWORDS = ["ampac", "pace", "gym", "business"];
+
+function isBusinessDebt(debt: Debt): boolean {
+  return BUSINESS_KEYWORDS.some((kw) => debt.name.toLowerCase().includes(kw));
+}
+
+// Create a virtual debt entry for the divorce settlement loan
+function createDivorceLoan(): Debt {
+  const monthlyPayment = 900; // From divorce settlement
+  const estimatedMonths = 60; // 5-year estimate
+  return {
+    id: "__divorce_settlement__",
+    name: "Divorce Settlement Loan",
+    balance: monthlyPayment * estimatedMonths,
+    monthly: monthlyPayment,
+    paidPct: 0,
+    apr: 0, // Settlement payments don't accrue interest
+    minPayment: monthlyPayment,
+    debtType: "settlement",
+  };
+}
+
 export default function DebtClient({
   initialDebts,
   admin,
@@ -107,12 +131,19 @@ export default function DebtClient({
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
 
-  const total = totalBalance(debts);
-  const minTotal = totalMinimum(debts);
-  const mo = monthlyInterest(debts);
+  const divorceLoan = createDivorceLoan();
+  const allDebtsIncludingDivorce = [...debts, divorceLoan];
+
+  const total = totalBalance(allDebtsIncludingDivorce);
+  const minTotal = totalMinimum(allDebtsIncludingDivorce);
+  const mo = monthlyInterest(allDebtsIncludingDivorce);
   const cards = cardBalance(debts);
   const carLoans = carLoanBalance(debts);
   const personalLoans = personalLoanBalance(debts);
+
+  // Partition debts into personal and business
+  const personalDebts = debts.filter((d) => !isBusinessDebt(d));
+  const businessDebts = debts.filter((d) => isBusinessDebt(d));
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
@@ -311,11 +342,20 @@ export default function DebtClient({
         />
       )}
 
-      {/* Debt list */}
+      {/* Total debt secured header */}
       <Card>
-        <p className="mb-2 text-[13px] text-muted">Your debts</p>
+        <p className="text-[13px] text-muted">Total Debt Secured</p>
+        <p className="mt-2 text-3xl font-medium">{money(total)}</p>
+        <p className="mt-1 text-xs text-muted">
+          {money(minTotal)}/mo minimum payments · {money(mo)}/mo in finance charges
+        </p>
+      </Card>
+
+      {/* Personal Debt Secured */}
+      <Card>
+        <p className="mb-3 text-[13px] font-medium">Personal Debt Secured</p>
         <div className="space-y-3">
-          {debts.map((d) =>
+          {personalDebts.map((d) =>
             editingId === d.id ? (
               <DebtForm
                 key={d.id}
@@ -359,29 +399,29 @@ export default function DebtClient({
               </div>
             )
           )}
-        </div>
 
-        {/* What the whole list costs each month: what has to be paid, and how
-            much of that is pure interest. */}
-        {debts.length > 0 && (
-          <div className="mt-3 space-y-1 border-t border-border pt-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-muted">Minimum payments</span>
-              <span>{money(minTotal)}/mo</span>
+          {/* Divorce Settlement Loan */}
+          <div>
+            <div className="flex items-center justify-between font-medium">
+              <span className="flex items-center gap-1.5">
+                {divorceLoan.name}
+                <span className="inline-block rounded bg-warn/20 px-1.5 py-0.5 text-[10px] font-medium text-warn">
+                  ESTIMATED
+                </span>
+              </span>
+              <span>{money(divorceLoan.balance)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">Finance charges</span>
-              <span className="text-warn">{money(mo)}/mo</span>
-            </div>
-            {minTotal > 0 && mo > 0 && (
-              <p className="pt-1 text-muted">
-                {mo >= minTotal
-                  ? "Paying the minimums doesn't cover the interest — the balance grows."
-                  : `${money(minTotal - mo)}/mo of the minimums actually comes off what you owe.`}
+            <p className="mb-2 mt-1 text-xs text-muted">
+              {divorceLoan.apr}% interest · {money(divorceLoan.minPayment)}/mo minimum
+            </p>
+            <div className="flex items-start gap-2 rounded-lg bg-tint p-2">
+              <AlertCircle size={14} className="mt-0.5 text-muted flex-shrink-0" />
+              <p className="text-xs text-muted">
+                This is an estimate based on the settlement support amount. Actual balance may differ.
               </p>
-            )}
+            </div>
           </div>
-        )}
+        </div>
 
         {admin &&
           (adding ? (
@@ -398,6 +438,59 @@ export default function DebtClient({
             </button>
           ))}
       </Card>
+
+      {/* Business Debt Secured */}
+      {businessDebts.length > 0 && (
+        <Card>
+          <p className="mb-3 text-[13px] font-medium">Business Debt Secured</p>
+          <div className="space-y-3">
+            {businessDebts.map((d) =>
+              editingId === d.id ? (
+                <DebtForm
+                  key={d.id}
+                  initial={d}
+                  onCancel={() => setEditingId(null)}
+                  onSave={(data) => handleUpdate({ ...d, ...data })}
+                />
+              ) : (
+                <div key={d.id}>
+                  <div className="flex items-center justify-between font-medium">
+                    <span className="truncate">{d.name}</span>
+                    <span className="flex items-center gap-3">
+                      {money(d.balance)}
+                      {admin && (
+                        <>
+                          <button
+                            aria-label="Edit"
+                            className="text-muted"
+                            onClick={() => setEditingId(d.id)}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            aria-label="Delete"
+                            className="text-muted"
+                            onClick={() => handleDelete(d.id)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <p className="mb-2 mt-1 text-xs text-muted">
+                    {d.apr}% interest · {money(d.minPayment)}/mo minimum
+                    {financeCharge(d) > 0 && (
+                      <> · {money(financeCharge(d))}/mo finance charge</>
+                    )}
+                  </p>
+                  {d.paidPct > 0 && <Bar pct={d.paidPct} />}
+                </div>
+              )
+            )}
+          </div>
+        </Card>
+      )}
 
     </div>
   );
