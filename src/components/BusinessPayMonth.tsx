@@ -30,6 +30,7 @@ function shortDate(iso: string | null): string {
 
 export default function BusinessPayMonth({ pay }: { pay: PayMonth }) {
   const [openLine, setOpenLine] = useState<string | null>(null);
+  const [openDistribution, setOpenDistribution] = useState<string | null>(null);
   const over = pay.difference > 0;
 
   const parts = (
@@ -129,15 +130,55 @@ export default function BusinessPayMonth({ pay }: { pay: PayMonth }) {
         <div className="mt-2">
           <p className="text-xs font-medium">Where what you took came from</p>
           <ul className="mt-1 space-y-1 text-xs text-muted">
-            {pay.tookFrom.map((a) => (
-              <li key={a.name} className="flex justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1">
-                  <Landmark size={11} className="shrink-0" />
-                  <span className="truncate">{a.name}</span>
-                </span>
-                <span className="shrink-0">{money(a.amount)}</span>
-              </li>
-            ))}
+            {pay.tookFrom.map((a) => {
+              const canOpen = Boolean(a.transactions && a.transactions.length > 0);
+              const distOpen = openDistribution === a.name;
+              return (
+                <li key={a.name}>
+                  <button
+                    className="flex w-full items-center justify-between gap-2 text-left disabled:cursor-default"
+                    onClick={() => setOpenDistribution(distOpen ? null : a.name)}
+                    disabled={!canOpen}
+                    aria-expanded={canOpen ? distOpen : undefined}
+                  >
+                    <span className="flex min-w-0 items-center gap-1">
+                      {canOpen && (
+                        <ChevronDown
+                          size={11}
+                          className={`shrink-0 transition-transform ${distOpen ? "rotate-180" : "-rotate-90"}`}
+                        />
+                      )}
+                      <Landmark size={11} className="shrink-0" />
+                      <span className="truncate">{a.name}</span>
+                      {canOpen && <span className="text-faint">({a.transactions!.length})</span>}
+                    </span>
+                    <span className="shrink-0">{money(a.amount)}</span>
+                  </button>
+
+                  {distOpen && a.transactions && (
+                    <ul
+                      className="mt-1 space-y-1 border-l pl-3"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      {a.transactions.map((t, i) => (
+                        <li
+                          key={`${t.date ?? ""}-${t.label}-${i}`}
+                          className="flex items-start justify-between gap-2"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate">{t.label}</span>
+                            <span className="block text-faint">
+                              {[shortDate(t.date), t.meta].filter(Boolean).join(" · ")}
+                            </span>
+                          </span>
+                          <span className="shrink-0">{money(t.amount)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

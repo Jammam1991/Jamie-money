@@ -41,7 +41,7 @@ export type PayMonth = {
     management: number;
     profitShare: number;
   };
-  tookFrom: { name: string; amount: number }[];
+  tookFrom: { name: string; amount: number; transactions?: EarnLine[] }[];
   // The individual sessions, classes and leads behind the earnings. Null when
   // the gym dashboard is too old to send them.
   earnedDetails: EarnedDetails | null;
