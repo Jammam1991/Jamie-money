@@ -201,25 +201,33 @@ export default function DebtClient({
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
-  // The same money cut a different way: what's behind each debt rather than
-  // whose it is. The settlement is its own line rather than folded into
-  // unsecured, so the three add up to the total exactly.
-  const carDebts = debts.filter(isCarLoan);
-  const unsecuredDebts = debts.filter(isUnsecured);
+  // The same money cut a different way: Jamie's own unsecured debt, his car,
+  // the gym's debt, and the settlement — kept apart rather than lumped into
+  // one "Unsecured" line, so a business balance never reads as Jamie's. These
+  // four still add up to the total exactly.
+  const personalUnsecuredDebts = personalDebts.filter(isUnsecured);
+  const personalCarDebts = personalDebts.filter(isCarLoan);
   const breakdown = [
     {
-      key: "unsecured",
-      label: "Unsecured",
-      note: "cards and loans with nothing behind them",
-      balance: totalBalance(unsecuredDebts),
-      monthly: totalMinimum(unsecuredDebts),
+      key: "personal-cards",
+      label: "Jamie Personal Cards",
+      note: "cards and loans in Jamie's name",
+      balance: totalBalance(personalUnsecuredDebts),
+      monthly: totalMinimum(personalUnsecuredDebts),
     },
     {
       key: "car",
-      label: "Car",
+      label: "Jamie's Car",
       note: "backed by the car itself",
-      balance: totalBalance(carDebts),
-      monthly: totalMinimum(carDebts),
+      balance: totalBalance(personalCarDebts),
+      monthly: totalMinimum(personalCarDebts),
+    },
+    {
+      key: "business",
+      label: "Jamie Business Secured",
+      note: "the gym's loans and cards",
+      balance: businessTotal,
+      monthly: totalMinimum(businessDebts),
     },
     {
       key: "divorce",
