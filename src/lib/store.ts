@@ -622,10 +622,19 @@ export async function getOverallContext(): Promise<OverallContext> {
 // a read-only copy refreshed by syncMoneyAppDebts — nothing here is edited in
 // this app.
 
+export interface NegativeFactor {
+  name: string;
+  kind?: string;
+  status?: string;
+  balance?: number;
+  pastDue?: number;
+}
+
 export interface FicoScoreEntry {
   score: number;
   scoredOn: string;
   note: string | null;
+  negatives?: NegativeFactor[] | null;
 }
 
 // The credit-score history, oldest first so the chart reads left to right.
@@ -641,6 +650,7 @@ export async function getFicoHistory(): Promise<FicoScoreEntry[]> {
     score: Number(row.score),
     scoredOn: row.scored_on,
     note: row.note ?? null,
+    negatives: Array.isArray(row.negatives) ? (row.negatives as NegativeFactor[]) : null,
   }));
 }
 

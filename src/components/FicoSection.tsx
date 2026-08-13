@@ -137,12 +137,17 @@ function FicoScoreChart({ history }: { history: FicoScoreEntry[] }) {
 
 export function FicoSection({ history }: { history: FicoScoreEntry[] }) {
   const [showHistory, setShowHistory] = useState(false);
+  const [showNegatives, setShowNegatives] = useState(false);
 
   // Newest first, matching how Money App reads it.
   const sorted = [...history].sort((a, b) => b.scoredOn.localeCompare(a.scoredOn));
   const latest = sorted[0] ?? null;
   const previous = sorted[1] ?? null;
   const delta = latest && previous ? latest.score - previous.score : null;
+
+  // Get top 2 negative factors
+  const negatives = latest?.negatives ?? null;
+  const topNegatives = negatives ? negatives.slice(0, 2) : null;
 
   return (
     <div className="bg-card rounded-2xl border border-border p-4">
@@ -161,21 +166,53 @@ export function FicoSection({ history }: { history: FicoScoreEntry[] }) {
       </div>
 
       {latest ? (
-        <div className="flex items-end gap-4 mb-2">
-          <div>
-            <p className={`text-5xl font-bold tabular-nums ${ficoColor(latest.score)}`}>
-              {latest.score}
-            </p>
-            <p className="text-xs text-faint mt-1">
-              {ficoLabel(latest.score)} · as of {fmtLocalDate(latest.scoredOn)}
-            </p>
-          </div>
-          {delta !== null && (
-            <div
-              className={`pb-1 text-sm font-semibold ${delta > 0 ? "text-pos" : delta < 0 ? "text-neg" : "text-faint"}`}
+        <div className="mb-2">
+          <div className="flex items-end gap-4">
+            <button
+              onClick={() => topNegatives && setShowNegatives((v) => !v)}
+              disabled={!topNegatives}
+              className={topNegatives ? "cursor-pointer hover:opacity-80 transition-opacity" : "cursor-default"}
             >
-              {delta > 0 ? `+${delta}` : delta < 0 ? `${delta}` : "No change"}
-              <span className="text-[10px] font-normal text-faint ml-1">vs prev</span>
+              <p className={`text-5xl font-bold tabular-nums ${ficoColor(latest.score)}`}>
+                {latest.score}
+              </p>
+              <p className="text-xs text-faint mt-1">
+                {ficoLabel(latest.score)} · as of {fmtLocalDate(latest.scoredOn)}
+              </p>
+            </button>
+            {delta !== null && delta < 0 && (
+              <div className="pb-1 text-neg flex items-baseline gap-1">
+                <span className="text-lg">↓</span>
+                <span className="text-sm font-semibold">{Math.abs(delta)} pts</span>
+              </div>
+            )}
+            {delta !== null && delta > 0 && (
+              <div className="pb-1 text-pos flex items-baseline gap-1">
+                <span className="text-lg">↑</span>
+                <span className="text-sm font-semibold">{delta} pts</span>
+              </div>
+            )}
+            {delta !== null && delta === 0 && (
+              <div className="pb-1 text-faint text-sm font-semibold">No change</div>
+            )}
+          </div>
+
+          {showNegatives && topNegatives && topNegatives.length > 0 && (
+            <div className="mt-3 rounded-lg border border-border bg-card/50 p-3 space-y-2">
+              <p className="text-xs font-semibold text-faint uppercase tracking-wider">Factors bringing score down</p>
+              <ul className="space-y-2">
+                {topNegatives.map((factor, i) => (
+                  <li key={i} className="text-sm">
+                    <p className="font-semibold text-foreground">{factor.name}</p>
+                    {factor.kind && (
+                      <p className="text-xs text-muted">{factor.kind}</p>
+                    )}
+                    {factor.status && (
+                      <p className="text-xs text-faint">{factor.status}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>
