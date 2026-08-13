@@ -149,6 +149,18 @@ export function FicoSection({ history }: { history: FicoScoreEntry[] }) {
   const negatives = latest?.negatives ?? null;
   const topNegatives = negatives ? negatives.slice(0, 2) : null;
 
+  // Debug logging
+  if (typeof window !== "undefined") {
+    console.log("FicoSection debug:", {
+      historyLength: history.length,
+      sortedLength: sorted.length,
+      latest: latest ? { score: latest.score, scoredOn: latest.scoredOn, negativesCount: latest.negatives?.length } : null,
+      previous: previous ? { score: previous.score, scoredOn: previous.scoredOn } : null,
+      delta,
+      topNegatives: topNegatives ? topNegatives.map(n => ({ name: n.name, kind: n.kind })) : null,
+    });
+  }
+
   return (
     <div className="bg-card rounded-2xl border border-border p-4">
       <div className="flex items-center justify-between mb-4">
