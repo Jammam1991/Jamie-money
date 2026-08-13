@@ -10,6 +10,7 @@ import {
   NEGATIVE_KIND_LABEL,
   fmtLocalDate,
   fmtMoney,
+  isAuthorizedUser,
   todayLocalISO,
   type ReportAccount,
   type ReportSnapshot,
@@ -48,7 +49,8 @@ type DetailKey =
   | "interest"
   | "negatives"
   | "inquiries"
-  | "business";
+  | "business"
+  | "authorized";
 
 type DetailRow = {
   key: string;
@@ -187,24 +189,36 @@ export function CreditReportOverview({
   const { reasons, negatives, summary, inquiries, reportAccounts } = snapshot;
   const today = todayLocalISO();
 
+  // Cards someone else owns and he's only named on come off every figure that
+  // says what he owes. They stay on the page — they still move his score, and
+  // leaving them out silently would look like the report was missing rows.
+  const [owed, notHis] = useMemo(() => {
+    const his: ReportAccount[] = [];
+    const theirs: ReportAccount[] = [];
+    for (const a of reportAccounts) (isAuthorizedUser(a) ? theirs : his).push(a);
+    return [his, theirs];
+  }, [reportAccounts]);
+
   // ── Balances by group, straight off the bureau's own account types ─────────
   const groups = useMemo(() => {
     const sum = (pred: (a: ReportAccount) => boolean) =>
-      reportAccounts.filter(pred).reduce((s, a) => s + (a.balance ?? 0), 0);
+      owed.filter(pred).reduce((s, a) => s + (a.balance ?? 0), 0);
     return {
-      total: reportAccounts.reduce((s, a) => s + (a.balance ?? 0), 0),
+      total: owed.reduce((s, a) => s + (a.balance ?? 0), 0),
       cards: sum((a) => a.group === "credit_card"),
       loans: sum((a) => a.group === "loan"),
       business: sum((a) => a.group === "business"),
       other: sum((a) => a.group === "other"),
-      cardCount: reportAccounts.filter((a) => a.group === "credit_card").length,
-      loanCount: reportAccounts.filter((a) => a.group === "loan").length,
-      businessCount: reportAccounts.filter((a) => a.group === "business").length,
+      cardCount: owed.filter((a) => a.group === "credit_card").length,
+      loanCount: owed.filter((a) => a.group === "loan").length,
+      businessCount: owed.filter((a) => a.group === "business").length,
+      authorized: notHis.reduce((s, a) => s + (a.balance ?? 0), 0),
+      authorizedCount: notHis.length,
     };
-  }, [reportAccounts]);
+  }, [owed, notHis]);
 
-  // Monthly payment: only open accounts still bill you.
-  const monthlyPayment = reportAccounts
+  // Monthly payment: only open accounts still bill you, and only your own.
+  const monthlyPayment = owed
     .filter((a) => a.open)
     .reduce((s, a) => s + (a.monthlyPayment ?? 0), 0);
 
@@ -270,8 +284,11 @@ export function CreditReportOverview({
   const helpingCount = reasons?.helping.length ?? 0;
 
   // ── What each tile expands into ───────────────────────────────────────────
-  const accountRows = (pick: (a: ReportAccount) => boolean): DetailRow[] =>
-    reportAccounts
+  const accountRows = (
+    pick: (a: ReportAccount) => boolean,
+    from: ReportAccount[] = owed,
+  ): DetailRow[] =>
+    from
       .filter((a) => pick(a) && (a.balance ?? 0) !== 0)
       .sort((a, b) => (b.balance ?? 0) - (a.balance ?? 0))
       .map((a, i) => ({
@@ -313,10 +330,15 @@ export function CreditReportOverview({
       note: "On the report, but not personal FICO debt",
       rows: accountRows((a) => a.group === "business"),
     },
+    authorized: {
+      title: "Someone else's accounts",
+      note: "On the report because you're named on them — the balance isn't yours",
+      rows: accountRows(() => true, notHis),
+    },
     payments: {
       title: "Monthly minimums",
-      note: "What open accounts bill each month",
-      rows: reportAccounts
+      note: "What your own open accounts bill each month",
+      rows: owed
         .filter((a) => a.open && (a.monthlyPayment ?? 0) > 0)
         .sort((a, b) => (b.monthlyPayment ?? 0) - (a.monthlyPayment ?? 0))
         .map((a, i) => ({
@@ -569,6 +591,41 @@ export function CreditReportOverview({
             </p>
             <svg
               className={`w-3.5 h-3.5 text-faint shrink-0 transition-transform ${openTile === "business" ? "rotate-90" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
+
+        {/* Named on someone else's card: on the report, but not money he owes. */}
+        {groups.authorizedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => toggle("authorized")}
+            className={`mt-2.5 w-full text-left rounded-xl border px-3.5 py-3 flex items-center gap-3 transition-colors ${
+              openTile === "authorized"
+                ? "border-accent/50 bg-accent/10"
+                : "border-border bg-surface"
+            }`}
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+                Not yours — you&apos;re an authorized user
+              </p>
+              <p className="text-[10px] text-faint mt-0.5">
+                {groups.authorizedCount} account
+                {groups.authorizedCount === 1 ? "" : "s"} · counts toward your score, but the
+                balance is someone else&apos;s to pay
+              </p>
+            </div>
+            <p className="text-lg font-bold text-faint tabular-nums shrink-0">
+              {fmtMoney(groups.authorized, { decimals: 0 })}
+            </p>
+            <svg
+              className={`w-3.5 h-3.5 text-faint shrink-0 transition-transform ${openTile === "authorized" ? "rotate-90" : ""}`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

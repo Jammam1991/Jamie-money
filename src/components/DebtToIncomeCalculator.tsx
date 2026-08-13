@@ -5,7 +5,7 @@
 // database — nothing here is sent anywhere.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { fmtMoney, type ReportAccount } from "@/lib/creditReport";
+import { fmtMoney, isAuthorizedUser, type ReportAccount } from "@/lib/creditReport";
 
 type CustomDebt = { id: string; name: string; amount: number };
 
@@ -77,6 +77,10 @@ export function DebtToIncomeCalculator({
   // Business loans ride on the personal report but aren't personal FICO debt,
   // so default them out of DTI too — the checkbox still lets one back in if a
   // lender is counting a personal guarantee.
+  //
+  // A card he's only an authorized user on defaults out for the same reason: the
+  // payment is someone else's. A lender who won't take that on trust can put it
+  // back with the same checkbox.
   const debtItems = useMemo(
     () =>
       reportAccounts
@@ -86,6 +90,7 @@ export function DebtToIncomeCalculator({
           name: a.name,
           amount: a.monthlyPayment ?? 0,
           isBusiness: a.group === "business",
+          isAuthorized: isAuthorizedUser(a),
         })),
     [reportAccounts],
   );
@@ -127,7 +132,7 @@ export function DebtToIncomeCalculator({
         income: "",
         newPayment: "",
         threshold: DEFAULT_THRESHOLD,
-        excluded: debtItems.filter((d) => d.isBusiness).map((d) => d.key),
+        excluded: debtItems.filter((d) => d.isBusiness || d.isAuthorized).map((d) => d.key),
         custom: [],
       },
     );
@@ -335,6 +340,11 @@ export function DebtToIncomeCalculator({
             {d.isBusiness && (
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-accent/10 text-accent shrink-0">
                 BUSINESS
+              </span>
+            )}
+            {d.isAuthorized && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-accent/10 text-accent shrink-0">
+                NOT YOURS
               </span>
             )}
             <span className="text-muted tabular-nums shrink-0">
