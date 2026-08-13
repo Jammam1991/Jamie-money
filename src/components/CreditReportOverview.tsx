@@ -483,87 +483,99 @@ export function CreditReportOverview({
         <p className="text-[10px] text-faint mb-2">Tap any tile to see what&apos;s behind it.</p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <Tile
-            label="Total owed"
-            value={fmtMoney(groups.total, { decimals: 0 })}
-            sub={`${reportAccounts.length} reported accounts`}
-            open={openTile === "total"}
-            onToggle={() => toggle("total")}
-            count={details.total.rows.length}
-          />
-          <Tile
-            label="Credit cards"
-            value={fmtMoney(groups.cards, { decimals: 0 })}
-            sub={`${groups.cardCount} cards${usagePct != null ? ` · ${usagePct}% used` : ""}`}
-            tone={usageTone}
-            open={openTile === "cards"}
-            onToggle={() => toggle("cards")}
-            count={details.cards.rows.length}
-          />
-          <Tile
-            label="Loans"
-            value={fmtMoney(groups.loans, { decimals: 0 })}
-            sub={`${groups.loanCount} loan${groups.loanCount === 1 ? "" : "s"}`}
-            open={openTile === "loans"}
-            onToggle={() => toggle("loans")}
-            count={details.loans.rows.length}
-          />
-          <Tile
-            label="Monthly payments"
-            value={fmtMoney(monthlyPayment, { decimals: 0 })}
-            sub="Minimums on open accounts"
-            open={openTile === "payments"}
-            onToggle={() => toggle("payments")}
-            count={details.payments.rows.length}
-          />
-          <Tile
-            label="On-time payments"
-            value={onTimePct != null ? `${onTimePct}%` : "—"}
-            sub={
-              onTimePct != null
-                ? `${onTimeMonths} of ${totalMonths} reported months`
-                : "No payment history yet"
-            }
-            tone={onTimeTone}
-            open={openTile === "ontime"}
-            onToggle={() => toggle("ontime")}
-            count={details.ontime.rows.length}
-          />
-          <Tile
-            label="Interest / yr"
-            value={interestPerYear > 0 ? fmtMoney(interestPerYear, { decimals: 0 }) : "—"}
-            sub={
-              accountsWithApr > 0
-                ? `Est. from ${accountsWithApr} saved APR${accountsWithApr === 1 ? "" : "s"}`
-                : "Add APRs to estimate"
-            }
-            tone={interestPerYear > 0 ? "warn" : "neutral"}
-            open={openTile === "interest"}
-            onToggle={() => toggle("interest")}
-            count={details.interest.rows.length}
-          />
-          <Tile
-            label="Negative items"
-            value={String(negatives.length)}
-            sub={
-              summary?.accountsEverLate != null
-                ? `${summary.accountsEverLate} accounts ever late`
-                : undefined
-            }
-            tone={negatives.length > 0 ? "bad" : "good"}
-            open={openTile === "negatives"}
-            onToggle={() => toggle("negatives")}
-            count={details.negatives.rows.length}
-          />
-          <Tile
-            label="Hard inquiries"
-            value={String(liveInquiries.length)}
-            sub={`${recentInquiries.length} in the last 12 months`}
-            tone={recentInquiries.length >= 4 ? "bad" : recentInquiries.length >= 2 ? "warn" : "good"}
-            open={openTile === "inquiries"}
-            onToggle={() => toggle("inquiries")}
-            count={details.inquiries.rows.length}
-          />
+          {[
+            {
+              key: "total" as DetailKey,
+              label: "Total owed",
+              value: fmtMoney(groups.total, { decimals: 0 }),
+              sub: `${reportAccounts.length} reported accounts`,
+              tone: undefined as Tone | undefined,
+            },
+            {
+              key: "cards" as DetailKey,
+              label: "Credit cards",
+              value: fmtMoney(groups.cards, { decimals: 0 }),
+              sub: `${groups.cardCount} cards${usagePct != null ? ` · ${usagePct}% used` : ""}`,
+              tone: usageTone,
+            },
+            {
+              key: "loans" as DetailKey,
+              label: "Loans",
+              value: fmtMoney(groups.loans, { decimals: 0 }),
+              sub: `${groups.loanCount} loan${groups.loanCount === 1 ? "" : "s"}`,
+              tone: undefined as Tone | undefined,
+            },
+            {
+              key: "payments" as DetailKey,
+              label: "Monthly payments",
+              value: fmtMoney(monthlyPayment, { decimals: 0 }),
+              sub: "Minimums on open accounts",
+              tone: undefined as Tone | undefined,
+            },
+            {
+              key: "ontime" as DetailKey,
+              label: "On-time payments",
+              value: onTimePct != null ? `${onTimePct}%` : "—",
+              sub:
+                onTimePct != null
+                  ? `${onTimeMonths} of ${totalMonths} reported months`
+                  : "No payment history yet",
+              tone: onTimeTone,
+            },
+            {
+              key: "interest" as DetailKey,
+              label: "Interest / yr",
+              value: interestPerYear > 0 ? fmtMoney(interestPerYear, { decimals: 0 }) : "—",
+              sub:
+                accountsWithApr > 0
+                  ? `Est. from ${accountsWithApr} saved APR${accountsWithApr === 1 ? "" : "s"}`
+                  : "Add APRs to estimate",
+              tone: (interestPerYear > 0 ? "warn" : "neutral") as Tone,
+            },
+            {
+              key: "negatives" as DetailKey,
+              label: "Negative items",
+              value: String(negatives.length),
+              sub:
+                summary?.accountsEverLate != null
+                  ? `${summary.accountsEverLate} accounts ever late`
+                  : undefined,
+              tone: (negatives.length > 0 ? "bad" : "good") as Tone,
+            },
+            {
+              key: "inquiries" as DetailKey,
+              label: "Hard inquiries",
+              value: String(liveInquiries.length),
+              sub: `${recentInquiries.length} in the last 12 months`,
+              tone: (recentInquiries.length >= 4
+                ? "bad"
+                : recentInquiries.length >= 2
+                  ? "warn"
+                  : "good") as Tone,
+            },
+          ].map((tile) => (
+            <div key={tile.key} className="contents">
+              <Tile
+                label={tile.label}
+                value={tile.value}
+                sub={tile.sub}
+                tone={tile.tone}
+                open={openTile === tile.key}
+                onToggle={() => toggle(tile.key)}
+                count={details[tile.key].rows.length}
+              />
+              {openTile === tile.key && (
+                <div className="col-span-2 sm:col-span-4">
+                  <DetailPanel
+                    title={details[tile.key].title}
+                    note={details[tile.key].note}
+                    rows={details[tile.key].rows}
+                    onClose={() => setOpenTile(null)}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Business debt is on the report but doesn't drive the personal score. */}

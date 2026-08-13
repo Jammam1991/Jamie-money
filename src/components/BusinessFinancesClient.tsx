@@ -26,6 +26,22 @@ function money(n: number): string {
   return `${rounded < 0 ? "-" : ""}$${Math.abs(rounded).toLocaleString("en-US")}`;
 }
 
+// Calculate year-end profit projection for the current year only
+function getYearEndProjection(profit: number, year: number): number | null {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+
+  // Only show projection for current year and positive profit
+  if (year !== currentYear || profit <= 0) return null;
+
+  // Calculate days into year: Jan 1 to today
+  const jan1 = new Date(currentYear, 0, 1);
+  const daysIntoYear = Math.ceil((today.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  // Annualize: profit / daysIntoYear * 365
+  return (profit / daysIntoYear) * 365;
+}
+
 function shortDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${Number(m)}/${Number(d)}/${y.slice(2)}`;
@@ -45,7 +61,7 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
     <div className="space-y-4">
       <IntroCard data={data} />
 
-      {view.show_headline && <Headline rollup={rollup} on={on} />}
+      {view.show_headline && <Headline rollup={rollup} on={on} year={data.year} />}
 
       {canSwitch && noMistakes && (
         <MistakesPanel
@@ -171,9 +187,10 @@ function IntroCard({ data }: { data: BusinessFinances }) {
 }
 
 // Money in, money out, what's left. The three numbers everything else explains.
-function Headline({ rollup, on }: { rollup: Rollup; on: boolean }) {
+function Headline({ rollup, on, year }: { rollup: Rollup; on: boolean; year: number }) {
   const out = rollup.cogs + rollup.expenses;
   const profit = rollup.netProfit;
+  const projection = getYearEndProjection(profit, year);
 
   return (
     <Card>
@@ -191,6 +208,11 @@ function Headline({ rollup, on }: { rollup: Rollup; on: boolean }) {
       >
         {money(profit)}
       </p>
+      {projection && (
+        <p className="mt-1 text-[13px] text-muted">
+          Trending toward {money(projection)} by year end
+        </p>
+      )}
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Tint>
           <p className="text-[12px] text-muted">Money in</p>

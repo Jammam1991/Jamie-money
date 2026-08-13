@@ -12,8 +12,7 @@ export type PageKey =
   | "job-vs-business"
   | "credit-report"
   | "business-finances"
-  | "divorce"
-  | "divorce-responsibility";
+  | "divorce";
 
 export interface AppPage {
   key: PageKey;
@@ -83,13 +82,6 @@ export const PAGES: AppPage[] = [
     label: "Divorce",
     where: "menu",
     blurb: "Support, the split, benefits, key dates.",
-  },
-  {
-    key: "divorce-responsibility",
-    href: "/divorce-responsibility",
-    label: "The Debt Story",
-    where: "menu",
-    blurb: "How the debt got here, and what Jamie's share works out to.",
   },
 ];
 

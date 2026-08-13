@@ -13,7 +13,7 @@ const links = [
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },
   { href: "/divorce", label: "Divorce", Icon: Scale },
   {
-    href: "/divorce-responsibility",
+    href: "/story",
     label: "The Debt Story",
     Icon: BookOpen,
   },
