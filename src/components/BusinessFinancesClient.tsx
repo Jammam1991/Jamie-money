@@ -53,6 +53,8 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
   const [hideMistakes, setHideMistakes] = useState(false);
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
 
+  // The chevron toggles open/closed without changing what's loaded — lets
+  // Jamie peek at a year's months without leaving the page he's on.
   const toggleYear = (year: number) => {
     setExpandedYears((prev) => {
       const next = new Set(prev);
@@ -60,6 +62,13 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
       else next.add(year);
       return next;
     });
+  };
+
+  // Clicking the year itself always opens its months (never collapses) —
+  // it's paired with a Link that navigates to that year's annual view, so
+  // the two happen together on one click.
+  const expandYear = (year: number) => {
+    setExpandedYears((prev) => (prev.has(year) ? prev : new Set(prev).add(year)));
   };
 
   const { view, noMistakes } = data;
@@ -71,7 +80,12 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
 
   return (
     <div className="space-y-4">
-      <IntroCard data={data} expandedYears={expandedYears} onToggleYear={toggleYear} />
+      <IntroCard
+        data={data}
+        expandedYears={expandedYears}
+        onToggleYear={toggleYear}
+        onSelectYear={expandYear}
+      />
 
       {view.show_headline && (
         <Headline rollup={rollup} on={on} year={data.year} month={data.month} />
@@ -174,10 +188,12 @@ function IntroCard({
   data,
   expandedYears,
   onToggleYear,
+  onSelectYear,
 }: {
   data: BusinessFinances;
   expandedYears: Set<number>;
   onToggleYear: (year: number) => void;
+  onSelectYear: (year: number) => void;
 }) {
   const isAllTime = data.year === "all-time";
   const headerText = isAllTime ? "The gym's money, all time" : `The gym's money, ${data.year}`;
@@ -224,23 +240,34 @@ function IntroCard({
 
               return (
                 <div key={y}>
-                  {/* Year button/tab */}
-                  <button
-                    onClick={() => onToggleYear(y)}
-                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-1 text-[13px] transition-colors hover:bg-tint"
-                    style={
-                      isCurrentYear && !isCurrentMonth
-                        ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-                        : undefined
-                    }
-                  >
-                    <ChevronDown
-                      size={14}
-                      className="transition-transform"
-                      style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-                    />
-                    <span>{y}</span>
-                  </button>
+                  {/* Chevron: toggles the months open/closed without navigating. */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => onToggleYear(y)}
+                      aria-label={isExpanded ? "Collapse months" : "Expand months"}
+                      className="rounded-lg p-1.5 transition-colors hover:bg-tint"
+                    >
+                      <ChevronDown
+                        size={14}
+                        className="transition-transform"
+                        style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                    </button>
+                    {/* Year: navigates to that year's annual view and opens its months. */}
+                    <Link
+                      href={`/business-finances?year=${y}`}
+                      scroll={false}
+                      onClick={() => onSelectYear(y)}
+                      className="rounded-lg border border-border px-3 py-1 text-[13px]"
+                      style={
+                        isCurrentYear && !isCurrentMonth
+                          ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
+                          : undefined
+                      }
+                    >
+                      {y}
+                    </Link>
+                  </div>
 
                   {/* Month dropdown - shown when expanded */}
                   {isExpanded && (

@@ -175,13 +175,16 @@ export async function getBusinessFinances(
       if (!firstRes.ok) throw new Error(`Money App returned ${firstRes.status}`);
       const firstData = (await firstRes.json()) as BusinessFinances;
 
-      // The business started Nov 27, 2024 — make sure that year is fetched
-      // even if Money App's own "years" list starts later (e.g. it only
-      // lists years with a full-year's worth of tax-relevant data).
-      const yearsToFetch = Array.from(new Set([...firstData.years, BUSINESS_START_YEAR]));
-
-      // Fetch all years and aggregate
-      const allYearPromises = yearsToFetch.map(async (y) => {
+      // Only fetch years Money App itself vouches for via `years`. An
+      // earlier version of this also force-requested BUSINESS_START_YEAR
+      // (2024) even when it wasn't in that list — Money App doesn't
+      // recognize year=2024 through this endpoint and returned unscoped
+      // data for it instead of a clean error, which silently inflated the
+      // all-time total by roughly a year's worth of income and expenses.
+      // If Chris adds 2024 to this app's allowed years in Money App's
+      // Shared access settings, it'll show up in `years` and get included
+      // here automatically — nothing else needs to change.
+      const allYearPromises = firstData.years.map(async (y) => {
         const yParams = new URLSearchParams({ email, year: String(y) });
         const res = await fetch(
           `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${yParams}`,
@@ -323,23 +326,31 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     throw new Error("No rollups to aggregate");
   }
 
-  const sumIncome = rollups.reduce((sum, r) => sum + r.income, 0);
-  const sumCogs = rollups.reduce((sum, r) => sum + r.cogs, 0);
-  const sumExpenses = rollups.reduce((sum, r) => sum + r.expenses, 0);
-
+  // Dedupe by `year` before summing anything — if Money App ever returns
+  // two rollups tagged with the same year (e.g. a request for a year it
+  // doesn't recognize falls back to another year's data instead of
+  // erroring), summing the raw list would silently double-count that
+  // year. This is what actually caused all-time income/expenses to come
+  // in far above the real 22-month total.
   const byYear = new Map(rollups.map((r) => [r.year, r]));
+  const unique = [...byYear.values()];
+
+  const sumIncome = unique.reduce((sum, r) => sum + r.income, 0);
+  const sumCogs = unique.reduce((sum, r) => sum + r.cogs, 0);
+  const sumExpenses = unique.reduce((sum, r) => sum + r.expenses, 0);
+
   const monthlyNetProfit = months.map(
     ({ year, month }) => byYear.get(year)?.monthlyNetProfit[month] ?? 0,
   );
 
   return {
     year: -1, // Special value for all-time
-    lines: rollups.flatMap((r) => r.lines),
+    lines: unique.flatMap((r) => r.lines),
     income: sumIncome,
     cogs: sumCogs,
     expenses: sumExpenses,
     netProfit: sumIncome - sumCogs - sumExpenses,
-    untagged: rollups.reduce(
+    untagged: unique.reduce(
       (sum, r) => ({
         income: sum.income + r.untagged.income,
         cogs: sum.cogs + r.untagged.cogs,
@@ -347,11 +358,11 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
       }),
       { income: 0, cogs: 0, expense: 0 },
     ),
-    untaggedAccountCount: Math.max(...rollups.map((r) => r.untaggedAccountCount), 0),
+    untaggedAccountCount: Math.max(...unique.map((r) => r.untaggedAccountCount), 0),
     monthlyNetProfit,
-    fedHidden: rollups.some((r) => r.fedHidden),
-    fedDroppedCount: rollups.reduce((sum, r) => sum + r.fedDroppedCount, 0),
-    mistakesRemoved: rollups.some((r) => r.mistakesRemoved),
+    fedHidden: unique.some((r) => r.fedHidden),
+    fedDroppedCount: unique.reduce((sum, r) => sum + r.fedDroppedCount, 0),
+    mistakesRemoved: unique.some((r) => r.mistakesRemoved),
   };
 }
 
