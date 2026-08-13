@@ -54,6 +54,9 @@ type ExportDebt = {
   balance: number;
   apr: number;
   minPayment: number;
+  // Who signed for it — "business" for the gym's accounts. Sent only by a Money
+  // App new enough to include it.
+  scope?: string | null;
   // Added later, with the full credit report — an older Money App won't send them.
   openedDate?: string | null;
   creditReportDay?: number | null;
@@ -171,12 +174,15 @@ export async function syncMoneyAppDebts(
     };
   }
 
+  const exportUrl = (query: string) =>
+    `${baseUrl.replace(/\/$/, "")}/api/debt/export?${query}`;
+
   let parsed: ExportResponse;
   try {
-    const res = await fetch(
-      `${baseUrl.replace(/\/$/, "")}/api/debt/export?person=jamie`,
-      { headers: { "x-api-key": apiKey }, cache: "no-store" },
-    );
+    const res = await fetch(exportUrl("person=jamie"), {
+      headers: { "x-api-key": apiKey },
+      cache: "no-store",
+    });
     if (!res.ok) throw new Error(`Money App returned ${res.status}`);
     parsed = await res.json();
   } catch (err) {
@@ -196,7 +202,38 @@ export async function syncMoneyAppDebts(
 
   // A response that isn't shaped the way we expect is a reachable-but-broken
   // Money App, not a crash — treat it as "sent nothing" and say so.
-  const sent = Array.isArray(parsed.debts) ? parsed.debts : [];
+  const personal = Array.isArray(parsed.debts) ? parsed.debts : [];
+
+  const problems: string[] = [];
+
+  // The gym's accounts. They aren't anyone's personally, so no value of
+  // `person` reaches them — they're asked for by scope instead. A Money App too
+  // old to know the parameter answers 400, which isn't worth failing the whole
+  // sync over: everything personal has already arrived by this point.
+  let business: ExportDebt[] = [];
+  try {
+    const res = await fetch(exportUrl("scope=business"), {
+      headers: { "x-api-key": apiKey },
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const body = await res.json();
+      const rows: ExportDebt[] = Array.isArray(body?.debts) ? body.debts : [];
+      // Stamped from the request rather than trusted from the response, so the
+      // section can't be emptied by a Money App that answers without a scope.
+      business = rows.map((d) => ({ ...d, scope: "business" }));
+    } else if (res.status !== 400 && res.status !== 404) {
+      throw new Error(`Money App returned ${res.status}`);
+    }
+  } catch (err) {
+    note(
+      problems,
+      "the business accounts",
+      err instanceof Error ? err.message : "couldn't reach Money App",
+    );
+  }
+
+  const sent = [...personal, ...business];
 
   // Accounts Chris has deleted here. Money App exports Jamie's scope together
   // with the joint one, so Chris's own accounts come along with them — his TD
@@ -226,7 +263,6 @@ export async function syncMoneyAppDebts(
   );
 
   const base = Math.floor(Date.now() / 1000);
-  const problems: string[] = [];
   let synced = 0;
   for (let i = 0; i < debts.length; i++) {
     const d = debts[i];
@@ -236,6 +272,10 @@ export async function syncMoneyAppDebts(
     // when they're missing rather than blanking what's already saved.
     const details: Record<string, unknown> = {};
     if (d.type !== undefined) details.debt_type = d.type;
+    // Which section the Debt page files it under. Optional for the same reason
+    // as the rest: it arrives with business_debt_scope.sql, and until that's
+    // been run the balances still have to update.
+    if (d.scope !== undefined) details.scope = d.scope ?? null;
     if (d.openedDate !== undefined) details.opened_date = d.openedDate;
     if (d.creditReportDay !== undefined) details.credit_report_day = d.creditReportDay;
     if (d.notes !== undefined) details.notes = d.notes;
@@ -277,7 +317,16 @@ export async function syncMoneyAppDebts(
         // error actually standing in the way.
         error = retry.error;
       } else {
-        note(problems, "the account details", error.message);
+        // The details now span two migrations, so the message has to name both
+        // — pointing at only one reads as "already done" when it's the other
+        // that's missing, and a missing scope silently empties the Business
+        // section while every balance still looks right.
+        note(
+          problems,
+          "the account details",
+          error.message,
+          "credit_report_setup.sql and supabase/business_debt_scope.sql",
+        );
         error = null;
       }
     }

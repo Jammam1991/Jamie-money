@@ -74,16 +74,16 @@ const inputClass =
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
-// Which rows belong to the business rather than to Jamie personally. Matched on
-// the name because that is all Money App and the credit report give us — the
-// lender is what tells them apart, not the debt type. "US Bank" is deliberately
-// not on its own: the auto loan is personal, only the card is the business's.
-const BUSINESS_LENDERS = ["ampac", "pace"];
-
+// Which rows belong to the gym rather than to Jamie personally. Money App says
+// so outright, which is the only thing that gets it right: the names give no
+// usable rule — "Business Platinum Card" and "US Bank Card (JM)" are the gym's
+// while "US Bank Auto Loan" is Jamie's, and matching on "US Bank" or "business"
+// mis-sorts one or the other.
+//
+// Anything without a scope is personal. Rows typed in by hand have none, and a
+// debt of Jamie's shown under Business is a worse error than the reverse.
 function isBusinessDebt(debt: Debt): boolean {
-  const name = debt.name.toLowerCase();
-  if (BUSINESS_LENDERS.some((lender) => name.includes(lender))) return true;
-  return name.includes("us bank") && /card|credit/.test(name);
+  return debt.scope === "business";
 }
 
 // What Jamie owes Chris out of the settlement, as one line in the list. There
@@ -147,20 +147,26 @@ export default function DebtClient({
   // reasons about actual debt — the year-by-year story, the "you owe" sentence,
   // the payoff maths — and added only to the secured totals at the top.
   const settlement = settlementLoan(settlementMonthly);
-
-  const total = totalBalance(debts);
-  const minTotal = totalMinimum(debts);
-  const mo = monthlyInterest(debts);
-  const cards = cardBalance(debts);
-  const carLoans = carLoanBalance(debts);
-  const personalLoans = personalLoanBalance(debts);
-
   const businessDebts = debts.filter(isBusinessDebt);
   const personalDebts = debts.filter((d) => !isBusinessDebt(d));
-  const personalTotal = totalBalance(personalDebts) + settlement.balance;
+
+  // Jamie's own debt, and only his. The year-by-year story, the "you owe"
+  // sentence and the payoff maths are all about what he borrowed and what he
+  // can pay down, so the gym's accounts stay out of them — they aren't his to
+  // pay, and their balance history isn't mirrored here either, so counting them
+  // would move this year's figure while every earlier year sat still.
+  const total = totalBalance(personalDebts);
+  const minTotal = totalMinimum(personalDebts);
+  const cards = cardBalance(personalDebts);
+  const carLoans = carLoanBalance(personalDebts);
+  const personalLoans = personalLoanBalance(personalDebts);
+
+  // The sections at the top, which do count everything that's owed.
+  const personalTotal = total + settlement.balance;
   const businessTotal = totalBalance(businessDebts);
   const securedTotal = personalTotal + businessTotal;
-  const securedMin = minTotal + settlement.minPayment;
+  const securedMin = totalMinimum(debts) + settlement.minPayment;
+  const securedInterest = monthlyInterest(debts);
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
@@ -329,7 +335,8 @@ export default function DebtClient({
         <p className="text-[13px] text-muted">Total Debt Secured</p>
         <p className="mt-1 text-3xl font-medium">{money(securedTotal)}</p>
         <p className="mt-2 text-xs text-muted">
-          {money(securedMin)}/mo minimum · {money(mo)}/mo of that is interest
+          {money(securedMin)}/mo minimum · {money(securedInterest)}/mo of that is
+          interest
         </p>
       </Card>
 
@@ -392,8 +399,8 @@ export default function DebtClient({
           <div className="space-y-3">{businessDebts.map(row)}</div>
         ) : (
           <p className="text-xs text-muted">
-            Nothing here yet. A debt named for AMPAC, Pace, or the US Bank card
-            lands in this section on its own.
+            Nothing here yet. The gym&apos;s accounts arrive from Money App and
+            land in this section on their own.
           </p>
         )}
       </Card>
@@ -473,10 +480,11 @@ export default function DebtClient({
           </div>
         ))}
 
-      {/* Payoff what-if calculator */}
-      {debts.length > 0 && (
+      {/* Payoff what-if calculator. Jamie's own debts only — paying extra at
+          the gym's loans isn't a plan he can act on. */}
+      {personalDebts.length > 0 && (
         <PayoffCalculator
-          debts={debts}
+          debts={personalDebts}
           minTotal={minTotal}
           extra={extra}
           setExtra={setExtra}

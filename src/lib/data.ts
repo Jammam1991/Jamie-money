@@ -46,6 +46,10 @@ export type Debt = {
   // "auto_loan", "mortgage", "personal_loan", "student_loan",
   // "line_of_credit" or "other". Missing on rows typed in by hand.
   debtType?: string;
+  // Who signed for it, straight from Money App: "business" for the gym's
+  // accounts, "jamie"/"joint" for his own. Missing on rows typed in by hand,
+  // which is why the Debt page treats only an explicit "business" as business.
+  scope?: string;
 };
 
 // A single recurring bill Jamie owes (rent, phone, etc.).

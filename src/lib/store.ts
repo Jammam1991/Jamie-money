@@ -74,6 +74,7 @@ export async function getDebts(): Promise<Debt[]> {
     apr: Number(row.apr ?? 0),
     minPayment: Number(row.min_payment ?? row.monthly ?? 0),
     debtType: row.debt_type ? String(row.debt_type) : undefined,
+    scope: row.scope ? String(row.scope) : undefined,
   }));
 }
 
