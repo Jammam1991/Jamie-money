@@ -20,6 +20,8 @@ import {
   cardBalance,
   duration,
   financeCharge,
+  isCarLoan,
+  isUnsecured,
   monthlyInterest,
   personalLoanBalance,
   simulate,
@@ -199,6 +201,35 @@ export default function DebtClient({
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
+  // The same money cut a different way: what's behind each debt rather than
+  // whose it is. The settlement is its own line rather than folded into
+  // unsecured, so the three add up to the total exactly.
+  const carDebts = debts.filter(isCarLoan);
+  const unsecuredDebts = debts.filter(isUnsecured);
+  const breakdown = [
+    {
+      key: "unsecured",
+      label: "Unsecured",
+      note: "cards and loans with nothing behind them",
+      balance: totalBalance(unsecuredDebts),
+      monthly: totalMinimum(unsecuredDebts),
+    },
+    {
+      key: "car",
+      label: "Car",
+      note: "backed by the car itself",
+      balance: totalBalance(carDebts),
+      monthly: totalMinimum(carDebts),
+    },
+    {
+      key: "divorce",
+      label: "Divorce settlement",
+      note: terms.total === null ? "estimated" : "what Jamie owes Chris",
+      balance: settlement.balance,
+      monthly: settlement.minPayment,
+    },
+  ].filter((row) => row.balance > 0);
+
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
   for (const tx of txs) {
@@ -376,12 +407,31 @@ export default function DebtClient({
     <div className="space-y-4">
       {/* Everything owed, in one number, before the page breaks it apart. */}
       <Card>
-        <p className="text-[13px] text-muted">Total Debt Secured</p>
+        <p className="text-[13px] text-muted">Total Debt</p>
         <p className="mt-1 text-3xl font-medium">{money(securedTotal)}</p>
         <p className="mt-2 text-xs text-muted">
           {money(securedMin)}/mo minimum · {money(securedInterest)}/mo of that is
           interest
         </p>
+
+        {/* The same total split by what's behind each debt. These three add up
+            to the figure above — nothing is counted twice or left out. */}
+        <div className="mt-3 space-y-2 border-t border-border pt-3">
+          {breakdown.map((row) => (
+            <div key={row.key} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0">
+                <span className="text-[15px]">{row.label}</span>
+                <span className="block text-xs text-muted">{row.note}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="text-[15px] font-medium">{money(row.balance)}</span>
+                <span className="block text-xs text-muted">
+                  {money(row.monthly)}/mo
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
       </Card>
 
       {/* Jamie's own debts, plus what's owed to Chris out of the settlement. */}

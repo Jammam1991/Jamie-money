@@ -43,6 +43,27 @@ function looksLikePersonalLoan(name: string): boolean {
   return /\bloan\b/i.test(name) && !looksLikeCarLoan(name);
 }
 
+// ── Secured or not ───────────────────────────────────────────────────────────
+// Secured means there's something behind the debt the lender can take back if
+// it stops being paid — the car, the house. Everything else is unsecured: the
+// cards and the loans with nothing but a signature behind them.
+//
+// Money App's tag decides it where there is one; the name checks are the last
+// resort for rows typed in by hand.
+export function isCarLoan(debt: Debt): boolean {
+  return debt.debtType
+    ? debt.debtType === "auto_loan"
+    : looksLikeCarLoan(debt.name);
+}
+
+export function isSecured(debt: Debt): boolean {
+  return isCarLoan(debt) || debt.debtType === "mortgage";
+}
+
+export function isUnsecured(debt: Debt): boolean {
+  return !isSecured(debt);
+}
+
 // What's owed on credit cards.
 export function cardBalance(debts: Debt[]): number {
   return debts
@@ -54,11 +75,7 @@ export function cardBalance(debts: Debt[]): number {
 
 // What's owed on car loans.
 export function carLoanBalance(debts: Debt[]): number {
-  return debts
-    .filter((d) =>
-      d.debtType ? d.debtType === "auto_loan" : looksLikeCarLoan(d.name),
-    )
-    .reduce((sum, d) => sum + d.balance, 0);
+  return debts.filter(isCarLoan).reduce((sum, d) => sum + d.balance, 0);
 }
 
 // What's owed on personal loans — including the closed cards that have since
