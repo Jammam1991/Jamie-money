@@ -63,7 +63,7 @@ export default function BusinessPayMonth({ pay }: { pay: PayMonth }) {
           style={{ borderColor: "var(--border)" }}
         >
           <span>{over ? "Difference you owe" : "Under what you earned"}</span>
-          <span style={{ color: over ? "var(--warn)" : "var(--good)" }}>
+          <span style={{ color: over ? "#8B0000" : "var(--good)" }}>
             {money(Math.abs(pay.difference))}
           </span>
         </div>
