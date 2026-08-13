@@ -32,7 +32,7 @@ import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DuplicateCleanup from "@/components/DuplicateCleanup";
 import DebtByYear from "@/components/DebtByYear";
-import type { DebtSnapshotRow, DebtTransaction } from "@/lib/store";
+import type { DebtSnapshotRow, DebtTransaction, SettlementTerms } from "@/lib/store";
 import type { PayMonth } from "@/lib/gymPay";
 import {
   addDebt,
@@ -40,7 +40,7 @@ import {
   deleteDebt,
   deleteDebtTransaction,
   importDebts,
-  setSettlementTotal,
+  setSettlementTerms,
   updateDebt,
 } from "@/lib/actions";
 
@@ -89,21 +89,43 @@ function isBusinessDebt(debt: Debt): boolean {
 
 // What Jamie owes Chris out of the settlement, as one line in the list.
 //
-// Chris can set the figure himself, and when he has, that's what's shown. Until
-// then there's nothing to read but the monthly amount from the Divorce page, so
-// it's multiplied out over five years and labelled an estimate — SETTLEMENT_MONTHS
-// is the whole of the guess.
-const SETTLEMENT_MONTHS = 60;
+// Chris sets the total, the rate and the term. The monthly payment is worked
+// out from those three rather than typed, so it can't sit on screen disagreeing
+// with them — $200,000 paid at $900 a month is a different arrangement from the
+// one those numbers describe, and nothing on the page would have said so.
+//
+// Until he sets anything there's only the monthly support figure from the
+// Divorce page, so it's multiplied out over the default term and labelled an
+// estimate. That fallback works out to exactly the support figure, which is
+// what the row showed before any of this was editable.
+const SETTLEMENT_MONTHS = 60; // five years
+const SETTLEMENT_APR = 0; // a settlement doesn't charge interest unless Chris says so
 
-function settlementLoan(monthly: number, total: number | null): Debt {
+// Nothing set — the shape the row falls back to.
+const NO_TERMS: SettlementTerms = { total: null, apr: null, months: null };
+
+// The level payment that clears `total` over `months` at `apr`. The standard
+// amortisation formula; at 0% it's just the total split evenly, which the
+// formula itself can't do (it divides by zero).
+function monthlyPayment(total: number, apr: number, months: number): number {
+  if (months <= 0) return total;
+  const r = apr / 100 / 12;
+  if (r === 0) return total / months;
+  return (total * r) / (1 - Math.pow(1 + r, -months));
+}
+
+function settlementLoan(supportMonthly: number, terms: SettlementTerms): Debt {
+  const months = terms.months ?? SETTLEMENT_MONTHS;
+  const apr = terms.apr ?? SETTLEMENT_APR;
+  const balance = terms.total ?? supportMonthly * months;
   return {
     id: "__divorce_settlement__",
     name: "Divorce Settlement Loan",
-    balance: total ?? monthly * SETTLEMENT_MONTHS,
-    monthly,
+    balance,
+    monthly: monthlyPayment(balance, apr, months),
     paidPct: 0,
-    apr: 0, // A settlement doesn't charge interest.
-    minPayment: monthly,
+    apr,
+    minPayment: monthlyPayment(balance, apr, months),
     debtType: "settlement",
   };
 }
@@ -120,7 +142,7 @@ export default function DebtClient({
   payProblem,
   currentYear,
   settlementMonthly,
-  settlementTotal,
+  settlementTerms,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -133,7 +155,7 @@ export default function DebtClient({
   payProblem: string | null;
   currentYear: number;
   settlementMonthly: number; // monthly support from the Divorce page
-  settlementTotal: number | null; // what Chris set, or null to use the estimate
+  settlementTerms: SettlementTerms; // what Chris set; nulls fall back to the estimate
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -145,7 +167,7 @@ export default function DebtClient({
   const [extra, setExtra] = useState(100);
   // What Chris set the settlement to, held here so the number moves the moment
   // he saves rather than after the round trip.
-  const [settlementOverride, setSettlementOverride] = useState<number | null>(settlementTotal);
+  const [terms, setTerms] = useState<SettlementTerms>(settlementTerms);
   const [editingSettlement, setEditingSettlement] = useState(false);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
@@ -155,7 +177,7 @@ export default function DebtClient({
   // anyone agreed to. So it's built here and kept out of everything that
   // reasons about actual debt — the year-by-year story, the "you owe" sentence,
   // the payoff maths — and added only to the secured totals at the top.
-  const settlement = settlementLoan(settlementMonthly, settlementOverride);
+  const settlement = settlementLoan(settlementMonthly, terms);
   const businessDebts = debts.filter(isBusinessDebt);
   const personalDebts = debts.filter((d) => !isBusinessDebt(d));
 
@@ -280,16 +302,16 @@ export default function DebtClient({
     });
   }
 
-  // `null` clears Chris's figure and puts the row back on its own estimate.
-  function handleSaveSettlement(value: number | null) {
-    const previous = settlementOverride;
-    setSettlementOverride(value);
+  // All-null clears Chris's figures and puts the row back on its own estimate.
+  function handleSaveSettlement(next: SettlementTerms) {
+    const previous = terms;
+    setTerms(next);
     setEditingSettlement(false);
     startTransition(async () => {
-      const res = await setSettlementTotal(value);
-      // Put the old number back rather than leave a figure on screen that isn't
-      // the one saved — this is money Jamie is being told he owes.
-      if (!res.ok) setSettlementOverride(previous);
+      const res = await setSettlementTerms(next);
+      // Put the old numbers back rather than leave figures on screen that aren't
+      // the ones saved — this is money Jamie is being told he owes.
+      if (!res.ok) setTerms(previous);
     });
   }
 
@@ -376,8 +398,8 @@ export default function DebtClient({
               it says which of the two you're looking at. */}
           {editingSettlement ? (
             <SettlementForm
-              current={settlementOverride}
-              estimate={settlementMonthly * SETTLEMENT_MONTHS}
+              current={terms}
+              estimate={settlementLoan(settlementMonthly, NO_TERMS)}
               onCancel={() => setEditingSettlement(false)}
               onSave={handleSaveSettlement}
             />
@@ -399,14 +421,20 @@ export default function DebtClient({
                 </span>
               </div>
               <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-                {settlementOverride === null && (
+                {terms.total === null && (
                   <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
                     Estimated
                   </span>
                 )}
-                <span>{money(settlement.minPayment)}/mo · no interest</span>
+                <span>
+                  {settlement.apr > 0
+                    ? `${settlement.apr}% interest`
+                    : "no interest"}{" "}
+                  · {money(settlement.minPayment)}/mo over{" "}
+                  {duration(terms.months ?? SETTLEMENT_MONTHS)}
+                </span>
               </p>
-              {settlementOverride === null && (
+              {terms.total === null && (
                 <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
                   <AlertCircle size={13} className="mt-0.5 shrink-0" />
                   A guess, not a number anyone agreed to:{" "}
@@ -543,54 +571,124 @@ export default function DebtClient({
   );
 }
 
-// ── The settlement total ──────────────────────────────────────────────────────
-// Admin-only. Empty means "no figure of mine" — the row goes back to the
-// estimate rather than to zero, so clearing it can't quietly tell Jamie he owes
-// nothing.
+// ── The settlement terms ──────────────────────────────────────────────────────
+// Admin-only. Chris sets what's owed, the rate and how long it runs; the monthly
+// payment is worked out from those and shown as he types, so he can see what a
+// rate or a term actually costs before saving it.
+//
+// Clearing all three puts the row back to the estimate rather than to zero, so
+// an emptied form can't quietly tell Jamie he owes nothing.
 function SettlementForm({
   current,
   estimate,
   onCancel,
   onSave,
 }: {
-  current: number | null;
-  estimate: number;
+  current: SettlementTerms;
+  estimate: Debt; // the row as it reads with nothing set
   onCancel: () => void;
-  onSave: (value: number | null) => void;
+  onSave: (terms: SettlementTerms) => void;
 }) {
-  const [value, setValue] = useState(current === null ? "" : String(current));
+  const text = (v: number | null) => (v === null ? "" : String(v));
+  const [total, setTotal] = useState(text(current.total));
+  const [apr, setApr] = useState(text(current.apr));
+  const [years, setYears] = useState(
+    current.months === null ? "" : String(current.months / 12),
+  );
+
+  // What's actually being typed, falling back to the estimate for anything left
+  // blank — the same rule the row itself uses, so the preview is what he'll get.
+  const num = (s: string, fallback: number) => {
+    const n = Number(s.trim());
+    return s.trim() && Number.isFinite(n) && n >= 0 ? n : fallback;
+  };
+  const previewTotal = num(total, estimate.balance);
+  const previewApr = num(apr, SETTLEMENT_APR);
+  const previewMonths = Math.max(1, Math.round(num(years, SETTLEMENT_MONTHS / 12) * 12));
+  const preview = monthlyPayment(previewTotal, previewApr, previewMonths);
+  const interest = Math.max(0, preview * previewMonths - previewTotal);
+
+  const blank = !total.trim() && !apr.trim() && !years.trim();
 
   function submit() {
-    const trimmed = value.trim();
-    if (!trimmed) return onSave(null);
-    const n = Number(trimmed);
-    if (!Number.isFinite(n) || n < 0) return;
-    onSave(Math.round(n));
+    const parse = (s: string) => {
+      const n = Number(s.trim());
+      return s.trim() && Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const y = parse(years);
+    onSave({
+      total: parse(total),
+      apr: parse(apr),
+      months: y === null ? null : Math.max(1, Math.round(y * 12)),
+    });
+  }
+
+  function keys(e: React.KeyboardEvent) {
+    if (e.key === "Enter") submit();
+    if (e.key === "Escape") onCancel();
   }
 
   return (
     <div className="space-y-2 rounded-xl bg-tint p-3">
       <p className="text-[13px] font-medium">Divorce Settlement Loan</p>
-      <label className="block">
-        <span className="mb-1 block text-[11px] text-muted">What Jamie owes $</span>
-        <input
-          type="number"
-          inputMode="decimal"
-          autoFocus
-          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
-          placeholder={String(estimate)}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") submit();
-            if (e.key === "Escape") onCancel();
-          }}
-        />
-      </label>
+      <div className="grid grid-cols-3 gap-2">
+        <label className="block">
+          <span className="mb-1 block text-[11px] text-muted">Owed $</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            autoFocus
+            className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
+            placeholder={String(estimate.balance)}
+            value={total}
+            onChange={(e) => setTotal(e.target.value)}
+            onKeyDown={keys}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] text-muted">Rate %</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
+            placeholder="0"
+            value={apr}
+            onChange={(e) => setApr(e.target.value)}
+            onKeyDown={keys}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] text-muted">Years</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
+            placeholder={String(SETTLEMENT_MONTHS / 12)}
+            value={years}
+            onChange={(e) => setYears(e.target.value)}
+            onKeyDown={keys}
+          />
+        </label>
+      </div>
+
+      {/* The monthly isn't typed — it's what these three come to. */}
+      <div className="rounded-lg bg-card p-2">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[13px] text-muted">Works out to</span>
+          <span className="text-lg font-medium">{money(preview)}/mo</span>
+        </div>
+        <p className="mt-0.5 text-xs text-muted">
+          {money(previewTotal)} over {duration(previewMonths)}
+          {previewApr > 0
+            ? ` at ${previewApr}% — ${money(interest)} of that is interest.`
+            : " with no interest."}
+        </p>
+      </div>
+
       <p className="text-xs text-muted">
-        {value.trim()
-          ? "Shown as the settlement total, with no estimate note."
-          : `Leave it empty to go back to the estimate of ${money(estimate)}.`}
+        {blank
+          ? `Left empty, the row goes back to its estimate of ${money(estimate.balance)}.`
+          : "Anything left empty uses the estimate for that number."}
       </p>
       <div className="flex justify-end gap-2">
         <button className="rounded-lg px-3 py-2 text-sm text-muted" onClick={onCancel}>

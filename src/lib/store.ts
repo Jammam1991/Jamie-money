@@ -158,29 +158,61 @@ export async function hasPlaidItems(): Promise<boolean> {
 
 // Jamie's latest credit score, last pulled from Money App.
 // ── What Jamie owes Chris out of the settlement ──────────────────────────────
-// The Debt page can work this out on its own — the monthly support figure over
-// five years — but that's arithmetic standing in for a number only Chris knows.
-// When he sets one here it wins, and the page stops guessing.
+// Chris sets what's owed, the rate and how long it runs for. The monthly
+// payment isn't stored: it's worked out from those three, so the four numbers
+// can never disagree with each other on screen.
+//
+// Every field is null until he sets it, which is what tells "cleared, go back to
+// the estimate" apart from "set to zero" — opposite answers for money Jamie is
+// told he owes.
 //
 // It lives in `settings` rather than a column of its own because it isn't a
-// debt: there's no lender, no APR, and nothing syncs it. That also means no
-// setup SQL — `settings` is already there.
-//
-// null means nothing has been set, which is what makes "cleared, use the
-// estimate" different from "set to zero".
+// debt: there's no lender and nothing syncs it. That also means no setup SQL.
 export const SETTLEMENT_TOTAL_KEY = "divorce_settlement_total";
 
-export async function getSettlementTotal(): Promise<number | null> {
+export type SettlementTerms = {
+  total: number | null; // what's owed
+  apr: number | null; // yearly rate, percent
+  months: number | null; // how long it runs for
+};
+
+export const NO_SETTLEMENT_TERMS: SettlementTerms = {
+  total: null,
+  apr: null,
+  months: null,
+};
+
+function positive(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+export async function getSettlementTerms(): Promise<SettlementTerms> {
   const c = client();
-  if (!c) return null;
+  if (!c) return NO_SETTLEMENT_TERMS;
   const { data, error } = await c
     .from("settings")
     .select("value")
     .eq("key", SETTLEMENT_TOTAL_KEY)
     .maybeSingle();
-  if (error || !data?.value) return null;
-  const n = Number(data.value);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  if (error || !data?.value) return NO_SETTLEMENT_TERMS;
+
+  // This key used to hold a bare total. Read that shape too, so the figure
+  // Chris already saved survives rather than reverting to the estimate.
+  const raw = String(data.value);
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return {
+        total: positive(parsed.total),
+        apr: positive(parsed.apr),
+        months: positive(parsed.months),
+      };
+    }
+    return { total: positive(parsed), apr: null, months: null };
+  } catch {
+    return { total: positive(raw), apr: null, months: null };
+  }
 }
 
 export async function getMoneyAppFico(): Promise<{ score: number; date: string } | null> {
