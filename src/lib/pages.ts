@@ -10,7 +10,6 @@ export type PageKey =
   | "owes"
   | "compare"
   | "job-vs-business"
-  | "overall-debt"
   | "credit-report"
   | "divorce"
   | "divorce-responsibility";
@@ -60,13 +59,6 @@ export const PAGES: AppPage[] = [
     label: "Job vs Business",
     where: "menu",
     blurb: "The full write-up: pros, cons, job leads, journal.",
-  },
-  {
-    key: "overall-debt",
-    href: "/overall-debt",
-    label: "Overall Debt",
-    where: "menu",
-    blurb: "Everything owed and owned between both of you.",
   },
   {
     key: "credit-report",
