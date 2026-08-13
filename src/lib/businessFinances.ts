@@ -56,6 +56,8 @@ export type Mistake = {
   /** The part of it that was the mistake — all of it, or the marked slice. */
   mistakeAmount: number;
   full: boolean;
+  /** Which Schedule C line it's booked to — same wording as "Line by line". */
+  category: string;
 };
 
 /** The same year with the mistakes taken back out. */
