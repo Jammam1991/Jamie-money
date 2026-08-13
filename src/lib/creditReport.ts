@@ -77,7 +77,38 @@ export type ReportAccount = {
   responsibility: string | null;
   opened: string | null;
   neverLate: boolean;
+  /** What Money App read off the Responsibility line when it parsed the report. */
+  authorizedUser?: boolean;
+  /** Hand-set in Money App. Wins over what the bureau said. */
+  authorizedUserOverride?: boolean | null;
 };
+
+// ── Cards that are on the report but aren't his ──────────────────────────────
+// An authorized user can spend on someone else's card, so the whole account —
+// balance, limit, payment record — lands on their report too. It moves their
+// score, but they don't owe the money and the bill isn't theirs.
+//
+// The bureau says which is which on the Responsibility line: Experian writes
+// "Authorized user", TransUnion writes "Authorized account".
+const AUTHORIZED_USER_RE = /authoriz(?:ed)?\s*(?:user|account)/i;
+
+/**
+ * Is this someone else's account that Jamie can just spend on?
+ *
+ * Same order of precedence Money App uses, so both apps agree: a mark set by
+ * hand wins, then what the parser found, and failing both the stored
+ * Responsibility line is read directly — reports saved before Money App had
+ * the flag still answer correctly, with no re-import.
+ */
+export function isAuthorizedUser(a: {
+  authorizedUser?: boolean;
+  authorizedUserOverride?: boolean | null;
+  responsibility?: string | null;
+}): boolean {
+  if (a.authorizedUserOverride != null) return a.authorizedUserOverride;
+  if (a.authorizedUser != null) return a.authorizedUser;
+  return a.responsibility ? AUTHORIZED_USER_RE.test(a.responsibility) : false;
+}
 
 export const REPORT_GROUP_LABEL: Record<ReportAccountGroup, string> = {
   credit_card: "Credit cards",
