@@ -641,16 +641,36 @@ export interface FicoScoreEntry {
 export async function getFicoHistory(): Promise<FicoScoreEntry[]> {
   const c = client();
   if (!c) return [];
-  const { data, error } = await c
-    .from("moneyapp_fico_history")
-    .select("*")
-    .order("scored_on", { ascending: true });
-  if (error || !data) return [];
-  return data.map((row) => ({
+
+  // Fetch both fico history and credit reports
+  const [ficoRes, reportsRes] = await Promise.all([
+    c
+      .from("moneyapp_fico_history")
+      .select("*")
+      .order("scored_on", { ascending: true }),
+    c
+      .from("moneyapp_credit_reports")
+      .select("report_date, negatives")
+      .order("report_date", { ascending: true }),
+  ]);
+
+  if (ficoRes.error || !ficoRes.data) return [];
+
+  // Build a map of report_date -> negatives for quick lookup
+  const negativesByDate = new Map<string, NegativeFactor[]>();
+  if (!reportsRes.error && reportsRes.data) {
+    for (const report of reportsRes.data) {
+      if (report.negatives && Array.isArray(report.negatives)) {
+        negativesByDate.set(report.report_date, report.negatives as NegativeFactor[]);
+      }
+    }
+  }
+
+  return ficoRes.data.map((row) => ({
     score: Number(row.score),
     scoredOn: row.scored_on,
     note: row.note ?? null,
-    negatives: Array.isArray(row.negatives) ? (row.negatives as NegativeFactor[]) : null,
+    negatives: negativesByDate.get(row.scored_on) ?? null,
   }));
 }
 
