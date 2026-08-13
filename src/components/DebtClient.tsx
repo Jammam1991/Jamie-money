@@ -40,6 +40,7 @@ import {
   deleteDebt,
   deleteDebtTransaction,
   importDebts,
+  setSettlementTotal,
   updateDebt,
 } from "@/lib/actions";
 
@@ -86,17 +87,19 @@ function isBusinessDebt(debt: Debt): boolean {
   return debt.scope === "business";
 }
 
-// What Jamie owes Chris out of the settlement, as one line in the list. There
-// is no agreed balance to read — only the monthly amount on the Divorce page —
-// so this multiplies it out over five years and says plainly that it's an
-// estimate. SETTLEMENT_MONTHS is the only guess in it.
+// What Jamie owes Chris out of the settlement, as one line in the list.
+//
+// Chris can set the figure himself, and when he has, that's what's shown. Until
+// then there's nothing to read but the monthly amount from the Divorce page, so
+// it's multiplied out over five years and labelled an estimate — SETTLEMENT_MONTHS
+// is the whole of the guess.
 const SETTLEMENT_MONTHS = 60;
 
-function settlementLoan(monthly: number): Debt {
+function settlementLoan(monthly: number, total: number | null): Debt {
   return {
     id: "__divorce_settlement__",
     name: "Divorce Settlement Loan",
-    balance: monthly * SETTLEMENT_MONTHS,
+    balance: total ?? monthly * SETTLEMENT_MONTHS,
     monthly,
     paidPct: 0,
     apr: 0, // A settlement doesn't charge interest.
@@ -117,6 +120,7 @@ export default function DebtClient({
   payProblem,
   currentYear,
   settlementMonthly,
+  settlementTotal,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -129,6 +133,7 @@ export default function DebtClient({
   payProblem: string | null;
   currentYear: number;
   settlementMonthly: number; // monthly support from the Divorce page
+  settlementTotal: number | null; // what Chris set, or null to use the estimate
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -138,6 +143,10 @@ export default function DebtClient({
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [extra, setExtra] = useState(100);
+  // What Chris set the settlement to, held here so the number moves the moment
+  // he saves rather than after the round trip.
+  const [settlementOverride, setSettlementOverride] = useState<number | null>(settlementTotal);
+  const [editingSettlement, setEditingSettlement] = useState(false);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
 
@@ -146,7 +155,7 @@ export default function DebtClient({
   // anyone agreed to. So it's built here and kept out of everything that
   // reasons about actual debt — the year-by-year story, the "you owe" sentence,
   // the payoff maths — and added only to the secured totals at the top.
-  const settlement = settlementLoan(settlementMonthly);
+  const settlement = settlementLoan(settlementMonthly, settlementOverride);
   const businessDebts = debts.filter(isBusinessDebt);
   const personalDebts = debts.filter((d) => !isBusinessDebt(d));
 
@@ -271,6 +280,19 @@ export default function DebtClient({
     });
   }
 
+  // `null` clears Chris's figure and puts the row back on its own estimate.
+  function handleSaveSettlement(value: number | null) {
+    const previous = settlementOverride;
+    setSettlementOverride(value);
+    setEditingSettlement(false);
+    startTransition(async () => {
+      const res = await setSettlementTotal(value);
+      // Put the old number back rather than leave a figure on screen that isn't
+      // the one saved — this is money Jamie is being told he owes.
+      if (!res.ok) setSettlementOverride(previous);
+    });
+  }
+
   function handleDeleteTransaction(id: string) {
     setTxs((list) => list.filter((t) => t.id !== id));
     startTransition(() => {
@@ -349,26 +371,51 @@ export default function DebtClient({
         <div className="space-y-3">
           {personalDebts.map(row)}
 
-          {/* The settlement. No row in the database and no agreed balance, so
-              it's marked estimated rather than shown as if it were settled. */}
-          <div>
-            <div className="flex items-center justify-between font-medium">
-              <span className="truncate">{settlement.name}</span>
-              <span>{money(settlement.balance)}</span>
+          {/* The settlement. It has no row in the database — Chris either sets
+              the figure or the page works one out from the monthly amount, and
+              it says which of the two you're looking at. */}
+          {editingSettlement ? (
+            <SettlementForm
+              current={settlementOverride}
+              estimate={settlementMonthly * SETTLEMENT_MONTHS}
+              onCancel={() => setEditingSettlement(false)}
+              onSave={handleSaveSettlement}
+            />
+          ) : (
+            <div>
+              <div className="flex items-center justify-between font-medium">
+                <span className="truncate">{settlement.name}</span>
+                <span className="flex items-center gap-3">
+                  {money(settlement.balance)}
+                  {admin && (
+                    <button
+                      aria-label="Edit the settlement total"
+                      className="text-muted"
+                      onClick={() => setEditingSettlement(true)}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  )}
+                </span>
+              </div>
+              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                {settlementOverride === null && (
+                  <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                    Estimated
+                  </span>
+                )}
+                <span>{money(settlement.minPayment)}/mo · no interest</span>
+              </p>
+              {settlementOverride === null && (
+                <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
+                  <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                  A guess, not a number anyone agreed to:{" "}
+                  {money(settlement.minPayment)} a month over five years. The
+                  real figure comes out of the settlement.
+                </p>
+              )}
             </div>
-            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-              <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-                Estimated
-              </span>
-              <span>{money(settlement.minPayment)}/mo · no interest</span>
-            </p>
-            <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
-              <AlertCircle size={13} className="mt-0.5 shrink-0" />
-              A guess, not a number anyone agreed to:{" "}
-              {money(settlement.minPayment)} a month over five years. The real
-              figure comes out of the settlement.
-            </p>
-          </div>
+          )}
         </div>
 
         {admin &&
@@ -492,6 +539,72 @@ export default function DebtClient({
       )}
 
 
+    </div>
+  );
+}
+
+// ── The settlement total ──────────────────────────────────────────────────────
+// Admin-only. Empty means "no figure of mine" — the row goes back to the
+// estimate rather than to zero, so clearing it can't quietly tell Jamie he owes
+// nothing.
+function SettlementForm({
+  current,
+  estimate,
+  onCancel,
+  onSave,
+}: {
+  current: number | null;
+  estimate: number;
+  onCancel: () => void;
+  onSave: (value: number | null) => void;
+}) {
+  const [value, setValue] = useState(current === null ? "" : String(current));
+
+  function submit() {
+    const trimmed = value.trim();
+    if (!trimmed) return onSave(null);
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) return;
+    onSave(Math.round(n));
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl bg-tint p-3">
+      <p className="text-[13px] font-medium">Divorce Settlement Loan</p>
+      <label className="block">
+        <span className="mb-1 block text-[11px] text-muted">What Jamie owes $</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          autoFocus
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
+          placeholder={String(estimate)}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") onCancel();
+          }}
+        />
+      </label>
+      <p className="text-xs text-muted">
+        {value.trim()
+          ? "Shown as the settlement total, with no estimate note."
+          : `Leave it empty to go back to the estimate of ${money(estimate)}.`}
+      </p>
+      <div className="flex justify-end gap-2">
+        <button className="rounded-lg px-3 py-2 text-sm text-muted" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          className={primaryBtn + " flex items-center gap-1.5"}
+          style={{ background: "var(--good)" }}
+          onClick={submit}
+        >
+          <Check size={16} />
+          Save
+        </button>
+      </div>
     </div>
   );
 }

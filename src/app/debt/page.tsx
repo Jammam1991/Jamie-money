@@ -7,6 +7,7 @@ import {
   getDebts,
   getDebtSnapshotRows,
   getDivorce,
+  getSettlementTotal,
   getJamieSpending,
   getMoneyAppFico,
   hasPlaidItems,
@@ -43,6 +44,7 @@ export default async function DebtPage() {
     snapshots,
     payMonths,
     divorce,
+    settlementTotal,
   ] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
@@ -52,6 +54,7 @@ export default async function DebtPage() {
     getDebtSnapshotRows(),
     getPayMonths(),
     getDivorce(),
+    getSettlementTotal(),
   ]);
 
   return (
@@ -69,6 +72,7 @@ export default async function DebtPage() {
         payProblem={payMonths.problem}
         currentYear={new Date().getFullYear()}
         settlementMonthly={divorce.support.amount}
+        settlementTotal={settlementTotal}
       />
     </div>
   );

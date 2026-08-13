@@ -157,6 +157,32 @@ export async function hasPlaidItems(): Promise<boolean> {
 }
 
 // Jamie's latest credit score, last pulled from Money App.
+// ── What Jamie owes Chris out of the settlement ──────────────────────────────
+// The Debt page can work this out on its own — the monthly support figure over
+// five years — but that's arithmetic standing in for a number only Chris knows.
+// When he sets one here it wins, and the page stops guessing.
+//
+// It lives in `settings` rather than a column of its own because it isn't a
+// debt: there's no lender, no APR, and nothing syncs it. That also means no
+// setup SQL — `settings` is already there.
+//
+// null means nothing has been set, which is what makes "cleared, use the
+// estimate" different from "set to zero".
+export const SETTLEMENT_TOTAL_KEY = "divorce_settlement_total";
+
+export async function getSettlementTotal(): Promise<number | null> {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", SETTLEMENT_TOTAL_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return null;
+  const n = Number(data.value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export async function getMoneyAppFico(): Promise<{ score: number; date: string } | null> {
   const c = client();
   if (!c) return null;

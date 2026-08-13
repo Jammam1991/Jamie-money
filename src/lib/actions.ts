@@ -10,6 +10,7 @@ import {
   getBillPayments,
   getComingSoonPages,
   recordLogin,
+  SETTLEMENT_TOTAL_KEY,
 } from "./store";
 import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
 import type { BillDocument, BillPayment, CashKind } from "./data";
@@ -154,6 +155,29 @@ export async function setPageComingSoon(
   if (error) return { ok: false, error: error.message };
   // The nav and menu live in the root layout, so refresh every page.
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// What Jamie owes Chris out of the settlement. `null` clears it, which puts the
+// Debt page back on its own estimate rather than pinning it to zero — those are
+// different answers and the page shows them differently.
+export async function setSettlementTotal(value: number | null): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const { error } =
+    value === null
+      ? await c.from("settings").delete().eq("key", SETTLEMENT_TOTAL_KEY)
+      : await c
+          .from("settings")
+          .upsert(
+            { key: SETTLEMENT_TOTAL_KEY, value: String(Math.max(0, Math.round(value))) },
+            { onConflict: "key" },
+          );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
   return { ok: true };
 }
 
