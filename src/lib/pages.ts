@@ -12,6 +12,7 @@ export type PageKey =
   | "job-vs-business"
   | "credit-report"
   | "business-finances"
+  | "tax-center"
   | "divorce";
 
 export interface AppPage {
@@ -75,6 +76,13 @@ export const PAGES: AppPage[] = [
     // Parking it here hides the whole page. WHAT it shows when it's on is set
     // in the Money App instead — Settings → Shared access, on this app's row.
     blurb: "The gym's P&L, from the Money App. What's on it is set over there.",
+  },
+  {
+    key: "tax-center",
+    href: "/tax-center",
+    label: "Tax Center",
+    where: "menu",
+    blurb: "Taxes paid and refunds by year, from the Money App, plus the return documents.",
   },
   {
     key: "divorce",
