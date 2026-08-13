@@ -74,25 +74,33 @@ const inputClass =
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
 
-// Business debt keywords
-const BUSINESS_KEYWORDS = ["ampac", "pace", "gym", "business"];
+// Which rows belong to the business rather than to Jamie personally. Matched on
+// the name because that is all Money App and the credit report give us — the
+// lender is what tells them apart, not the debt type. "US Bank" is deliberately
+// not on its own: the auto loan is personal, only the card is the business's.
+const BUSINESS_LENDERS = ["ampac", "pace"];
 
 function isBusinessDebt(debt: Debt): boolean {
-  return BUSINESS_KEYWORDS.some((kw) => debt.name.toLowerCase().includes(kw));
+  const name = debt.name.toLowerCase();
+  if (BUSINESS_LENDERS.some((lender) => name.includes(lender))) return true;
+  return name.includes("us bank") && /card|credit/.test(name);
 }
 
-// Create a virtual debt entry for the divorce settlement loan
-function createDivorceLoan(): Debt {
-  const monthlyPayment = 900; // From divorce settlement
-  const estimatedMonths = 60; // 5-year estimate
+// What Jamie owes Chris out of the settlement, as one line in the list. There
+// is no agreed balance to read — only the monthly amount on the Divorce page —
+// so this multiplies it out over five years and says plainly that it's an
+// estimate. SETTLEMENT_MONTHS is the only guess in it.
+const SETTLEMENT_MONTHS = 60;
+
+function settlementLoan(monthly: number): Debt {
   return {
     id: "__divorce_settlement__",
     name: "Divorce Settlement Loan",
-    balance: monthlyPayment * estimatedMonths,
-    monthly: monthlyPayment,
+    balance: monthly * SETTLEMENT_MONTHS,
+    monthly,
     paidPct: 0,
-    apr: 0, // Settlement payments don't accrue interest
-    minPayment: monthlyPayment,
+    apr: 0, // A settlement doesn't charge interest.
+    minPayment: monthly,
     debtType: "settlement",
   };
 }
@@ -108,6 +116,7 @@ export default function DebtClient({
   payMonths,
   payProblem,
   currentYear,
+  settlementMonthly,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -119,6 +128,7 @@ export default function DebtClient({
   payMonths: PayMonth[];
   payProblem: string | null;
   currentYear: number;
+  settlementMonthly: number; // monthly support from the Divorce page
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -131,19 +141,26 @@ export default function DebtClient({
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
 
-  const divorceLoan = createDivorceLoan();
-  const allDebtsIncludingDivorce = [...debts, divorceLoan];
+  // The settlement is shown alongside the real debts but isn't one of them: it
+  // has no row in the database, and it's an estimate rather than a balance
+  // anyone agreed to. So it's built here and kept out of everything that
+  // reasons about actual debt — the year-by-year story, the "you owe" sentence,
+  // the payoff maths — and added only to the secured totals at the top.
+  const settlement = settlementLoan(settlementMonthly);
 
-  const total = totalBalance(allDebtsIncludingDivorce);
-  const minTotal = totalMinimum(allDebtsIncludingDivorce);
-  const mo = monthlyInterest(allDebtsIncludingDivorce);
+  const total = totalBalance(debts);
+  const minTotal = totalMinimum(debts);
+  const mo = monthlyInterest(debts);
   const cards = cardBalance(debts);
   const carLoans = carLoanBalance(debts);
   const personalLoans = personalLoanBalance(debts);
 
-  // Partition debts into personal and business
+  const businessDebts = debts.filter(isBusinessDebt);
   const personalDebts = debts.filter((d) => !isBusinessDebt(d));
-  const businessDebts = debts.filter((d) => isBusinessDebt(d));
+  const personalTotal = totalBalance(personalDebts) + settlement.balance;
+  const businessTotal = totalBalance(businessDebts);
+  const securedTotal = personalTotal + businessTotal;
+  const securedMin = minTotal + settlement.minPayment;
 
   // New debt added, bucketed by the year of each charge. Newest year first.
   const byYear = new Map<number, number>();
@@ -255,8 +272,132 @@ export default function DebtClient({
     });
   }
 
+  // One row of the two lists below. Editing swaps it for the form in place, so
+  // both sections behave the same way without repeating the markup twice.
+  function row(d: Debt) {
+    if (editingId === d.id) {
+      return (
+        <DebtForm
+          key={d.id}
+          initial={d}
+          onCancel={() => setEditingId(null)}
+          onSave={(data) => handleUpdate({ ...d, ...data })}
+        />
+      );
+    }
+    return (
+      <div key={d.id}>
+        <div className="flex items-center justify-between font-medium">
+          <span className="truncate">{d.name}</span>
+          <span className="flex items-center gap-3">
+            {money(d.balance)}
+            {admin && (
+              <>
+                <button
+                  aria-label="Edit"
+                  className="text-muted"
+                  onClick={() => setEditingId(d.id)}
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  aria-label="Delete"
+                  className="text-muted"
+                  onClick={() => handleDelete(d.id)}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </>
+            )}
+          </span>
+        </div>
+        <p className="mb-2 mt-1 text-xs text-muted">
+          {d.apr}% interest · {money(d.minPayment)}/mo minimum
+          {financeCharge(d) > 0 && (
+            <> · {money(financeCharge(d))}/mo finance charge</>
+          )}
+        </p>
+        {d.paidPct > 0 && <Bar pct={d.paidPct} />}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {/* Everything owed, in one number, before the page breaks it apart. */}
+      <Card>
+        <p className="text-[13px] text-muted">Total Debt Secured</p>
+        <p className="mt-1 text-3xl font-medium">{money(securedTotal)}</p>
+        <p className="mt-2 text-xs text-muted">
+          {money(securedMin)}/mo minimum · {money(mo)}/mo of that is interest
+        </p>
+      </Card>
+
+      {/* Jamie's own debts, plus what's owed to Chris out of the settlement. */}
+      <Card>
+        <div className="mb-3 flex items-baseline justify-between">
+          <p className="text-[13px] font-medium">Personal Debt Secured</p>
+          <p className="text-[13px] text-muted">{money(personalTotal)}</p>
+        </div>
+        <div className="space-y-3">
+          {personalDebts.map(row)}
+
+          {/* The settlement. No row in the database and no agreed balance, so
+              it's marked estimated rather than shown as if it were settled. */}
+          <div>
+            <div className="flex items-center justify-between font-medium">
+              <span className="truncate">{settlement.name}</span>
+              <span>{money(settlement.balance)}</span>
+            </div>
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+              <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                Estimated
+              </span>
+              <span>{money(settlement.minPayment)}/mo · no interest</span>
+            </p>
+            <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
+              <AlertCircle size={13} className="mt-0.5 shrink-0" />
+              A guess, not a number anyone agreed to:{" "}
+              {money(settlement.minPayment)} a month over five years. The real
+              figure comes out of the settlement.
+            </p>
+          </div>
+        </div>
+
+        {admin &&
+          (adding ? (
+            <div className="mt-3">
+              <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
+            </div>
+          ) : (
+            <button
+              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
+              onClick={() => setAdding(true)}
+            >
+              <Plus size={16} />
+              Add a debt
+            </button>
+          ))}
+      </Card>
+
+      {/* The gym's debts. Shown even when empty so it's clear nothing is
+          hiding — the names Chris expects here (AMPAC, Pace, the US Bank card)
+          have to exist as debts before they can be sorted into it. */}
+      <Card>
+        <div className="mb-3 flex items-baseline justify-between">
+          <p className="text-[13px] font-medium">Business Debt Secured</p>
+          <p className="text-[13px] text-muted">{money(businessTotal)}</p>
+        </div>
+        {businessDebts.length > 0 ? (
+          <div className="space-y-3">{businessDebts.map(row)}</div>
+        ) : (
+          <p className="text-xs text-muted">
+            Nothing here yet. A debt named for AMPAC, Pace, or the US Bank card
+            lands in this section on its own.
+          </p>
+        )}
+      </Card>
+
       {/* This year's headline. The years before it used to be listed here too,
           but they're the same rows the card below opens with — so they live in
           one place now instead of being scrolled past twice. */}
@@ -342,155 +483,6 @@ export default function DebtClient({
         />
       )}
 
-      {/* Total debt secured header */}
-      <Card>
-        <p className="text-[13px] text-muted">Total Debt Secured</p>
-        <p className="mt-2 text-3xl font-medium">{money(total)}</p>
-        <p className="mt-1 text-xs text-muted">
-          {money(minTotal)}/mo minimum payments · {money(mo)}/mo in finance charges
-        </p>
-      </Card>
-
-      {/* Personal Debt Secured */}
-      <Card>
-        <p className="mb-3 text-[13px] font-medium">Personal Debt Secured</p>
-        <div className="space-y-3">
-          {personalDebts.map((d) =>
-            editingId === d.id ? (
-              <DebtForm
-                key={d.id}
-                initial={d}
-                onCancel={() => setEditingId(null)}
-                onSave={(data) => handleUpdate({ ...d, ...data })}
-              />
-            ) : (
-              <div key={d.id}>
-                <div className="flex items-center justify-between font-medium">
-                  <span className="truncate">{d.name}</span>
-                  <span className="flex items-center gap-3">
-                    {money(d.balance)}
-                    {admin && (
-                      <>
-                        <button
-                          aria-label="Edit"
-                          className="text-muted"
-                          onClick={() => setEditingId(d.id)}
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          aria-label="Delete"
-                          className="text-muted"
-                          onClick={() => handleDelete(d.id)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </>
-                    )}
-                  </span>
-                </div>
-                <p className="mb-2 mt-1 text-xs text-muted">
-                  {d.apr}% interest · {money(d.minPayment)}/mo minimum
-                  {financeCharge(d) > 0 && (
-                    <> · {money(financeCharge(d))}/mo finance charge</>
-                  )}
-                </p>
-                {d.paidPct > 0 && <Bar pct={d.paidPct} />}
-              </div>
-            )
-          )}
-
-          {/* Divorce Settlement Loan */}
-          <div>
-            <div className="flex items-center justify-between font-medium">
-              <span className="flex items-center gap-1.5">
-                {divorceLoan.name}
-                <span className="inline-block rounded bg-warn/20 px-1.5 py-0.5 text-[10px] font-medium text-warn">
-                  ESTIMATED
-                </span>
-              </span>
-              <span>{money(divorceLoan.balance)}</span>
-            </div>
-            <p className="mb-2 mt-1 text-xs text-muted">
-              {divorceLoan.apr}% interest · {money(divorceLoan.minPayment)}/mo minimum
-            </p>
-            <div className="flex items-start gap-2 rounded-lg bg-tint p-2">
-              <AlertCircle size={14} className="mt-0.5 text-muted flex-shrink-0" />
-              <p className="text-xs text-muted">
-                This is an estimate based on the settlement support amount. Actual balance may differ.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {admin &&
-          (adding ? (
-            <div className="mt-3">
-              <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
-            </div>
-          ) : (
-            <button
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-              onClick={() => setAdding(true)}
-            >
-              <Plus size={16} />
-              Add a debt
-            </button>
-          ))}
-      </Card>
-
-      {/* Business Debt Secured */}
-      {businessDebts.length > 0 && (
-        <Card>
-          <p className="mb-3 text-[13px] font-medium">Business Debt Secured</p>
-          <div className="space-y-3">
-            {businessDebts.map((d) =>
-              editingId === d.id ? (
-                <DebtForm
-                  key={d.id}
-                  initial={d}
-                  onCancel={() => setEditingId(null)}
-                  onSave={(data) => handleUpdate({ ...d, ...data })}
-                />
-              ) : (
-                <div key={d.id}>
-                  <div className="flex items-center justify-between font-medium">
-                    <span className="truncate">{d.name}</span>
-                    <span className="flex items-center gap-3">
-                      {money(d.balance)}
-                      {admin && (
-                        <>
-                          <button
-                            aria-label="Edit"
-                            className="text-muted"
-                            onClick={() => setEditingId(d.id)}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            aria-label="Delete"
-                            className="text-muted"
-                            onClick={() => handleDelete(d.id)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <p className="mb-2 mt-1 text-xs text-muted">
-                    {d.apr}% interest · {money(d.minPayment)}/mo minimum
-                    {financeCharge(d) > 0 && (
-                      <> · {money(financeCharge(d))}/mo finance charge</>
-                    )}
-                  </p>
-                  {d.paidPct > 0 && <Bar pct={d.paidPct} />}
-                </div>
-              )
-            )}
-          </div>
-        </Card>
-      )}
 
     </div>
   );

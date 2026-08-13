@@ -6,6 +6,7 @@ import {
   getDebtTransactions,
   getDebts,
   getDebtSnapshotRows,
+  getDivorce,
   getJamieSpending,
   getMoneyAppFico,
   hasPlaidItems,
@@ -33,8 +34,16 @@ export default async function DebtPage() {
   const c = client();
   if (c) after(() => autoSyncMoneyAppDebts(c));
 
-  const [debts, hasBank, fico, transactions, spending, snapshots, payMonths] =
-    await Promise.all([
+  const [
+    debts,
+    hasBank,
+    fico,
+    transactions,
+    spending,
+    snapshots,
+    payMonths,
+    divorce,
+  ] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
     getMoneyAppFico(),
@@ -42,6 +51,7 @@ export default async function DebtPage() {
     getJamieSpending(),
     getDebtSnapshotRows(),
     getPayMonths(),
+    getDivorce(),
   ]);
 
   return (
@@ -58,6 +68,7 @@ export default async function DebtPage() {
         payMonths={payMonths.months}
         payProblem={payMonths.problem}
         currentYear={new Date().getFullYear()}
+        settlementMonthly={divorce.support.amount}
       />
     </div>
   );
