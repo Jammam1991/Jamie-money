@@ -36,6 +36,10 @@ export default async function DivorceResponsibilityPage() {
         </p>
         <Link
           href="/story"
+          // Don't prefetch: /story mints a fresh pass every time it's asked, so
+          // a prefetch spends one for a tap that may never come — and leaves the
+          // router holding a redirect built earlier than the tap.
+          prefetch={false}
           className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-3 text-sm font-medium text-white"
           style={{ background: "linear-gradient(135deg, #a56814 0%, #7d4a0b 100%)" }}
         >
