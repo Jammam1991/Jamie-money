@@ -88,7 +88,7 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
         />
       )}
 
-      {view.show_monthly && <MonthlyStrip rollup={rollup} on={on} />}
+      {view.show_monthly && <MonthlyStrip rollup={rollup} on={on} labels={data.monthLabels} />}
 
       {view.show_schedule_c && <Lines rollup={rollup} on={on} />}
 
@@ -501,7 +501,18 @@ function MistakesPanel({
 
 // Profit month by month. Bars go up from the middle when the month made money
 // and down when it lost, so a bad stretch is obvious without reading a number.
-function MonthlyStrip({ rollup, on }: { rollup: Rollup; on: boolean }) {
+// `labels` overrides the default Jan–Dec letters — required whenever the
+// array can run longer than 12 entries (the all-time view spans multiple
+// years), since indexing the fixed MONTHS array past 11 would crash.
+function MonthlyStrip({
+  rollup,
+  on,
+  labels,
+}: {
+  rollup: Rollup;
+  on: boolean;
+  labels?: string[];
+}) {
   const months = rollup.monthlyNetProfit;
   const peak = Math.max(...months.map((m) => Math.abs(m)), 1);
 
@@ -538,7 +549,7 @@ function MonthlyStrip({ rollup, on }: { rollup: Rollup; on: boolean }) {
                   />
                 )}
               </div>
-              <span className="mt-1 text-[9px] text-muted">{MONTHS[i][0]}</span>
+              <span className="mt-1 text-[9px] text-muted">{labels ? labels[i] : MONTHS[i][0]}</span>
             </div>
           );
         })}

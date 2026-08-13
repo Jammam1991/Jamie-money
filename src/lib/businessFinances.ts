@@ -123,6 +123,12 @@ export type BusinessFinances = {
   flagged: FlaggedTx[];
   notes: Note[];
   documents: Doc[];
+  /**
+   * Only set for "all-time": one label per entry in actual.monthlyNetProfit
+   * (and noMistakes.rollup.monthlyNetProfit), since that array spans more
+   * than 12 months and the plain Jan–Dec labels no longer apply.
+   */
+  monthLabels?: string[];
 };
 
 function apiUrl(): string | undefined {
@@ -169,8 +175,13 @@ export async function getBusinessFinances(
       if (!firstRes.ok) throw new Error(`Money App returned ${firstRes.status}`);
       const firstData = (await firstRes.json()) as BusinessFinances;
 
+      // The business started Nov 27, 2024 — make sure that year is fetched
+      // even if Money App's own "years" list starts later (e.g. it only
+      // lists years with a full-year's worth of tax-relevant data).
+      const yearsToFetch = Array.from(new Set([...firstData.years, BUSINESS_START_YEAR]));
+
       // Fetch all years and aggregate
-      const allYearPromises = firstData.years.map(async (y) => {
+      const allYearPromises = yearsToFetch.map(async (y) => {
         const yParams = new URLSearchParams({ email, year: String(y) });
         const res = await fetch(
           `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${yParams}`,
@@ -229,6 +240,33 @@ export async function getBusinessFinances(
   }
 }
 
+const BUSINESS_START_YEAR = 2024;
+const BUSINESS_START_MONTH = 10; // November, 0-indexed
+const MONTH_LETTERS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+
+/**
+ * Every real calendar month from the business's start (Nov 2024) through
+ * today, in order. This is what makes the all-time monthly chart's x-axis —
+ * NOT one bucket per (year, month) pair, which is what caused the previous
+ * version to sometimes emit 24 entries for 2 years and crash the chart (it
+ * indexes a fixed 12-entry MONTHS array by position).
+ */
+function chronologicalMonths(): { year: number; month: number }[] {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+
+  const out: { year: number; month: number }[] = [];
+  for (let year = BUSINESS_START_YEAR; year <= currentYear; year++) {
+    const startMonth = year === BUSINESS_START_YEAR ? BUSINESS_START_MONTH : 0;
+    const endMonth = year === currentYear ? currentMonth : 11;
+    for (let month = startMonth; month <= endMonth; month++) {
+      out.push({ year, month });
+    }
+  }
+  return out;
+}
+
 /**
  * Aggregate multiple years of data into one all-time view.
  */
@@ -238,15 +276,28 @@ function aggregateYears(years: BusinessFinances[]): BusinessFinances {
   }
 
   const first = years[0];
+  const months = chronologicalMonths();
+  const monthLabels = months.map(({ year, month }) =>
+    month === BUSINESS_START_MONTH || month === 0
+      ? `${MONTH_LETTERS[month]}'${String(year).slice(2)}`
+      : MONTH_LETTERS[month],
+  );
+
   const aggregated: BusinessFinances = {
     view: first.view,
     year: "all-time",
     years: first.years,
     throughDate: first.throughDate, // Most recent date
-    actual: aggregateRollups(years.map((y) => y.actual)),
+    actual: aggregateRollups(
+      years.map((y) => y.actual),
+      months,
+    ),
     noMistakes: years.some((y) => y.noMistakes)
       ? {
-          rollup: aggregateRollups(years.map((y) => y.noMistakes?.rollup || y.actual)),
+          rollup: aggregateRollups(
+            years.map((y) => y.noMistakes?.rollup || y.actual),
+            months,
+          ),
           mistakes: years.flatMap((y) => y.noMistakes?.mistakes || []),
           profitDifference: years.reduce((sum, y) => sum + (y.noMistakes?.profitDifference || 0), 0),
         }
@@ -254,15 +305,20 @@ function aggregateYears(years: BusinessFinances[]): BusinessFinances {
     flagged: years.flatMap((y) => y.flagged),
     notes: years.flatMap((y) => y.notes),
     documents: years.flatMap((y) => y.documents),
+    monthLabels,
   };
 
   return aggregated;
 }
 
 /**
- * Combine multiple rollup objects (from different years) into one aggregated rollup.
+ * Combine multiple rollup objects (from different years) into one aggregated
+ * rollup. `months` fixes the exact chronological months to emit in
+ * monthlyNetProfit — every rollup is read by (year, month) lookup rather than
+ * concatenated, so the result always has exactly `months.length` entries,
+ * never one bucket per source year.
  */
-function aggregateRollups(rollups: Rollup[]): Rollup {
+function aggregateRollups(rollups: Rollup[], months: { year: number; month: number }[]): Rollup {
   if (rollups.length === 0) {
     throw new Error("No rollups to aggregate");
   }
@@ -271,26 +327,11 @@ function aggregateRollups(rollups: Rollup[]): Rollup {
   const sumCogs = rollups.reduce((sum, r) => sum + r.cogs, 0);
   const sumExpenses = rollups.reduce((sum, r) => sum + r.expenses, 0);
 
-  // For monthly data, create a continuous array from Nov 2024 to current month
-  const allMonthlyData = rollups.flatMap((r, yearIndex) => {
-    const year = r.year;
-    return r.monthlyNetProfit.map((profit, monthIndex) => ({
-      year,
-      month: monthIndex,
-      profit,
-    }));
-  });
+  const byYear = new Map(rollups.map((r) => [r.year, r]));
+  const monthlyNetProfit = months.map(
+    ({ year, month }) => byYear.get(year)?.monthlyNetProfit[month] ?? 0,
+  );
 
-  // Aggregate by counting months and summing profits
-  const monthlyMap = new Map<string, number>();
-  for (const m of allMonthlyData) {
-    const key = `${m.year}-${m.month}`;
-    monthlyMap.set(key, (monthlyMap.get(key) || 0) + m.profit);
-  }
-
-  const aggregatedMonthly = Array.from(monthlyMap.values());
-
-  const first = rollups[0];
   return {
     year: -1, // Special value for all-time
     lines: rollups.flatMap((r) => r.lines),
@@ -307,7 +348,7 @@ function aggregateRollups(rollups: Rollup[]): Rollup {
       { income: 0, cogs: 0, expense: 0 },
     ),
     untaggedAccountCount: Math.max(...rollups.map((r) => r.untaggedAccountCount), 0),
-    monthlyNetProfit: aggregatedMonthly,
+    monthlyNetProfit,
     fedHidden: rollups.some((r) => r.fedHidden),
     fedDroppedCount: rollups.reduce((sum, r) => sum + r.fedDroppedCount, 0),
     mistakesRemoved: rollups.some((r) => r.mistakesRemoved),
