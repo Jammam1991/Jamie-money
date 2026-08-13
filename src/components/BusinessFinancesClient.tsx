@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { ChevronDown } from "lucide-react";
 import { Card, Tint } from "@/components/ui";
 import type { BusinessFinances, Mistake, Rollup } from "@/lib/businessFinances";
 
@@ -207,6 +208,28 @@ function Headline({ rollup, on }: { rollup: Rollup; on: boolean }) {
 // The button Chris asked for: what profit looks like with the start-up mistakes
 // taken back out, and the list of what they were. The books themselves never
 // change — this is the same year counted a second way.
+type MistakeGroup = { category: string; total: number; mistakes: Mistake[] };
+
+// One row per category instead of one row per transaction — a year can flag
+// forty small charges under "Advertising" and Jamie only needs the one number
+// unless he goes looking. Sorted worst-first, so whatever cost the most sits
+// at the top without him having to add anything up.
+function groupMistakes(mistakes: Mistake[]): MistakeGroup[] {
+  const byCategory = new Map<string, Mistake[]>();
+  for (const m of mistakes) {
+    const list = byCategory.get(m.category);
+    if (list) list.push(m);
+    else byCategory.set(m.category, [m]);
+  }
+  return [...byCategory.entries()]
+    .map(([category, list]) => ({
+      category,
+      total: list.reduce((s, m) => s + m.mistakeAmount, 0),
+      mistakes: list,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
 function MistakesPanel({
   on,
   onToggle,
@@ -223,6 +246,15 @@ function MistakesPanel({
   mistakes: Mistake[];
 }) {
   const total = mistakes.reduce((s, m) => s + m.mistakeAmount, 0);
+  const groups = groupMistakes(mistakes);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggleGroup = (category: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
 
   return (
     <Card>
@@ -274,22 +306,59 @@ function MistakesPanel({
           </p>
 
           <p className="mt-4 text-[14px] font-medium">What the mistakes were</p>
-          <ul className="mt-2 space-y-2">
-            {mistakes.map((m) => (
-              <li key={m.id} className="flex items-baseline justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-[14px]">{m.name ?? "—"}</p>
-                  <p className="text-[12px] text-muted">
-                    {shortDate(m.date)}
-                    {!m.full && " · part of a bigger charge"}
-                    {m.memo && ` · ${m.memo}`}
-                  </p>
-                </div>
-                <span className="shrink-0 text-[14px] font-medium" style={{ color: "var(--neg)" }}>
-                  {money(m.mistakeAmount)}
-                </span>
-              </li>
-            ))}
+          <ul className="mt-2 space-y-1">
+            {groups.map((g) => {
+              const expanded = open.has(g.category);
+              return (
+                <li key={g.category} className="rounded-xl" style={{ background: "var(--tint)" }}>
+                  <button
+                    onClick={() => toggleGroup(g.category)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <ChevronDown
+                        size={15}
+                        className="shrink-0 text-muted transition-transform"
+                        style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                      <span className="truncate text-[14px] font-medium">{g.category}</span>
+                      <span className="shrink-0 text-[12px] text-muted">
+                        ({g.mistakes.length})
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[14px] font-medium" style={{ color: "var(--neg)" }}>
+                      {money(g.total)}
+                    </span>
+                  </button>
+
+                  {expanded && (
+                    <ul className="space-y-2 px-3 pb-3">
+                      {g.mistakes.map((m) => (
+                        <li
+                          key={m.id}
+                          className="flex items-baseline justify-between gap-3 rounded-lg bg-card px-2.5 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[13px]">{m.name ?? "—"}</p>
+                            <p className="text-[11px] text-muted">
+                              {shortDate(m.date)}
+                              {!m.full && " · part of a bigger charge"}
+                              {m.memo && ` · ${m.memo}`}
+                            </p>
+                          </div>
+                          <span
+                            className="shrink-0 text-[13px] font-medium"
+                            style={{ color: "var(--neg)" }}
+                          >
+                            {money(m.mistakeAmount)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
 
           <p className="mt-3 text-[12px] text-muted">
