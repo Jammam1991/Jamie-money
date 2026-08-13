@@ -11,6 +11,7 @@ export type PageKey =
   | "compare"
   | "job-vs-business"
   | "credit-report"
+  | "business-finances"
   | "divorce"
   | "divorce-responsibility";
 
@@ -66,6 +67,15 @@ export const PAGES: AppPage[] = [
     label: "Credit Report",
     where: "menu",
     blurb: "Uploaded reports and the credit-score history.",
+  },
+  {
+    key: "business-finances",
+    href: "/business-finances",
+    label: "Business Finances",
+    where: "menu",
+    // Parking it here hides the whole page. WHAT it shows when it's on is set
+    // in the Money App instead — Settings → Shared access, on this app's row.
+    blurb: "The gym's P&L, from the Money App. What's on it is set over there.",
   },
   {
     key: "divorce",
