@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // A nightly Vercel cron hits this (see vercel.json). The Debt page pulls on its
 // own too, but only when someone opens it — this is what keeps the numbers
 // current for the pages that read the same rows without opening Debt (Home,
-// Overall Debt, Credit Report).
+// Credit Report).
 //
 // Unlike the page-load pull, this one is not throttled: it runs once a night by
 // definition, and skipping it because someone happened to open the Debt page an

@@ -9,7 +9,6 @@ import { Menu, X, Scale, CreditCard, FileText, BookOpen } from "lucide-react";
 const links = [
   { href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
   { href: "/debt", label: "Debt", Icon: CreditCard },
-  { href: "/overall-debt", label: "Overall Debt", Icon: CreditCard },
   { href: "/credit-report", label: "Credit Report", Icon: FileText },
   { href: "/divorce", label: "Divorce", Icon: Scale },
   {
