@@ -5,6 +5,7 @@
 // database — nothing here is sent anywhere.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { fmtMoney, isAuthorizedUser, type ReportAccount } from "@/lib/creditReport";
 
 type CustomDebt = { id: string; name: string; amount: number };
@@ -74,6 +75,8 @@ export function DebtToIncomeCalculator({
   reportAccounts: ReportAccount[];
   storageKey: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   // Business loans ride on the personal report but aren't personal FICO debt,
   // so default them out of DTI too — the checkbox still lets one back in if a
   // lender is counting a personal guarantee.
@@ -202,13 +205,26 @@ export function DebtToIncomeCalculator({
 
   return (
     <div className="bg-card rounded-2xl border border-border p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-faint mb-1">
-        Debt-to-income
-      </p>
-      <p className="text-[11px] text-faint mb-3 leading-tight">
-        Lenders compare monthly debt payments to monthly income — most cap it around 43–45%, some
-        go to 50% for strong credit.
-      </p>
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between"
+        aria-expanded={expanded}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+          Debt-to-income
+        </p>
+        <ChevronDown
+          size={16}
+          className={`text-muted transition-transform ${expanded ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {expanded && (
+        <>
+          <p className="text-[11px] text-faint mb-3 mt-3 leading-tight">
+            Lenders compare monthly debt payments to monthly income — most cap it around 43–45%, some
+            go to 50% for strong credit.
+          </p>
 
       {/* Target DTI */}
       <div className="flex items-center gap-2 flex-wrap mb-4">
@@ -404,6 +420,8 @@ export function DebtToIncomeCalculator({
           Add
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 }
