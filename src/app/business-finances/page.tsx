@@ -9,16 +9,21 @@ export const dynamic = "force-dynamic";
 export default async function BusinessFinancesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ year?: string; month?: string }>;
 }) {
   const { comingSoon } = await pageGate("business-finances");
   if (comingSoon) return <ComingSoon title="Business Finances" />;
 
   const sp = await searchParams;
-  const asked = parseInt(sp.year ?? "", 10);
-  const { data, error } = await getBusinessFinances(
-    Number.isFinite(asked) ? asked : undefined,
-  );
+  const yearStr = sp.year ?? "";
+  const monthStr = sp.month ?? "";
+
+  // Handle "all-time" special case
+  const isAllTime = yearStr === "all-time";
+  const year = isAllTime ? undefined : (Number.isFinite(parseInt(yearStr, 10)) ? parseInt(yearStr, 10) : undefined);
+  const month = Number.isFinite(parseInt(monthStr, 10)) ? parseInt(monthStr, 10) : undefined;
+
+  const { data, error } = await getBusinessFinances(year, month, isAllTime);
 
   if (!data) {
     return (

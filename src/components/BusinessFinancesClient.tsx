@@ -15,6 +15,8 @@ import type { BusinessFinances, Mistake, Rollup } from "@/lib/businessFinances";
 // The one piece of state is the mistakes button. Both versions of the year come
 // down in the same response, so switching between them is instant and doesn't
 // ask Money App anything twice.
+//
+// Year tabs are now expandable dropdowns showing months. All start collapsed.
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -49,6 +51,16 @@ function shortDate(iso: string): string {
 
 export default function BusinessFinancesClient({ data }: { data: BusinessFinances }) {
   const [hideMistakes, setHideMistakes] = useState(false);
+  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
+
+  const toggleYear = (year: number) => {
+    setExpandedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  };
 
   const { view, noMistakes } = data;
   // The button can only be on while there's something to switch to — a year with
@@ -59,9 +71,11 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
 
   return (
     <div className="space-y-4">
-      <IntroCard data={data} />
+      <IntroCard data={data} expandedYears={expandedYears} onToggleYear={toggleYear} />
 
-      {view.show_headline && <Headline rollup={rollup} on={on} year={data.year} />}
+      {view.show_headline && (
+        <Headline rollup={rollup} on={on} year={data.year} month={data.month} />
+      )}
 
       {canSwitch && noMistakes && (
         <MistakesPanel
@@ -153,33 +167,114 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <p className="text-[16px] font-semibold">{children}</p>;
 }
 
-// The year, how current the books are, and — when more than one year is
-// allowed — the other years to jump to.
-function IntroCard({ data }: { data: BusinessFinances }) {
+// The year (expandable to months), how current the books are, and — when more
+// than one year is allowed — the other years to jump to. Year tabs are now
+// collapsible dropdowns showing 12 months. "All Time" is a special non-expandable tab.
+function IntroCard({
+  data,
+  expandedYears,
+  onToggleYear,
+}: {
+  data: BusinessFinances;
+  expandedYears: Set<number>;
+  onToggleYear: (year: number) => void;
+}) {
+  const isAllTime = data.year === "all-time";
+  const headerText = isAllTime ? "The gym's money, all time" : `The gym's money, ${data.year}`;
+
+  let dateRangeText = "";
+  if (isAllTime) {
+    dateRangeText = `From 11/27/24 through ${data.throughDate ? shortDate(data.throughDate) : "today"}`;
+  } else if (data.month) {
+    dateRangeText = `${MONTHS[data.month - 1]} ${data.year}`;
+  } else if (data.throughDate) {
+    dateRangeText = `Counted up to ${shortDate(data.throughDate)}`;
+  }
+
   return (
     <Card>
-      <p className="text-[15px] font-medium">The gym&apos;s money, {data.year}</p>
+      <p className="text-[15px] font-medium">{headerText}</p>
       <p className="mt-1 text-[13px] text-muted">
         Straight from Chris&apos;s accounting app. He picks what shows up here.
-        {data.throughDate && ` Counted up to ${shortDate(data.throughDate)}.`}
+        {dateRangeText && ` ${dateRangeText}.`}
       </p>
-      {data.years.length > 1 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {data.years.map((y) => (
-            <Link
-              key={y}
-              href={`/business-finances?year=${y}`}
-              scroll={false}
-              className="rounded-lg border border-border px-3 py-1 text-[13px]"
-              style={
-                y === data.year
-                  ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-                  : undefined
-              }
-            >
-              {y}
-            </Link>
-          ))}
+
+      {data.years.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {/* All Time tab - never expandable */}
+          <Link
+            href="/business-finances?year=all-time"
+            scroll={false}
+            className="inline-block rounded-lg border border-border px-3 py-1 text-[13px]"
+            style={
+              isAllTime
+                ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
+                : undefined
+            }
+          >
+            All Time
+          </Link>
+
+          {/* Year tabs - expandable to show months */}
+          <div className="space-y-2">
+            {data.years.map((y) => {
+              const isExpanded = expandedYears.has(y);
+              const isCurrentYear = y === data.year && !isAllTime;
+              const isCurrentMonth = isCurrentYear && data.month;
+
+              return (
+                <div key={y}>
+                  {/* Year button/tab */}
+                  <button
+                    onClick={() => onToggleYear(y)}
+                    className="flex items-center gap-2 rounded-lg border border-border px-3 py-1 text-[13px] transition-colors hover:bg-tint"
+                    style={
+                      isCurrentYear && !isCurrentMonth
+                        ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
+                        : undefined
+                    }
+                  >
+                    <ChevronDown
+                      size={14}
+                      className="transition-transform"
+                      style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+                    />
+                    <span>{y}</span>
+                  </button>
+
+                  {/* Month dropdown - shown when expanded */}
+                  {isExpanded && (
+                    <div className="ml-6 mt-2 flex flex-wrap gap-2">
+                      {MONTHS.map((month, idx) => {
+                        const monthNum = idx + 1;
+                        const isSelectedMonth = isCurrentMonth && data.month === monthNum;
+
+                        return (
+                          <Link
+                            key={idx}
+                            href={`/business-finances?year=${y}&month=${monthNum}`}
+                            scroll={false}
+                            className="rounded-lg border border-border px-2 py-1 text-[12px]"
+                            style={
+                              isSelectedMonth
+                                ? {
+                                    background: "var(--good)",
+                                    color: "#fff",
+                                    borderColor: "var(--good)",
+                                  }
+                                : undefined
+                            }
+                          >
+                            {month}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </Card>
@@ -187,10 +282,22 @@ function IntroCard({ data }: { data: BusinessFinances }) {
 }
 
 // Money in, money out, what's left. The three numbers everything else explains.
-function Headline({ rollup, on, year }: { rollup: Rollup; on: boolean; year: number }) {
+function Headline({
+  rollup,
+  on,
+  year,
+  month,
+}: {
+  rollup: Rollup;
+  on: boolean;
+  year: number | "all-time";
+  month?: number;
+}) {
   const out = rollup.cogs + rollup.expenses;
   const profit = rollup.netProfit;
-  const projection = getYearEndProjection(profit, year);
+  // Only show year-end projection for current year, not for months or all-time
+  const projection =
+    typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;
 
   return (
     <Card>

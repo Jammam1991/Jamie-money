@@ -111,7 +111,8 @@ export type Doc = {
 
 export type BusinessFinances = {
   view: ViewSettings;
-  year: number;
+  year: number | "all-time";
+  month?: number;
   /** The years this app is allowed to open, newest first. */
   years: number[];
   /** The last business transaction in the year — how current the books are. */
@@ -146,6 +147,8 @@ export function businessFinancesReady(): boolean {
  */
 export async function getBusinessFinances(
   year?: number,
+  month?: number,
+  isAllTime?: boolean,
 ): Promise<{ data: BusinessFinances | null; error: string | null }> {
   const baseUrl = apiUrl();
   const apiKey = process.env.MONEYAPP_API_KEY;
@@ -154,26 +157,58 @@ export async function getBusinessFinances(
     return { data: null, error: "This page isn't connected to the Money App yet." };
   }
 
-  const params = new URLSearchParams({ email });
-  if (year) params.set("year", String(year));
-
   try {
+    if (isAllTime) {
+      // For all-time, fetch the first year to get the list of available years
+      const params = new URLSearchParams({ email });
+      const firstRes = await fetch(
+        `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${params}`,
+        { headers: { "x-api-key": apiKey }, cache: "no-store" },
+      );
+
+      if (!firstRes.ok) throw new Error(`Money App returned ${firstRes.status}`);
+      const firstData = (await firstRes.json()) as BusinessFinances;
+
+      // Fetch all years and aggregate
+      const allYearPromises = firstData.years.map(async (y) => {
+        const yParams = new URLSearchParams({ email, year: String(y) });
+        const res = await fetch(
+          `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${yParams}`,
+          { headers: { "x-api-key": apiKey }, cache: "no-store" },
+        );
+        if (!res.ok) return null;
+        return (await res.json()) as BusinessFinances;
+      });
+
+      const allYears = (await Promise.all(allYearPromises)).filter(Boolean) as BusinessFinances[];
+
+      if (allYears.length === 0) {
+        return { data: null, error: "Couldn't fetch any years for all-time view." };
+      }
+
+      // Aggregate the data
+      const aggregated = aggregateYears(allYears);
+      return { data: aggregated, error: null };
+    }
+
+    const params = new URLSearchParams({ email });
+    if (year) params.set("year", String(year));
+    if (month && Number.isFinite(month) && month >= 1 && month <= 12) {
+      params.set("month", String(month));
+    }
+
     const res = await fetch(
       `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${params}`,
       { headers: { "x-api-key": apiKey }, cache: "no-store" },
     );
 
     if (res.status === 403) {
-      // The row is gone, switched off, or run out — the one failure Chris causes
-      // on purpose, so it says that rather than blaming the connection.
       return {
         data: null,
         error: "This app isn't on the Money App's shared-access list right now.",
       };
     }
     if (res.status === 404) {
-      // A Money App that predates the endpoint. Says what to do, since the fix
-      // is a deploy over there and nothing here.
       return {
         data: null,
         error: "The Money App doesn't have the shared-access feed yet.",
@@ -181,13 +216,102 @@ export async function getBusinessFinances(
     }
     if (!res.ok) throw new Error(`Money App returned ${res.status}`);
 
-    return { data: (await res.json()) as BusinessFinances, error: null };
+    const data = (await res.json()) as BusinessFinances;
+    if (month) {
+      data.month = month;
+    }
+    return { data, error: null };
   } catch (err) {
     return {
       data: null,
       error: err instanceof Error ? err.message : "Couldn't reach the Money App.",
     };
   }
+}
+
+/**
+ * Aggregate multiple years of data into one all-time view.
+ */
+function aggregateYears(years: BusinessFinances[]): BusinessFinances {
+  if (years.length === 0) {
+    throw new Error("No years to aggregate");
+  }
+
+  const first = years[0];
+  const aggregated: BusinessFinances = {
+    view: first.view,
+    year: "all-time",
+    years: first.years,
+    throughDate: first.throughDate, // Most recent date
+    actual: aggregateRollups(years.map((y) => y.actual)),
+    noMistakes: years.some((y) => y.noMistakes)
+      ? {
+          rollup: aggregateRollups(years.map((y) => y.noMistakes?.rollup || y.actual)),
+          mistakes: years.flatMap((y) => y.noMistakes?.mistakes || []),
+          profitDifference: years.reduce((sum, y) => sum + (y.noMistakes?.profitDifference || 0), 0),
+        }
+      : null,
+    flagged: years.flatMap((y) => y.flagged),
+    notes: years.flatMap((y) => y.notes),
+    documents: years.flatMap((y) => y.documents),
+  };
+
+  return aggregated;
+}
+
+/**
+ * Combine multiple rollup objects (from different years) into one aggregated rollup.
+ */
+function aggregateRollups(rollups: Rollup[]): Rollup {
+  if (rollups.length === 0) {
+    throw new Error("No rollups to aggregate");
+  }
+
+  const sumIncome = rollups.reduce((sum, r) => sum + r.income, 0);
+  const sumCogs = rollups.reduce((sum, r) => sum + r.cogs, 0);
+  const sumExpenses = rollups.reduce((sum, r) => sum + r.expenses, 0);
+
+  // For monthly data, create a continuous array from Nov 2024 to current month
+  const allMonthlyData = rollups.flatMap((r, yearIndex) => {
+    const year = r.year;
+    return r.monthlyNetProfit.map((profit, monthIndex) => ({
+      year,
+      month: monthIndex,
+      profit,
+    }));
+  });
+
+  // Aggregate by counting months and summing profits
+  const monthlyMap = new Map<string, number>();
+  for (const m of allMonthlyData) {
+    const key = `${m.year}-${m.month}`;
+    monthlyMap.set(key, (monthlyMap.get(key) || 0) + m.profit);
+  }
+
+  const aggregatedMonthly = Array.from(monthlyMap.values());
+
+  const first = rollups[0];
+  return {
+    year: -1, // Special value for all-time
+    lines: rollups.flatMap((r) => r.lines),
+    income: sumIncome,
+    cogs: sumCogs,
+    expenses: sumExpenses,
+    netProfit: sumIncome - sumCogs - sumExpenses,
+    untagged: rollups.reduce(
+      (sum, r) => ({
+        income: sum.income + r.untagged.income,
+        cogs: sum.cogs + r.untagged.cogs,
+        expense: sum.expense + r.untagged.expense,
+      }),
+      { income: 0, cogs: 0, expense: 0 },
+    ),
+    untaggedAccountCount: Math.max(...rollups.map((r) => r.untaggedAccountCount), 0),
+    monthlyNetProfit: aggregatedMonthly,
+    fedHidden: rollups.some((r) => r.fedHidden),
+    fedDroppedCount: rollups.reduce((sum, r) => sum + r.fedDroppedCount, 0),
+    mistakesRemoved: rollups.some((r) => r.mistakesRemoved),
+  };
 }
 
 /** Does any profit figure survive Chris's tick-boxes? */
