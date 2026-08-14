@@ -95,9 +95,13 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
         <MistakesPanel
           on={on}
           onToggle={() => setHideMistakes((v) => !v)}
-          actualProfit={data.actual.netProfit}
-          fixedProfit={noMistakes.rollup.netProfit}
-          difference={noMistakes.profitDifference}
+          actualProfit={data.actual.operatingProfit}
+          fixedProfit={noMistakes.rollup.operatingProfit}
+          // Computed from the same two figures shown above rather than trusting
+          // Money App's `profitDifference`, which is worked out against
+          // `netProfit` (grants included) — a different basis than the
+          // Operating Profit this panel actually displays.
+          difference={noMistakes.rollup.operatingProfit - data.actual.operatingProfit}
           mistakes={noMistakes.mistakes}
         />
       )}
@@ -321,7 +325,11 @@ function Headline({
   month?: number;
 }) {
   const out = rollup.cogs + rollup.expenses;
-  const profit = rollup.netProfit;
+  // Operating profit, not netProfit — netProfit folds grant/forgiveness
+  // income back in, which reads as the gym earning far more than it actually
+  // brought in from running the business. This is the figure that lines up
+  // with the Business P&L Budget's "Operating Profit" on Chris's dashboard.
+  const profit = rollup.operatingProfit;
   // Only show year-end projection for current year, not for months or all-time
   const projection =
     typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;

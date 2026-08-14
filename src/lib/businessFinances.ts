@@ -34,8 +34,16 @@ export type Rollup = {
   year: number;
   lines: ScheduleCLine[];
   income: number;
+  /** Grant/forgiveness income — kept out of `income` so that figure reads
+   *  real gym revenue, but still counted in `netProfit`. */
+  otherIncome: number;
   cogs: number;
   expenses: number;
+  /** `income - cogs - expenses` — real revenue against real running costs,
+   *  grants left out of both sides. What "Made a profit" now shows, since
+   *  it's the figure that lines up with the Business P&L Budget's Operating
+   *  Profit rather than `netProfit`, which folds grants back in. */
+  operatingProfit: number;
   netProfit: number;
   untagged: { income: number; cogs: number; expense: number };
   untaggedAccountCount: number;
@@ -44,6 +52,7 @@ export type Rollup = {
   fedHidden: boolean;
   fedDroppedCount: number;
   mistakesRemoved: boolean;
+  operational: boolean;
 };
 
 /** One transaction Chris marked as a start-up mistake in Money App. */
@@ -166,7 +175,7 @@ export async function getBusinessFinances(
   try {
     if (isAllTime) {
       // For all-time, fetch the first year to get the list of available years
-      const params = new URLSearchParams({ email });
+      const params = new URLSearchParams({ email, operational: "true" });
       const firstRes = await fetch(
         `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${params}`,
         { headers: { "x-api-key": apiKey }, cache: "no-store" },
@@ -185,7 +194,7 @@ export async function getBusinessFinances(
       // Shared access settings, it'll show up in `years` and get included
       // here automatically — nothing else needs to change.
       const allYearPromises = firstData.years.map(async (y) => {
-        const yParams = new URLSearchParams({ email, year: String(y) });
+        const yParams = new URLSearchParams({ email, year: String(y), operational: "true" });
         const res = await fetch(
           `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${yParams}`,
           { headers: { "x-api-key": apiKey }, cache: "no-store" },
@@ -205,7 +214,7 @@ export async function getBusinessFinances(
       return { data: aggregated, error: null };
     }
 
-    const params = new URLSearchParams({ email });
+    const params = new URLSearchParams({ email, operational: "true" });
     if (year) params.set("year", String(year));
     if (month && Number.isFinite(month) && month >= 1 && month <= 12) {
       params.set("month", String(month));
@@ -336,6 +345,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
   const unique = [...byYear.values()];
 
   const sumIncome = unique.reduce((sum, r) => sum + r.income, 0);
+  const sumOtherIncome = unique.reduce((sum, r) => sum + r.otherIncome, 0);
   const sumCogs = unique.reduce((sum, r) => sum + r.cogs, 0);
   const sumExpenses = unique.reduce((sum, r) => sum + r.expenses, 0);
 
@@ -347,9 +357,11 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     year: -1, // Special value for all-time
     lines: unique.flatMap((r) => r.lines),
     income: sumIncome,
+    otherIncome: sumOtherIncome,
     cogs: sumCogs,
     expenses: sumExpenses,
-    netProfit: sumIncome - sumCogs - sumExpenses,
+    operatingProfit: sumIncome - sumCogs - sumExpenses,
+    netProfit: sumIncome + sumOtherIncome - sumCogs - sumExpenses,
     untagged: unique.reduce(
       (sum, r) => ({
         income: sum.income + r.untagged.income,
@@ -363,6 +375,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     fedHidden: unique.some((r) => r.fedHidden),
     fedDroppedCount: unique.reduce((sum, r) => sum + r.fedDroppedCount, 0),
     mistakesRemoved: unique.some((r) => r.mistakesRemoved),
+    operational: unique.some((r) => r.operational),
   };
 }
 
