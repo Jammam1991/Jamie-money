@@ -4,7 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronLeft } from "lucide-react";
 import { Card } from "@/components/ui";
-import { SCOPE_LABEL, type CreditLine, type HouseholdPicture, type MonthDraw, type Scope, type Slice } from "@/lib/householdPicture";
+import {
+  SCOPE_LABEL,
+  type CreditLine,
+  type FlowStep,
+  type HouseholdPicture,
+  type MoneyFlow,
+  type MonthDraw,
+  type Scope,
+  type Slice,
+} from "@/lib/householdPicture";
 
 // ── The Big Picture ─────────────────────────────────────────────────────────
 // Seven scenes, in the order the money actually moves. Each one is a picture
@@ -63,17 +72,29 @@ export default function BigPictureClient({
   return (
     <div className="space-y-4">
       <Hero picture={picture} />
-      <Scene1Owed picture={picture} index={0} />
-      <Scene2Month picture={picture} index={1} admin={admin} />
-      <Scene3Gap picture={picture} index={2} />
-      <Scene4Gym picture={picture} index={3} />
-      <Scene5Credit picture={picture} index={4} />
-      <Scene6Runway picture={picture} index={5} />
-      <Scene7Fix picture={picture} index={6} />
+      {/* Scene numbers are positions in the story, so they're counted here
+          rather than hardcoded — the flow scene sits out when the incomes
+          aren't set, and everything below it has to close up behind it. */}
+      {(() => {
+        const scenes: ((i: number) => React.ReactNode)[] = [
+          (i) => <Scene1Owed key="owed" picture={picture} index={i} />,
+          ...(picture.flow
+            ? [(i: number) => <SceneSpending key="spending" flow={picture.flow!} index={i} />]
+            : []),
+          (i) => <SceneMonth key="month" picture={picture} index={i} admin={admin} />,
+          (i) => <SceneGap key="gap" picture={picture} index={i} />,
+          (i) => <SceneGym key="gym" picture={picture} index={i} />,
+          (i) => <SceneCredit key="credit" picture={picture} index={i} />,
+          (i) => <SceneRunway key="runway" picture={picture} index={i} />,
+          (i) => <SceneFix key="fix" picture={picture} index={i} />,
+        ];
+        return scenes.map((render, i) => render(i));
+      })()}
 
       <p className="px-2 text-center text-[11px] text-muted">
-        Every number here is read live from the Money App, the gym dashboard and
-        this app&apos;s own Bills page. Nothing is typed in by hand.
+        Read live from the Money App, the gym dashboard and this app&apos;s own
+        Bills page. The only figures typed in by hand are Chris&apos;s pay and the
+        rent from the rental — nothing else in the app knows those.
       </p>
 
       <Link
@@ -253,7 +274,142 @@ function Scene1Owed({ picture, index }: { picture: HouseholdPicture; index: numb
 
 // ── Scene 2: Jamie's month, in and out ───────────────────────────────────────
 
-function Scene2Month({
+// ── Scene: everything in, everything out, in the order it leaves ─────────────
+
+function SceneSpending({ flow, index }: { flow: MoneyFlow; index: number }) {
+  const short = flow.shortfall < 0;
+
+  return (
+    <Scene index={index} emoji="🌊" title="Total spending" accent={short ? RED : GREEN}>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-xl p-3 text-center" style={{ background: "var(--good-bg)" }}>
+          <p className="text-[11px]" style={{ color: GREEN }}>
+            Everything in
+          </p>
+          <p className="text-[20px] font-black leading-tight" style={{ color: GREEN }}>
+            {money(flow.incomeMonthly)}
+          </p>
+        </div>
+        <div className="rounded-xl p-3 text-center" style={{ background: "#fdeceb" }}>
+          <p className="text-[11px]" style={{ color: RED }}>
+            Everything out
+          </p>
+          <p className="text-[20px] font-black leading-tight" style={{ color: RED }}>
+            {money(flow.outMonthly)}
+          </p>
+        </div>
+      </div>
+
+      <Drill label="See where the money comes from">
+        <SliceList title="" slices={flow.incomeParts} color={GREEN} />
+      </Drill>
+
+      <p className="mt-5 text-center text-[13px] text-muted">
+        Now watch it leave, in the order it actually goes:
+      </p>
+
+      {/* The waterfall. Each rung takes its bite and the bar below shows what's
+          still standing — which is the whole point: it's still green until the
+          banks are paid, and then it isn't. */}
+      <div className="mt-3">
+        <FlowTop amount={flow.incomeMonthly} />
+        {flow.steps.map((s) => (
+          <FlowRung key={s.key} step={s} income={flow.incomeMonthly} />
+        ))}
+      </div>
+
+      <div
+        className="mt-4 rounded-xl p-3 text-center"
+        style={{ background: short ? "#fdeceb" : "var(--good-bg)" }}
+      >
+        <p className="text-[12px]" style={{ color: short ? RED : GREEN }}>
+          {short ? "Short every month by" : "Left over every month"}
+        </p>
+        <p
+          className="text-[30px] font-black leading-tight"
+          style={{ color: short ? RED : GREEN }}
+        >
+          {money(Math.abs(flow.shortfall))}
+        </p>
+        {short && (
+          <>
+            <p className="mt-1 text-[20px]">↓</p>
+            <p className="text-[13px] font-medium" style={{ color: RED }}>
+              💳 It goes onto the lines of credit
+            </p>
+            <p className="mt-1 text-[12px] text-muted">
+              Every month. That&apos;s why they keep maxing out — see below.
+            </p>
+          </>
+        )}
+      </div>
+
+      {(flow.incomeIncomplete || flow.budgetMissing) && (
+        <p className="mt-3 rounded-lg bg-warn-bg p-2 text-[11px] text-warn">
+          {flow.incomeIncomplete &&
+            "Some income hasn't been filled in yet, so the top number is low. "}
+          {flow.budgetMissing &&
+            "Money App isn't sending a household budget, so living expenses read as zero here."}
+        </p>
+      )}
+    </Scene>
+  );
+}
+
+/** The full bar the waterfall starts from — a month's income, untouched. */
+function FlowTop({ amount }: { amount: number }) {
+  return (
+    <div className="rounded-xl bg-tint p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[13px] font-medium">💰 Money in</span>
+        <span className="text-[15px] font-bold" style={{ color: GREEN }}>
+          {money(amount)}
+        </span>
+      </div>
+      <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-card">
+        <div className="h-full rounded-full" style={{ width: "100%", background: GREEN }} />
+      </div>
+    </div>
+  );
+}
+
+function FlowRung({ step, income }: { step: FlowStep; income: number }) {
+  const gone = step.remaining < 0;
+  // The bar measures what's LEFT, so an overdrawn month shows an empty bar and
+  // the red number does the talking. A negative width would just vanish.
+  const pct = income > 0 ? Math.max(0, (step.remaining / income) * 100) : 0;
+
+  return (
+    <>
+      <p className="py-1 text-center text-[16px] text-muted">↓</p>
+      <div className="rounded-xl bg-tint p-3">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0 text-[13px] font-medium">
+            {step.emoji} {step.label}
+          </span>
+          <span className="shrink-0 text-[15px] font-bold" style={{ color: RED }}>
+            −{money(step.amount)}
+          </span>
+        </div>
+        <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-card">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{ width: `${pct}%`, background: gone ? RED : GREEN }}
+          />
+        </div>
+        <p className="mt-1 text-[11px] text-muted">
+          {gone ? "Nothing left — " : "Still left: "}
+          <span className="font-medium" style={{ color: gone ? RED : "inherit" }}>
+            {gone ? `over by ${money(-step.remaining)}` : money(step.remaining)}
+          </span>
+        </p>
+        {step.note && <p className="mt-1 text-[11px] text-faint">{step.note}</p>}
+      </div>
+    </>
+  );
+}
+
+function SceneMonth({
   picture,
   index,
   admin,
@@ -315,7 +471,7 @@ function Scene2Month({
 
 // ── Scene 3: who fills the gap ───────────────────────────────────────────────
 
-function Scene3Gap({ picture, index }: { picture: HouseholdPicture; index: number }) {
+function SceneGap({ picture, index }: { picture: HouseholdPicture; index: number }) {
   const anyDraws = picture.draws.some((d) => d.amount > 0);
 
   return (
@@ -363,7 +519,7 @@ function Scene3Gap({ picture, index }: { picture: HouseholdPicture; index: numbe
 
 // ── Scene 4: why the gym can't pay him ───────────────────────────────────────
 
-function Scene4Gym({ picture, index }: { picture: HouseholdPicture; index: number }) {
+function SceneGym({ picture, index }: { picture: HouseholdPicture; index: number }) {
   const profit = picture.gymProfitMonthly;
   const losing = profit != null && profit < 0;
 
@@ -416,13 +572,15 @@ function Scene4Gym({ picture, index }: { picture: HouseholdPicture; index: numbe
 
 // ── Scene 5: the fuel left in the tank ───────────────────────────────────────
 
-function Scene5Credit({ picture, index }: { picture: HouseholdPicture; index: number }) {
+const CREDIT_TITLE = "How much cash we have available to borrow";
+
+function SceneCredit({ picture, index }: { picture: HouseholdPicture; index: number }) {
   if (!picture.hasLimits) {
     return (
-      <Scene index={index} emoji="⛽" title="How much credit is left" accent={GREEN}>
+      <Scene index={index} emoji="⛽" title={CREDIT_TITLE} accent={GREEN}>
         <p className="mt-3 rounded-xl bg-tint p-2.5 text-[12px] text-muted">
-          None of the banks are reporting a credit limit right now, so there&apos;s
-          nothing to measure the room left against.
+          None of the lines of credit are reporting a limit right now, so
+          there&apos;s nothing to measure the cash left against.
         </p>
       </Scene>
     );
@@ -432,9 +590,9 @@ function Scene5Credit({ picture, index }: { picture: HouseholdPicture; index: nu
   const tone = leftPct <= 15 ? RED : leftPct <= 35 ? AMBER : GREEN;
 
   return (
-    <Scene index={index} emoji="⛽" title="How much credit is left" accent={tone}>
+    <Scene index={index} emoji="⛽" title={CREDIT_TITLE} accent={tone}>
       <div className="mt-3 text-center">
-        <p className="text-[12px] text-muted">Room left to borrow</p>
+        <p className="text-[12px] text-muted">Cash left to borrow</p>
         <p className="text-[34px] font-black leading-tight" style={{ color: tone }}>
           {money(picture.creditLeftTotal)}
         </p>
@@ -450,6 +608,12 @@ function Scene5Credit({ picture, index }: { picture: HouseholdPicture; index: nu
           <LineRow key={l.id} line={l} />
         ))}
       </div>
+
+      <p className="mt-3 text-[11px] text-muted">
+        Lines of credit only. Room on a credit card isn&apos;t cash — it
+        can&apos;t cover a mortgage payment or the gym&apos;s payroll, which is
+        what the shortfall above is made of.
+      </p>
     </Scene>
   );
 }
@@ -493,7 +657,7 @@ function LineRow({ line }: { line: CreditLine }) {
 
 // ── Scene 6: how fast it's running out ───────────────────────────────────────
 
-function Scene6Runway({ picture, index }: { picture: HouseholdPicture; index: number }) {
+function SceneRunway({ picture, index }: { picture: HouseholdPicture; index: number }) {
   const months = picture.monthsLeft;
   const tone = months == null ? GREEN : months <= 6 ? RED : months <= 18 ? AMBER : GREEN;
 
@@ -558,7 +722,7 @@ function Scene6Runway({ picture, index }: { picture: HouseholdPicture; index: nu
 
 // ── Scene 7: what closes it ──────────────────────────────────────────────────
 
-function Scene7Fix({ picture, index }: { picture: HouseholdPicture; index: number }) {
+function SceneFix({ picture, index }: { picture: HouseholdPicture; index: number }) {
   if (picture.burnMonthly <= 0) return null;
 
   return (

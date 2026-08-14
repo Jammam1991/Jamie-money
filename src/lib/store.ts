@@ -396,6 +396,45 @@ export async function getWeeklyIncome(): Promise<number> {
   return Number.isFinite(n) ? n : sampleIncome;
 }
 
+// ── The two incomes nothing else in the app knows ────────────────────────────
+// The Big Picture adds up what the whole household brings in. Three of the four
+// sources are already reachable — Jamie's pay from the gym dashboard, his
+// massage work from `weekly_income`, the gym's revenue from Money App — but
+// Chris's own pay and the rent the rental brings in live nowhere this app can
+// read. So Chris types them, the way he already types the weekly figure.
+//
+// Kept as one JSON row in `settings` rather than a table, so there's no setup
+// SQL. Null means "not set", which is what tells a missing figure apart from a
+// real zero — the difference between "we don't know what comes in" and "nothing
+// does".
+export const HOUSEHOLD_INCOME_KEY = "household_income";
+
+export type HouseholdIncome = {
+  /** Chris's take-home per month. */
+  chris: number | null;
+  /** What the rental brings in per month, before its mortgage. */
+  rental: number | null;
+};
+
+export const NO_HOUSEHOLD_INCOME: HouseholdIncome = { chris: null, rental: null };
+
+export async function getHouseholdIncome(): Promise<HouseholdIncome> {
+  const c = client();
+  if (!c) return NO_HOUSEHOLD_INCOME;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", HOUSEHOLD_INCOME_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return NO_HOUSEHOLD_INCOME;
+  try {
+    const parsed = JSON.parse(String(data.value));
+    return { chris: positive(parsed?.chris), rental: positive(parsed?.rental) };
+  } catch {
+    return NO_HOUSEHOLD_INCOME;
+  }
+}
+
 export async function getDivorce(): Promise<Divorce> {
   const c = client();
   if (!c) return sampleDivorce;
