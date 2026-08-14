@@ -23,7 +23,8 @@ export type Category = {
 };
 
 const CATEGORIES = {
-  home: { key: "home", emoji: "🏠", label: "Home & rent", color: "#7c5cd6", tint: "#f1ecfd" },
+  rent: { key: "rent", emoji: "🔑", label: "Rent Expenses", color: "#5f6bc4", tint: "#ecedfb" },
+  home: { key: "home", emoji: "🏠", label: "Home & repairs", color: "#7c5cd6", tint: "#f1ecfd" },
   car: { key: "car", emoji: "🚗", label: "Car & fuel", color: "#3b82b8", tint: "#e9f3fa" },
   food: { key: "food", emoji: "🍔", label: "Food & groceries", color: "#c98a2e", tint: "#fbf1e2" },
   health: { key: "health", emoji: "🏥", label: "Health & medical", color: "#2e9e7e", tint: "#e6f6f0" },
@@ -43,8 +44,24 @@ const CATEGORIES = {
 // the shop the card is named after.
 const RULES: { test: RegExp; category: Category }[] = [
   { test: /\b(vet|veterinar|petco|petsmart|chewy|groomer?|kennel)\b/i, category: CATEGORIES.pets },
-  { test: /\b(rent|mortgage|hoa|landlord|lease|storage|home ?depot|lowe'?s|ikea|furniture|plumb|electric(ian)?|roof|hvac|handyman|cleaner|maid|lawn|garden)\b/i, category: CATEGORIES.home },
-  { test: /\b(shell|chevron|exxon|mobil|arco|bp|76|texaco|costco gas|gas(oline)?|fuel|dmv|smog|auto ?zone|o'?reilly|jiffy ?lube|mechanic|tire|car ?wash|parking|toll|uber|lyft|porsche|taycan)\b/i, category: CATEGORIES.car },
+  // Car rental reads as "rent" but is a car cost, so it's settled before the
+  // rent rule gets a chance at it.
+  { test: /\b(shell|chevron|exxon|mobil|arco|bp|76|texaco|costco gas|gas(oline)?|fuel|dmv|smog|auto ?zone|o'?reilly|jiffy ?lube|mechanic|tire|car ?wash|parking|toll|uber|lyft|porsche|taycan|enterprise rent|hertz|avis|budget rent|car rental)\b/i, category: CATEGORIES.car },
+  // Rent has its own heading rather than sitting inside "Home": it's the
+  // biggest fixed thing borrowed for, and burying it next to a trip to the
+  // hardware shop hid that.
+  //
+  // Two landlords are named outright because neither can be reached by a
+  // general rule. "Earnest Homes" says nothing about rent at all, and
+  // "Lexonorangerent" buries the word inside a longer one, where `\brent\b`
+  // can't see it. A loose /rent/ with no boundaries would reach it — and would
+  // also swallow "parent", "current" and "Parents Magazine", so it stays out.
+  // No word boundaries on this one: "orangerent" sits mid-word inside
+  // "Lexonorangerent", where a boundary would never match. These strings are
+  // specific enough that matching them anywhere is safe.
+  { test: /(earnest\s*homes?|orange\s*rent)/i, category: CATEGORIES.rent },
+  { test: /\b(rent|rents|rental|rentals|landlord|leasing|apartments?|apt|hoa|property manage(ment)?|realty|prop(erty)? mgmt)\b/i, category: CATEGORIES.rent },
+  { test: /\b(mortgage|lease|storage|home ?depot|lowe'?s|ikea|furniture|plumb|electric(ian)?|roof|hvac|handyman|cleaner|maid|lawn|garden)\b/i, category: CATEGORIES.home },
   { test: /\b(kaiser|cvs|walgreens|rite ?aid|pharmac|dental|dentist|doctor|dr\.|medical|clinic|hospital|urgent ?care|therap|optometr|vision|orthodont|lab ?corp|quest diagnostic)\b/i, category: CATEGORIES.health },
   { test: /\b(safeway|kroger|trader ?joe|whole ?foods|sprouts|aldi|ralphs|vons|albertsons|grocer|market|restaurant|cafe|coffee|starbucks|doordash|grubhub|uber ?eats|postmates|pizza|taco|sushi|diner|bar ?& ?grill|mcdonald|chipotle)\b/i, category: CATEGORIES.food },
   { test: /\b(school|tuition|daycare|childcare|camp|college|university|student|book ?store|sport|soccer|dance|piano|tutor)\b/i, category: CATEGORIES.kids },
