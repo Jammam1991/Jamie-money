@@ -73,6 +73,10 @@ export default function BigPictureClient({
 // ── The top of the story ─────────────────────────────────────────────────────
 
 function Hero({ picture }: { picture: HouseholdPicture }) {
+  // One card open at a time — tapping a second card swaps to it rather than
+  // stacking two account lists under a hero that's meant to be a summary.
+  const [expanded, setExpanded] = useState<Scope | null>(null);
+
   return (
     <div
       className="gym-fade-in rounded-2xl p-6 text-center"
@@ -94,26 +98,66 @@ function Hero({ picture }: { picture: HouseholdPicture }) {
         {money(picture.totalDebt)}
       </p>
       {/* One card per owner rather than a personal/business split — the first
-          question is whose it is, and the two-bucket cut is scene 1's job. */}
+          question is whose it is, and the two-bucket cut is scene 1's job.
+          Each one taps open to the accounts behind it. */}
       <div className="mx-auto mt-5 grid max-w-sm grid-cols-2 gap-2">
-        {picture.byScope.map((s, i) => (
-          <div
-            key={s.scope}
-            // An odd count would otherwise leave the last card stranded in half
-            // a row. Joint only appears when it has a balance, so the count
-            // genuinely varies.
-            className={`rounded-xl bg-white/5 p-2.5 ${
-              picture.byScope.length % 2 === 1 && i === picture.byScope.length - 1
-                ? "col-span-2"
-                : ""
-            }`}
-          >
-            <p className="text-[18px]">{SCOPE_EMOJI[s.scope]}</p>
-            <p className="mt-0.5 text-[11px] text-white/50">{s.name}</p>
-            <p className="text-[15px] font-semibold text-white">{money(s.amount)}</p>
-          </div>
-        ))}
+        {picture.byScope.map((s, i) => {
+          const isOpen = expanded === s.scope;
+          return (
+            <button
+              key={s.scope}
+              type="button"
+              onClick={() => setExpanded(isOpen ? null : s.scope)}
+              aria-expanded={isOpen}
+              // An odd count would otherwise leave the last card stranded in
+              // half a row. Joint only appears when it has a balance, so the
+              // count genuinely varies.
+              className={`rounded-xl bg-white/5 p-2.5 text-left transition-colors hover:bg-white/10 ${
+                picture.byScope.length % 2 === 1 && i === picture.byScope.length - 1
+                  ? "col-span-2"
+                  : ""
+              }`}
+              style={isOpen ? { background: "rgba(255,255,255,0.12)" } : undefined}
+            >
+              <div className="flex items-start justify-between gap-1">
+                <p className="text-[18px]">{SCOPE_EMOJI[s.scope]}</p>
+                <ChevronDown
+                  size={13}
+                  className="mt-1 shrink-0 text-white/40 transition-transform"
+                  style={{ transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)" }}
+                />
+              </div>
+              <p className="mt-0.5 text-[11px] text-white/50">{s.name}</p>
+              <p className="text-[15px] font-semibold text-white">{money(s.amount)}</p>
+            </button>
+          );
+        })}
       </div>
+
+      {expanded && (
+        <div className="mx-auto mt-3 max-w-sm rounded-xl bg-white/5 p-3 text-left">
+          <p className="text-[12px] font-medium text-white/70">
+            {SCOPE_LABEL[expanded]} accounts
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {picture.accounts
+              .filter((a) => a.scope === expanded)
+              .map((a) => (
+                <li key={a.id} className="flex items-baseline justify-between gap-3 text-[12px]">
+                  <span className="min-w-0 truncate text-white/70">{a.name}</span>
+                  <span className="shrink-0 font-medium text-white">{money(a.balance)}</span>
+                </li>
+              ))}
+          </ul>
+          {expanded === "jamie" && (
+            <p className="mt-2.5 border-t border-white/10 pt-2.5 text-[11px] text-white/50">
+              Only what&apos;s in Jamie&apos;s name at the banks. What Chris has lent her
+              personally isn&apos;t counted here — that&apos;s scene 3, below.
+            </p>
+          )}
+        </div>
+      )}
+
       <p className="mx-auto mt-4 max-w-xs text-[12px] text-white/50">
         Scroll down to see how it got there — and where it&apos;s going.
       </p>

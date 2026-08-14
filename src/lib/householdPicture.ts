@@ -166,10 +166,15 @@ export const SCOPE_LABEL: Record<Scope, string> = {
   business: "The gym's",
 };
 
-/** Plain — the name on its own, for the cards at the top of the page. */
+/** Plain — the name on its own, for the cards at the top of the page.
+ *  Jamie's is spelled out on purpose: this is only the balance on accounts
+ *  the bank has in her name, not everything she's on the hook for — what
+ *  Chris lends her personally (scene 3's draws) sits on HIS accounts and
+ *  isn't in this figure, so reading it as "everything Jamie owes" undersells
+ *  the real number. */
 export const SCOPE_NAME: Record<Scope, string> = {
   chris: "Chris",
-  jamie: "Jamie",
+  jamie: "Jamie (Bank Secured)",
   joint: "Joint",
   lennon: "Rental Property",
   business: "Business",
