@@ -15,7 +15,25 @@ import {
   type HouseholdIncome,
   type SettlementTerms,
 } from "./store";
-import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
+import {
+  AUTH_COOKIE,
+  VAULT_COOKIE,
+  VAULT_MINUTES,
+  adminToken,
+  getRole,
+  isAdmin,
+  isLoggedIn,
+  isVaultUnlocked,
+  vaultToken,
+  viewerToken,
+} from "./auth";
+import {
+  aad,
+  getPasswordSecret,
+  seal,
+  vaultConfigured,
+  type RevealResult,
+} from "./passwords";
 import type { BillDocument, BillPayment, CashKind } from "./data";
 import { findCleanupCandidates, type CleanupCandidate } from "./duplicateDebts";
 import { clearIgnoredMoneyAppDebts, ignoreMoneyAppDebt } from "./moneyapp";
@@ -871,5 +889,194 @@ export async function deleteTaxDocument(id: string): Promise<ActionResult> {
   if (error) return { ok: false, error: error.message };
   revalidatePath("/settings");
   revalidatePath("/tax-center");
+  return { ok: true };
+}
+
+// ── The password book ─────────────────────────────────────────────────────────
+// Chris adds the logins on Settings; Jamie reads them on /passwords. Two things
+// stand between a stolen laptop and every account in the house: the second lock
+// (type your password again, good for 15 minutes) and the fact that a secret
+// only travels to the browser one row at a time, when Show is pressed.
+
+const NO_KEY: ActionResult = {
+  ok: false,
+  error:
+    "Not saved — the password book has no key yet. Add PASSWORDS_KEY in Vercel and redeploy.",
+};
+
+const LOCKED: ActionResult = {
+  ok: false,
+  error: "Locked. Type your password again to open the password book.",
+};
+
+// Changing a saved login needs both locks open, not just the admin one — a
+// session someone walked away from shouldn't be able to rewrite the book any
+// more than it should be able to read it.
+// The same refusal, reshaped for the one action that returns secrets.
+function fail(r: ActionResult): { ok: false; error: string } {
+  return { ok: false, error: r.error ?? "Something went wrong." };
+}
+
+async function guardVault(): Promise<ActionResult | null> {
+  const denied = await guard();
+  if (denied) return denied;
+  if (!(await isVaultUnlocked())) return LOCKED;
+  if (!vaultConfigured()) return NO_KEY;
+  return null;
+}
+
+// Open the second lock. Takes the same password the person logged in with —
+// so Jamie's password opens Jamie's view and Chris's opens Chris's, and
+// neither can be swapped for the other.
+export async function unlockVault(
+  _prev: ActionResult | null,
+  formData: FormData
+): Promise<ActionResult> {
+  const role = await getRole();
+  if (!role) return { ok: false, error: "Please log in first." };
+
+  const pw = String(formData.get("password") ?? "");
+  const expected = role === "admin" ? process.env.ADMIN_PASSWORD : process.env.JAMIE_PASSWORD;
+  const token = vaultToken(role);
+  if (!expected || !token) {
+    return { ok: false, error: "No password is set up for this account yet." };
+  }
+
+  const a = Buffer.from(pw);
+  const b = Buffer.from(expected);
+  const same = a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!same) return { ok: false, error: "Wrong password." };
+
+  const store = await cookies();
+  store.set(VAULT_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict", // stricter than the login cookie: this one opens secrets
+    path: "/",
+    maxAge: 60 * VAULT_MINUTES,
+  });
+
+  revalidatePath("/passwords");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function lockVault(): Promise<void> {
+  const store = await cookies();
+  store.delete(VAULT_COOKIE);
+  revalidatePath("/passwords");
+  revalidatePath("/settings");
+}
+
+// Hand back one entry's secrets. This is the only path a real password takes to
+// a browser, and it checks both locks every single time — being able to POST
+// here is not the same as being allowed to.
+export async function revealPassword(id: string): Promise<RevealResult> {
+  if (!(await isLoggedIn())) return fail(NOT_ALLOWED);
+  if (!(await isVaultUnlocked())) return fail(LOCKED);
+  if (!vaultConfigured()) return fail(NO_KEY);
+
+  try {
+    const secret = await getPasswordSecret(id);
+    if (!secret) return { ok: false, error: "That entry is gone." };
+    return { ok: true, ...secret };
+  } catch {
+    // A wrong or changed PASSWORDS_KEY lands here. Say so plainly rather than
+    // echoing the crypto error, which tells an attacker more than it tells Chris.
+    return {
+      ok: false,
+      error: "Couldn't unlock that entry — PASSWORDS_KEY may have changed.",
+    };
+  }
+}
+
+export async function addPasswordEntry(input: {
+  label: string;
+  url?: string;
+  category?: string;
+  username?: string;
+  password: string;
+  notes?: string;
+}): Promise<ActionResult> {
+  const denied = await guardVault();
+  if (denied) return denied;
+
+  const label = input.label.trim();
+  if (!label) return { ok: false, error: "Give it a name, like \"Chase Bank\"." };
+  if (!input.password) return { ok: false, error: "There's no password to save." };
+
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  // The id is made here rather than by the database, because each locked value
+  // is tied to the row it belongs to and that knot has to be tied before the
+  // insert, not after.
+  const id = crypto.randomUUID();
+  const { error } = await c.from("password_entries").insert({
+    id,
+    label,
+    url: input.url?.trim() || null,
+    category: input.category?.trim() || null,
+    username_enc: input.username ? seal(input.username, aad(id, "username")) : null,
+    password_enc: seal(input.password, aad(id, "password")),
+    notes_enc: input.notes?.trim() ? seal(input.notes.trim(), aad(id, "notes")) : null,
+    sort: nextSort(),
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/settings");
+  revalidatePath("/passwords");
+  return { ok: true, id };
+}
+
+// Edit an entry. A blank password means "leave the password alone" — otherwise
+// changing a label would quietly wipe the thing the row exists for.
+export async function updatePasswordEntry(
+  id: string,
+  input: {
+    label: string;
+    url?: string;
+    category?: string;
+    username?: string;
+    password?: string;
+    notes?: string;
+  }
+): Promise<ActionResult> {
+  const denied = await guardVault();
+  if (denied) return denied;
+
+  const label = input.label.trim();
+  if (!label) return { ok: false, error: "Give it a name, like \"Chase Bank\"." };
+
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const patch: Record<string, string | number | null> = {
+    label,
+    url: input.url?.trim() || null,
+    category: input.category?.trim() || null,
+    username_enc: input.username ? seal(input.username, aad(id, "username")) : null,
+    notes_enc: input.notes?.trim() ? seal(input.notes.trim(), aad(id, "notes")) : null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.password) patch.password_enc = seal(input.password, aad(id, "password"));
+
+  const { error } = await c.from("password_entries").update(patch).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/settings");
+  revalidatePath("/passwords");
+  return { ok: true };
+}
+
+export async function deletePasswordEntry(id: string): Promise<ActionResult> {
+  const denied = await guardVault();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("password_entries").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  revalidatePath("/passwords");
   return { ok: true };
 }

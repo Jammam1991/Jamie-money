@@ -73,3 +73,33 @@ export async function isViewingAsJamie(): Promise<boolean> {
   const store = await cookies();
   return store.get(VIEW_AS_COOKIE)?.value === "jamie";
 }
+
+// ── The password book's own lock ──────────────────────────────────────────────
+// Being logged in isn't enough to see the saved logins: you have to type your
+// password again, and that only holds for 15 minutes. So a phone left unlocked
+// on a table, or a browser someone stayed signed in on, doesn't hand over every
+// account either of them owns.
+//
+// The proof is a second cookie, worked out from the same password with a
+// different salt — so it can't be copied out of the login cookie, or guessed
+// from it.
+
+export const VAULT_COOKIE = "jm_vault";
+export const VAULT_MINUTES = 15;
+
+export function vaultToken(role: Role): string | null {
+  const pw = role === "admin" ? process.env.ADMIN_PASSWORD : process.env.JAMIE_PASSWORD;
+  return pw ? hmac(pw, `jamie-vault-${role}-v1`) : null;
+}
+
+// Is the person looking right now allowed to see actual passwords? Both locks
+// have to be open, and the second one has to match the role the first gave.
+export async function isVaultUnlocked(): Promise<boolean> {
+  const role = await getRole();
+  if (!role) return false;
+  const expected = vaultToken(role);
+  if (!expected) return false;
+  const store = await cookies();
+  const value = store.get(VAULT_COOKIE)?.value;
+  return Boolean(value) && eq(value!, expected);
+}

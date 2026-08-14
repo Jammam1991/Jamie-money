@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Lock, LogOut, Activity, Settings } from "lucide-react";
+import { Lock, LogOut, Activity, Settings, KeyRound } from "lucide-react";
 import { logout, toggleViewAsJamie } from "@/lib/actions";
 
-// A small control in the top-right corner. Once logged in, everyone gets a
-// log-out button; the admin also gets a link to Jamie's login activity and
-// a toggle to view as Jamie.
+// A small control in the top-right corner. Once logged in, everyone gets the
+// password book and a log-out button; the admin also gets a link to Jamie's
+// login activity and a toggle to view as Jamie.
 export default function AdminBar({
   admin,
   loggedIn,
@@ -27,6 +27,15 @@ export default function AdminBar({
 
   return (
     <div className="mb-1 flex justify-end gap-4">
+      {loggedIn && (
+        <Link
+          href="/passwords"
+          className="flex items-center gap-1 text-[12px] text-muted"
+        >
+          <KeyRound size={13} />
+          Passwords
+        </Link>
+      )}
       {admin && !viewingAsJamie && (
         <Link
           href="/activity"

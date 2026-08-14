@@ -3,9 +3,11 @@ import { PageTitle } from "@/components/ui";
 import SettingsClient from "@/components/SettingsClient";
 import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
-import { getRole } from "@/lib/auth";
+import PasswordsAdmin from "@/components/PasswordsAdmin";
+import { getRole, isVaultUnlocked } from "@/lib/auth";
 import { getComingSoonPages, getHouseholdIncome } from "@/lib/store";
 import { getTaxDocuments } from "@/lib/taxCenter";
+import { getPasswordEntries, vaultConfigured } from "@/lib/passwords";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +15,14 @@ export default async function SettingsPage() {
   const role = await getRole();
   if (role !== "admin") redirect("/login");
 
-  const [comingSoon, taxDocuments, householdIncome] = await Promise.all([
+  const vaultOpen = await isVaultUnlocked();
+
+  const [comingSoon, taxDocuments, householdIncome, passwords] = await Promise.all([
     getComingSoonPages(),
     getTaxDocuments(),
     getHouseholdIncome(),
+    // Labels only, and only once the password book's own lock is open.
+    vaultOpen ? getPasswordEntries() : Promise.resolve([]),
   ]);
 
   return (
@@ -27,6 +33,11 @@ export default async function SettingsPage() {
       </div>
       <HouseholdIncomeAdmin initial={householdIncome} />
       <TaxDocumentsAdmin initialDocuments={taxDocuments} />
+      <PasswordsAdmin
+        initialEntries={passwords}
+        unlocked={vaultOpen}
+        configured={vaultConfigured()}
+      />
     </div>
   );
 }
