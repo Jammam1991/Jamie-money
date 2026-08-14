@@ -10,21 +10,19 @@ import {
   TrendingDown,
   ChevronDown,
   Gauge,
+  Settings,
   X,
   AlertCircle,
 } from "lucide-react";
 import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
-  carLoanBalance,
-  cardBalance,
   duration,
   financeCharge,
   isCarLoan,
   isUnsecured,
   monthlyInterest,
   monthlyPayment,
-  personalLoanBalance,
   simulate,
   totalBalance,
   totalMinimum,
@@ -55,23 +53,15 @@ function ficoLabel(score: number): string {
   return "Needs work";
 }
 
-// "You owe $36,759 on credit card debt, $86,767 on Car loan, $4,000 on
-// personal loan and a total of $127,526." A kind with nothing owed on it drops
-// out rather than reading "$0 on Car loan", and if none apply it's the total
-// on its own.
-function owedSentence(
-  cards: number,
-  carLoans: number,
-  personalLoans: number,
-  total: number,
-): string {
-  const parts: string[] = [];
-  if (cards > 0) parts.push(`${money(cards)} on credit card debt`);
-  if (carLoans > 0) parts.push(`${money(carLoans)} on Car loan`);
-  if (personalLoans > 0) parts.push(`${money(personalLoans)} on personal loan`);
-  if (parts.length === 0) return `You owe ${money(total)}.`;
-  return `You owe ${parts.join(", ")} and a total of ${money(total)}.`;
-}
+// One colour per bucket, used by that bucket's dot, its slice of the bar at the
+// top and the panel it opens — so a colour means the same thing everywhere on
+// the page. Four distinct hues rather than one ramp, because these are four
+// separate kinds of debt and not one thing at four sizes.
+const VIOLET = "#6d28d9"; // Jamie's cards
+const SKY = "#0369a1"; // Jamie's car
+const AMBER = "#b45309"; // the gym
+const RED = "#b3261e"; // the settlement
+const GREEN = "#167a5b";
 
 const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
@@ -134,6 +124,7 @@ export default function DebtClient({
   payMonths,
   payProblem,
   currentYear,
+  currentMonth,
   settlementMonthly,
   settlementTerms,
 }: {
@@ -147,6 +138,7 @@ export default function DebtClient({
   payMonths: PayMonth[];
   payProblem: string | null;
   currentYear: number;
+  currentMonth: string; // "YYYY-MM", the same shape transaction dates start with
   settlementMonthly: number; // monthly support from the Divorce page
   settlementTerms: SettlementTerms; // what Chris set; nulls fall back to the estimate
 }) {
@@ -162,6 +154,10 @@ export default function DebtClient({
   // he saves rather than after the round trip.
   const [terms, setTerms] = useState<SettlementTerms>(settlementTerms);
   const [editingSettlement, setEditingSettlement] = useState(false);
+  // Which of the four buckets is open. One at a time — the point of folding
+  // them away is that the page fits on a screen.
+  const [openBucket, setOpenBucket] = useState<string | null>(null);
+  const [openTools, setOpenTools] = useState(false);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
 
@@ -174,21 +170,17 @@ export default function DebtClient({
   const businessDebts = debts.filter(isBusinessDebt);
   const personalDebts = debts.filter((d) => !isBusinessDebt(d));
 
-  // Jamie's own debt, and only his. The year-by-year story, the "you owe"
-  // sentence and the payoff maths are all about what he borrowed and what he
-  // can pay down, so the gym's accounts stay out of them — they aren't his to
-  // pay, and their balance history isn't mirrored here either, so counting them
-  // would move this year's figure while every earlier year sat still.
+  // Jamie's own debt, and only his. The year-by-year story and the payoff maths
+  // are both about what he borrowed and what he can pay down, so the gym's
+  // accounts stay out of them — they aren't his to pay, and their balance
+  // history isn't mirrored here either, so counting them would move this year's
+  // figure while every earlier year sat still.
   const total = totalBalance(personalDebts);
   const minTotal = totalMinimum(personalDebts);
-  const cards = cardBalance(personalDebts);
-  const carLoans = carLoanBalance(personalDebts);
-  const personalLoans = personalLoanBalance(personalDebts);
 
   // The sections at the top, which do count everything that's owed.
-  const personalTotal = total + settlement.balance;
   const businessTotal = totalBalance(businessDebts);
-  const securedTotal = personalTotal + businessTotal;
+  const securedTotal = total + settlement.balance + businessTotal;
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
@@ -196,48 +188,70 @@ export default function DebtClient({
   // the gym's debt, and the settlement — kept apart rather than lumped into
   // one "Unsecured" line, so a business balance never reads as Jamie's. These
   // four still add up to the total exactly.
+  //
+  // Each one carries the debts behind it, so tapping a bucket opens the very
+  // rows it was added up from. The whole list used to sit open on the page,
+  // which meant scrolling past a dozen accounts to reach anything else.
   const personalUnsecuredDebts = personalDebts.filter(isUnsecured);
   const personalCarDebts = personalDebts.filter(isCarLoan);
   const breakdown = [
     {
       key: "personal-cards",
-      label: "Jamie Personal Cards",
+      emoji: "💳",
+      color: VIOLET,
+      label: "Jamie's cards",
       note: "cards and loans in Jamie's name",
       balance: totalBalance(personalUnsecuredDebts),
       monthly: totalMinimum(personalUnsecuredDebts),
+      debts: personalUnsecuredDebts,
     },
     {
       key: "car",
-      label: "Jamie's Car",
+      emoji: "🚗",
+      color: SKY,
+      label: "Jamie's car",
       note: "backed by the car itself",
       balance: totalBalance(personalCarDebts),
       monthly: totalMinimum(personalCarDebts),
+      debts: personalCarDebts,
     },
     {
       key: "business",
-      label: "Jamie Business Secured",
+      emoji: "🏋️",
+      color: AMBER,
+      label: "The gym",
       note: "the gym's loans and cards",
       balance: businessTotal,
       monthly: totalMinimum(businessDebts),
+      debts: businessDebts,
     },
     {
       key: "divorce",
+      emoji: "📄",
+      color: RED,
       label: "Divorce settlement",
-      note: terms.total === null ? "estimated" : "what Jamie owes Chris",
+      note: terms.total === null ? "an estimate, not agreed yet" : "what Jamie owes Chris",
       balance: settlement.balance,
       monthly: settlement.minPayment,
+      debts: [] as Debt[], // it has no rows — it opens its own panel instead
     },
-  ].filter((row) => row.balance > 0);
+    // The gym's row stays even at zero, so it's clear nothing is hiding: the
+    // names Chris expects there (AMPAC, Pace, the US Bank card) have to exist
+    // as debts before they can be sorted into it.
+  ].filter((row) => row.balance > 0 || row.key === "business");
 
-  // New debt added, bucketed by the year of each charge. Newest year first.
-  const byYear = new Map<number, number>();
-  for (const tx of txs) {
-    // tx_date is YYYY-MM-DD; read the year off the string so a timezone
-    // shift can't push a January 1st charge into the year before.
-    const year = Number(tx.txDate.slice(0, 4));
-    if (!year) continue;
-    byYear.set(year, (byYear.get(year) ?? 0) + tx.amount);
-  }
+  // New debt added this month and this year. Both come from the same list of
+  // charges, so the two numbers can never disagree about what counts.
+  //
+  // tx_date is YYYY-MM-DD, so the year and the month are read off the front of
+  // the string — `new Date()` would shift a January 1st charge into the year
+  // before depending on the timezone.
+  const addedThisMonth = txs
+    .filter((tx) => tx.txDate.startsWith(currentMonth))
+    .reduce((sum, tx) => sum + tx.amount, 0);
+  const addedThisYear = txs
+    .filter((tx) => tx.txDate.startsWith(String(currentYear)))
+    .reduce((sum, tx) => sum + tx.amount, 0);
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
     const tid = String(tempId.current--);
@@ -402,97 +416,182 @@ export default function DebtClient({
     );
   }
 
+  // The settlement, as the panel its bucket opens. It has no row in the
+  // database — Chris either sets the figure or the page works one out from the
+  // monthly amount — so it can't go through `row()` with the real debts.
+  function settlementPanel() {
+    if (editingSettlement) {
+      return (
+        <SettlementForm
+          current={terms}
+          estimate={settlementLoan(settlementMonthly, NO_TERMS)}
+          onCancel={() => setEditingSettlement(false)}
+          onSave={handleSaveSettlement}
+        />
+      );
+    }
+    return (
+      <div>
+        <div className="flex items-center justify-between font-medium">
+          <span className="truncate">{settlement.name}</span>
+          <span className="flex items-center gap-3">
+            {money(settlement.balance)}
+            {admin && (
+              <button
+                aria-label="Edit the settlement total"
+                className="text-muted"
+                onClick={() => setEditingSettlement(true)}
+              >
+                <Pencil size={15} />
+              </button>
+            )}
+          </span>
+        </div>
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+          {terms.total === null && (
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white"
+              style={{ background: RED }}
+            >
+              Estimated
+            </span>
+          )}
+          <span>
+            {settlement.apr > 0 ? `${settlement.apr}% interest` : "no interest"} ·{" "}
+            {money(settlement.minPayment)}/mo over{" "}
+            {duration(terms.months ?? SETTLEMENT_MONTHS)}
+          </span>
+        </p>
+        {terms.total === null && (
+          <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
+            <AlertCircle size={13} className="mt-0.5 shrink-0" />
+            A guess, not a number anyone agreed to: {money(settlement.minPayment)} a
+            month over five years. The real figure comes out of the settlement.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      {/* Everything owed, in one number, before the page breaks it apart. */}
-      <Card>
-        <p className="text-[13px] text-muted">Total Debt</p>
-        <p className="mt-1 text-3xl font-medium">{money(securedTotal)}</p>
-        <p className="mt-2 text-xs text-muted">
-          {money(securedMin)}/mo minimum · {money(securedInterest)}/mo of that is
-          interest
+    <div className="space-y-3">
+      {/* Everything owed, in one number — with what's been borrowed since the
+          start of the month and the start of the year right underneath. Those
+          two say whether the pile is still growing, which is the first thing
+          anyone opening this page wants to know. */}
+      <div
+        className="rounded-2xl p-5 text-center"
+        style={{ background: "linear-gradient(135deg, #0d0d0d 0%, #221c1c 100%)" }}
+      >
+        <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-white/50">
+          Total debt
+        </p>
+        <p
+          className="mt-1 text-[42px] font-black leading-none tracking-tight"
+          style={{
+            background: "linear-gradient(135deg, #ff8a80 0%, #d64545 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}
+        >
+          {money(securedTotal)}
+        </p>
+        <p className="mt-2 text-[12px] text-white/50">
+          {money(securedMin)} a month to keep up · {money(securedInterest)} of that
+          is pure interest
         </p>
 
-        {/* The same total split by what's behind each debt. These three add up
-            to the figure above — nothing is counted twice or left out. */}
-        <div className="mt-3 space-y-2 border-t border-border pt-3">
-          {breakdown.map((row) => (
-            <div key={row.key} className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0">
-                <span className="text-[15px]">{row.label}</span>
-                <span className="block text-xs text-muted">{row.note}</span>
-              </span>
-              <span className="shrink-0 text-right">
-                <span className="text-[15px] font-medium">{money(row.balance)}</span>
-                <span className="block text-xs text-muted">
-                  {money(row.monthly)}/mo
-                </span>
-              </span>
-            </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <NewDebtTile label="New debt this month" amount={addedThisMonth} />
+          <NewDebtTile label="New debt this year" amount={addedThisYear} />
+        </div>
+      </div>
+
+      {/* The same total split by whose it is and what's behind it. These add up
+          to the figure above exactly — nothing counted twice, nothing left out.
+          Every account used to be listed on the page at once; now a row opens
+          to show the accounts it was added up from. */}
+      <Card>
+        <div className="flex items-baseline justify-between">
+          <p className="text-[13px] font-medium">Where it&apos;s owed</p>
+          <p className="text-[11px] text-muted">tap a row to open it</p>
+        </div>
+
+        {/* One bar, one colour per bucket: the shape of the pile at a glance. */}
+        <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-tint">
+          {breakdown.map((b) => (
+            <div
+              key={b.key}
+              style={{
+                width: `${(b.balance / (securedTotal || 1)) * 100}%`,
+                background: b.color,
+              }}
+            />
           ))}
         </div>
-      </Card>
 
-      {/* Jamie's own debts, plus what's owed to Chris out of the settlement. */}
-      <Card>
-        <div className="mb-3 flex items-baseline justify-between">
-          <p className="text-[13px] font-medium">Personal Debt Secured</p>
-          <p className="text-[13px] text-muted">{money(personalTotal)}</p>
-        </div>
-        <div className="space-y-3">
-          {personalDebts.map(row)}
-
-          {/* The settlement. It has no row in the database — Chris either sets
-              the figure or the page works one out from the monthly amount, and
-              it says which of the two you're looking at. */}
-          {editingSettlement ? (
-            <SettlementForm
-              current={terms}
-              estimate={settlementLoan(settlementMonthly, NO_TERMS)}
-              onCancel={() => setEditingSettlement(false)}
-              onSave={handleSaveSettlement}
-            />
-          ) : (
-            <div>
-              <div className="flex items-center justify-between font-medium">
-                <span className="truncate">{settlement.name}</span>
-                <span className="flex items-center gap-3">
-                  {money(settlement.balance)}
-                  {admin && (
-                    <button
-                      aria-label="Edit the settlement total"
-                      className="text-muted"
-                      onClick={() => setEditingSettlement(true)}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                  )}
-                </span>
-              </div>
-              <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-                {terms.total === null && (
-                  <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-                    Estimated
+        <div className="mt-3 space-y-2">
+          {breakdown.map((b) => {
+            const open = openBucket === b.key;
+            return (
+              <div
+                key={b.key}
+                className="rounded-xl"
+                style={{ background: `${b.color}14` }}
+              >
+                <button
+                  className="flex w-full items-center gap-2.5 p-3 text-left"
+                  onClick={() => setOpenBucket(open ? null : b.key)}
+                  aria-expanded={open}
+                >
+                  <span className="text-[18px]">{b.emoji}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-medium">
+                      {b.label}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted">
+                      {b.note}
+                    </span>
                   </span>
+                  <span className="shrink-0 text-right">
+                    <span
+                      className="block text-[16px] font-bold leading-tight"
+                      style={{ color: b.color }}
+                    >
+                      {money(b.balance)}
+                    </span>
+                    <span className="block text-[11px] text-muted">
+                      {money(b.monthly)}/mo
+                    </span>
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className="shrink-0 text-muted transition-transform"
+                    style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+                  />
+                </button>
+
+                {open && (
+                  <div
+                    className="space-y-3 border-t p-3"
+                    style={{ borderColor: `${b.color}33` }}
+                  >
+                    {b.key === "divorce" ? (
+                      settlementPanel()
+                    ) : b.debts.length > 0 ? (
+                      b.debts.map(row)
+                    ) : (
+                      <p className="text-xs text-muted">
+                        Nothing here yet. The gym&apos;s accounts arrive from Money
+                        App and land in this section on their own.
+                      </p>
+                    )}
+                  </div>
                 )}
-                <span>
-                  {settlement.apr > 0
-                    ? `${settlement.apr}% interest`
-                    : "no interest"}{" "}
-                  · {money(settlement.minPayment)}/mo over{" "}
-                  {duration(terms.months ?? SETTLEMENT_MONTHS)}
-                </span>
-              </p>
-              {terms.total === null && (
-                <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
-                  <AlertCircle size={13} className="mt-0.5 shrink-0" />
-                  A guess, not a number anyone agreed to:{" "}
-                  {money(settlement.minPayment)} a month over five years. The
-                  real figure comes out of the settlement.
-                </p>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })}
         </div>
 
         {admin &&
@@ -511,46 +610,12 @@ export default function DebtClient({
           ))}
       </Card>
 
-      {/* The gym's debts. Shown even when empty so it's clear nothing is
-          hiding — the names Chris expects here (AMPAC, Pace, the US Bank card)
-          have to exist as debts before they can be sorted into it. */}
-      <Card>
-        <div className="mb-3 flex items-baseline justify-between">
-          <p className="text-[13px] font-medium">Business Debt Secured</p>
-          <p className="text-[13px] text-muted">{money(businessTotal)}</p>
-        </div>
-        {businessDebts.length > 0 ? (
-          <div className="space-y-3">{businessDebts.map(row)}</div>
-        ) : (
-          <p className="text-xs text-muted">
-            Nothing here yet. The gym&apos;s accounts arrive from Money App and
-            land in this section on their own.
-          </p>
-        )}
-      </Card>
-
-      {/* This year's headline. The years before it used to be listed here too,
-          but they're the same rows the card below opens with — so they live in
-          one place now instead of being scrolled past twice. */}
-      <div
-        className="rounded-2xl p-4 text-white"
-        style={{
-          background: "linear-gradient(135deg, #a56814 0%, #7d4a0b 100%)",
-        }}
-      >
-        <p className="text-[13px] uppercase tracking-wide opacity-80">
-          New debt added this year
-        </p>
-        <p className="text-3xl font-medium">
-          {money(byYear.get(currentYear) ?? 0)}
-        </p>
-        <p className="mt-3 text-[13px] opacity-90">
-          {owedSentence(cards, carLoans, personalLoans, total)}
-        </p>
-      </div>
+      {/* Credit score, last pulled from Money App */}
+      {fico && <FicoCard score={fico.score} date={fico.date} />}
 
       {/* Year by year: what got added, what it costs each month, and — once a
-          year is opened — the months and transactions behind it. */}
+          year is opened — the months and transactions behind it. Folded away by
+          default; it's the longest thing on the page by far. */}
       <DebtByYear
         transactions={txs}
         spending={spending}
@@ -564,46 +629,6 @@ export default function DebtClient({
         onDelete={handleDeleteTransaction}
       />
 
-
-      {/* Credit score, last pulled from Money App */}
-      {fico && (
-        <Card>
-          <p className="flex items-center gap-1.5 text-[13px] text-muted">
-            <Gauge size={15} />
-            Credit score
-          </p>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-3xl font-medium">{fico.score}</span>
-            <span className="text-[13px] text-muted">{ficoLabel(fico.score)}</span>
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            From Money App, updated {fico.date}.
-          </p>
-        </Card>
-      )}
-
-      {/* Pull debts straight from the bank or Money App (primary), with paste-a-report as backup */}
-      {admin &&
-        (importing ? (
-          <ImportPanel
-            onCancel={() => setImporting(false)}
-            onImport={handleImport}
-          />
-        ) : (
-          <div className="space-y-2">
-            <PlaidConnect hasBank={hasBank} />
-            <MoneyAppConnect />
-            <DuplicateCleanup />
-            <button
-              className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
-              onClick={() => setImporting(true)}
-            >
-              <Upload size={13} />
-              or paste a credit report instead
-            </button>
-          </div>
-        ))}
-
       {/* Payoff what-if calculator. Jamie's own debts only — paying extra at
           the gym's loans isn't a plan he can act on. */}
       {personalDebts.length > 0 && (
@@ -615,8 +640,110 @@ export default function DebtClient({
         />
       )}
 
+      {/* Pull debts straight from the bank or Money App (primary), with
+          paste-a-report as backup. Admin plumbing, so it sits folded at the
+          bottom rather than taking up four cards of the page. */}
+      {admin &&
+        (importing ? (
+          <ImportPanel
+            onCancel={() => setImporting(false)}
+            onImport={handleImport}
+          />
+        ) : (
+          <Card>
+            <button
+              className="flex w-full items-center justify-between"
+              onClick={() => setOpenTools((o) => !o)}
+              aria-expanded={openTools}
+            >
+              <span className="flex items-center gap-1.5 text-[13px] text-muted">
+                <Settings size={15} />
+                Where these numbers come from
+              </span>
+              <ChevronDown
+                size={16}
+                className={`text-muted transition-transform ${openTools ? "rotate-180" : ""}`}
+              />
+            </button>
 
+            {openTools && (
+              <div className="mt-3 space-y-2">
+                <PlaidConnect hasBank={hasBank} />
+                <MoneyAppConnect />
+                <DuplicateCleanup />
+                <button
+                  className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
+                  onClick={() => setImporting(true)}
+                >
+                  <Upload size={13} />
+                  or paste a credit report instead
+                </button>
+              </div>
+            )}
+          </Card>
+        ))}
     </div>
+  );
+}
+
+// ── "New debt this month / this year" ────────────────────────────────────────
+// Red when the pile grew, green when more went back than went out. A month
+// where Jamie paid down more than he borrowed is good news, and a bare
+// "-$1,200" buried it — so it gets said in words as well as colour.
+function NewDebtTile({ label, amount }: { label: string; amount: number }) {
+  const grew = amount > 0;
+  const tone = grew ? "#ff8a80" : "#6ee7b7";
+  return (
+    <div className="rounded-xl bg-white/5 p-3 text-left">
+      <p className="text-[11px] text-white/50">{label}</p>
+      <p className="mt-0.5 text-[22px] font-black leading-tight" style={{ color: tone }}>
+        {grew ? "+" : ""}
+        {money(Math.abs(amount))}
+      </p>
+      <p className="text-[11px] text-white/40">
+        {amount === 0 ? "nothing borrowed" : grew ? "borrowed" : "paid off"}
+      </p>
+    </div>
+  );
+}
+
+// ── Credit score ─────────────────────────────────────────────────────────────
+// The number, what it means in words, and where it sits on the 300–850 scale —
+// so a score reads as a position rather than as three digits on their own.
+function FicoCard({ score, date }: { score: number; date: string }) {
+  const color =
+    score >= 740 ? GREEN : score >= 670 ? SKY : score >= 580 ? AMBER : RED;
+  const pct = Math.max(0, Math.min(100, ((score - 300) / 550) * 100));
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[13px] text-muted">
+          <Gauge size={15} />
+          Credit score
+        </p>
+        <span
+          className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+          style={{ background: color }}
+        >
+          {ficoLabel(score)}
+        </span>
+      </div>
+      <p className="mt-1 text-[34px] font-black leading-none" style={{ color }}>
+        {score}
+      </p>
+      <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-tint">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, background: color }}
+        />
+      </div>
+      <div className="mt-1 flex justify-between text-[10px] text-muted">
+        <span>300</span>
+        <span>850</span>
+      </div>
+      <p className="mt-1 text-xs text-muted">From Money App, updated {date}.</p>
+    </Card>
   );
 }
 

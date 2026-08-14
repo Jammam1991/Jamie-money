@@ -278,6 +278,10 @@ export default function DebtByYear({
   }) => void;
   onDelete: (id: string) => void;
 }) {
+  // The whole card folds away. It's the longest thing on the Debt page by a
+  // long way, and it's the history — the balances above it are the answer to
+  // "what do I owe", which is what the page has to say without being opened.
+  const [open, setOpen] = useState(false);
   const [openYear, setOpenYear] = useState<number | null>(null);
   const [openMonth, setOpenMonth] = useState<string | null>(null); // "2026-3"
   const [openSpend, setOpenSpend] = useState<number | null>(null);
@@ -301,11 +305,42 @@ export default function DebtByYear({
 
   return (
     <Card>
-      <p className="flex items-center gap-1.5 text-[13px] text-muted">
-        <CalendarDays size={15} />
-        Debt by year
-      </p>
+      <button
+        className="flex w-full items-center justify-between"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-1.5 text-[13px] text-muted">
+          <CalendarDays size={15} />
+          Debt by year
+        </span>
+        <span className="flex items-center gap-2">
+          {/* The headline while it's shut, so closing the card doesn't hide
+              the one number it exists to make. */}
+          {!open && addedThisYear > 0 && (
+            <span
+              className="rounded-full px-2 py-0.5 text-[12px] font-medium"
+              style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
+            >
+              +{money(addedThisYear)} in {currentYear}
+            </span>
+          )}
+          <ChevronDown
+            size={16}
+            className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </span>
+      </button>
 
+      {!open && (
+        <p className="mt-2 text-xs text-muted">
+          Open it to see every year, the months inside them, and each
+          transaction behind the totals.
+        </p>
+      )}
+
+      {open && (
+        <>
       {addedThisYear > 0 && (
         <p className="mt-2 text-[15px]">
           You added <span className="font-medium">{money(addedThisYear)}</span> more
@@ -624,6 +659,8 @@ export default function DebtByYear({
         $1,000 you borrow adds about $23 a month, forever, until it&apos;s paid
         off.
       </p>
+        </>
+      )}
     </Card>
   );
 }
