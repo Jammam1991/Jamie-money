@@ -252,7 +252,10 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
   const lifetime = {
     income: allTimeResult.data.actual.income,
     expenses: allTimeResult.data.actual.cogs + allTimeResult.data.actual.expenses,
-    net: allTimeResult.data.actual.netProfit,
+    // Operating profit, not netProfit — same reasoning as Business Finances'
+    // headline: netProfit folds grant income back in, and the Decision
+    // chapter's whole point is the gym's real operating position.
+    net: allTimeResult.data.actual.operatingProfit,
   };
 
   const chapters: GymChapter[] = [
