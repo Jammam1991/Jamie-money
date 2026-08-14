@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   Plus,
   Trash2,
@@ -9,7 +10,9 @@ import {
   Upload,
   TrendingDown,
   ChevronDown,
+  ChevronRight,
   Gauge,
+  Landmark,
   Settings,
   X,
   AlertCircle,
@@ -17,16 +20,20 @@ import {
 import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
+  carLoanParts,
   duration,
   financeCharge,
   isCarLoan,
   isUnsecured,
   monthlyInterest,
   monthlyPayment,
+  monthsToClear,
   simulate,
+  TAYCAN_PRICE,
   totalBalance,
   totalMinimum,
 } from "@/lib/payoff";
+import { groupByCategory } from "@/lib/debtCategories";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
@@ -157,6 +164,8 @@ export default function DebtClient({
   // Which of the four buckets is open. One at a time — the point of folding
   // them away is that the page fits on a screen.
   const [openBucket, setOpenBucket] = useState<string | null>(null);
+  // Which of the two "new debt" tiles is showing the charges behind it.
+  const [openTile, setOpenTile] = useState<"month" | "year" | null>(null);
   const [openTools, setOpenTools] = useState(false);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
@@ -246,12 +255,12 @@ export default function DebtClient({
   // tx_date is YYYY-MM-DD, so the year and the month are read off the front of
   // the string — `new Date()` would shift a January 1st charge into the year
   // before depending on the timezone.
-  const addedThisMonth = txs
-    .filter((tx) => tx.txDate.startsWith(currentMonth))
-    .reduce((sum, tx) => sum + tx.amount, 0);
-  const addedThisYear = txs
-    .filter((tx) => tx.txDate.startsWith(String(currentYear)))
-    .reduce((sum, tx) => sum + tx.amount, 0);
+  // Held as the lists rather than just the sums, because each tile opens onto
+  // the very charges its number was added up from.
+  const monthTxs = txs.filter((tx) => tx.txDate.startsWith(currentMonth));
+  const yearTxs = txs.filter((tx) => tx.txDate.startsWith(String(currentYear)));
+  const addedThisMonth = monthTxs.reduce((sum, tx) => sum + tx.amount, 0);
+  const addedThisYear = yearTxs.reduce((sum, tx) => sum + tx.amount, 0);
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
     const tid = String(tempId.current--);
@@ -412,6 +421,7 @@ export default function DebtClient({
           )}
         </p>
         {d.paidPct > 0 && <Bar pct={d.paidPct} />}
+        <LoanParts debt={d} color={SKY} />
       </div>
     );
   }
@@ -480,32 +490,55 @@ export default function DebtClient({
           two say whether the pile is still growing, which is the first thing
           anyone opening this page wants to know. */}
       <div
-        className="rounded-2xl p-5 text-center"
-        style={{ background: "linear-gradient(135deg, #0d0d0d 0%, #221c1c 100%)" }}
+        className="rounded-2xl border p-5"
+        style={{
+          background: "linear-gradient(150deg, #fff6f2 0%, #ffeae4 55%, #f6ecfb 100%)",
+          borderColor: "#f3d9d0",
+        }}
       >
-        <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-white/50">
-          Total debt
-        </p>
-        <p
-          className="mt-1 text-[42px] font-black leading-none tracking-tight"
-          style={{
-            background: "linear-gradient(135deg, #ff8a80 0%, #d64545 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}
-        >
-          {money(securedTotal)}
-        </p>
-        <p className="mt-2 text-[12px] text-white/50">
-          {money(securedMin)} a month to keep up · {money(securedInterest)} of that
-          is pure interest
-        </p>
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <NewDebtTile label="New debt this month" amount={addedThisMonth} />
-          <NewDebtTile label="New debt this year" amount={addedThisYear} />
+        <div className="text-center">
+          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted">
+            Total debt
+          </p>
+          <p
+            className="mt-1 text-[42px] font-black leading-none tracking-tight"
+            style={{ color: RED }}
+          >
+            {money(securedTotal)}
+          </p>
+          <p className="mt-2 text-[12px] text-muted">
+            {money(securedMin)} a month to keep up · {money(securedInterest)} of
+            that is pure interest
+          </p>
         </div>
+
+        {/* The two tiles open. Tapping one shows what the borrowing actually
+            went on, grouped by heading, and each heading opens again to the
+            charges themselves. One at a time — two panels of transactions
+            inside a summary card defeats the point of the summary. */}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <NewDebtTile
+            label="New debt this month"
+            amount={addedThisMonth}
+            count={monthTxs.length}
+            open={openTile === "month"}
+            onToggle={() => setOpenTile(openTile === "month" ? null : "month")}
+          />
+          <NewDebtTile
+            label="New debt this year"
+            amount={addedThisYear}
+            count={yearTxs.length}
+            open={openTile === "year"}
+            onToggle={() => setOpenTile(openTile === "year" ? null : "year")}
+          />
+        </div>
+
+        {openTile && (
+          <NewDebtDrill
+            txs={openTile === "month" ? monthTxs : yearTxs}
+            period={openTile === "month" ? "this month" : `in ${currentYear}`}
+          />
+        )}
       </div>
 
       {/* The same total split by whose it is and what's behind it. These add up
@@ -686,22 +719,247 @@ export default function DebtClient({
   );
 }
 
+// ── The two loans hiding inside the car loan ─────────────────────────────────
+// One line on a statement, two different things owed: the Taycan, and the
+// negative equity rolled in from the cars before it. The bar shows the split at
+// a glance and each part carries its own share of the monthly payment.
+//
+// Nothing is estimated. Both parts sit in the same loan at the same rate over
+// the same term, so the payment divides in exactly the same proportion as the
+// balance — the two lines add back to the loan's own minimum to the dollar.
+function LoanParts({ debt, color }: { debt: Debt; color: string }) {
+  const parts = carLoanParts(debt);
+  if (!parts) return null;
+
+  const left = monthsToClear(debt.balance, debt.apr, debt.minPayment);
+  const rolled = parts.find((p) => p.key === "rolled");
+
+  return (
+    <div className="mt-2.5 rounded-xl bg-card p-3">
+      <p className="text-[11px] uppercase tracking-wide text-muted">
+        What&apos;s inside this loan
+      </p>
+
+      <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-full bg-tint">
+        {parts.map((p) => (
+          <div
+            key={p.key}
+            style={{
+              width: `${(p.balance / debt.balance) * 100}%`,
+              background: p.key === "taycan" ? color : RED,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="mt-2.5 space-y-2.5">
+        {parts.map((p) => (
+          <div key={p.key} className="flex items-start gap-2">
+            <span
+              className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ background: p.key === "taycan" ? color : RED }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] font-medium">
+                {p.emoji} {p.label}
+              </span>
+              <span className="block text-[11px] text-muted">{p.note}</span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className="block text-[14px] font-semibold leading-tight">
+                {money(p.balance)}
+              </span>
+              <span className="block text-[11px] text-muted">
+                {money(p.monthly)}/mo
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-2.5 border-t border-border pt-2.5 text-[11px] text-muted">
+        {rolled && (
+          <>
+            {money(rolled.monthly)} of the {money(debt.minPayment)} payment —
+            about {Math.round((rolled.balance / debt.balance) * 100)}% of it — is
+            still paying off cars that are already gone.{" "}
+          </>
+        )}
+        {left !== null && <>Both parts run out together in {duration(left)}. </>}
+        The Taycan is counted at {money(TAYCAN_PRICE)}; the rest is what was
+        carried over from earlier trade-ins.
+      </p>
+    </div>
+  );
+}
+
 // ── "New debt this month / this year" ────────────────────────────────────────
 // Red when the pile grew, green when more went back than went out. A month
 // where Jamie paid down more than he borrowed is good news, and a bare
 // "-$1,200" buried it — so it gets said in words as well as colour.
-function NewDebtTile({ label, amount }: { label: string; amount: number }) {
+//
+// A tile with no charges behind it doesn't pretend to open.
+function NewDebtTile({
+  label,
+  amount,
+  count,
+  open,
+  onToggle,
+}: {
+  label: string;
+  amount: number;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const grew = amount > 0;
-  const tone = grew ? "#ff8a80" : "#6ee7b7";
+  const tone = grew ? RED : GREEN;
   return (
-    <div className="rounded-xl bg-white/5 p-3 text-left">
-      <p className="text-[11px] text-white/50">{label}</p>
-      <p className="mt-0.5 text-[22px] font-black leading-tight" style={{ color: tone }}>
+    <button
+      type="button"
+      className="rounded-xl border bg-white/70 p-3 text-left disabled:cursor-default"
+      style={{ borderColor: open ? tone : "transparent" }}
+      onClick={onToggle}
+      disabled={count === 0}
+      aria-expanded={count > 0 ? open : undefined}
+    >
+      <span className="block text-[11px] text-muted">{label}</span>
+      <span
+        className="mt-0.5 block text-[22px] font-black leading-tight"
+        style={{ color: tone }}
+      >
         {grew ? "+" : ""}
         {money(Math.abs(amount))}
+      </span>
+      <span className="flex items-center gap-1 text-[11px] text-muted">
+        {count === 0
+          ? "nothing borrowed"
+          : `${count} charge${count === 1 ? "" : "s"} — tap to see`}
+        {count > 0 && (
+          <ChevronDown
+            size={11}
+            className="transition-transform"
+            style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+          />
+        )}
+      </span>
+    </button>
+  );
+}
+
+// ── Where the new debt went ──────────────────────────────────────────────────
+// The charges behind a tile, grouped by what they look like they were for, then
+// each heading opens onto the charges themselves — payee, date and the account
+// it landed on, which is what a line gets checked against on a statement.
+//
+// The headings are worked out from the payee name and nothing else, so the card
+// says so rather than presenting a guess as a fact. Every real charge is still
+// listed underneath: the grouping only decides what sits next to what.
+function NewDebtDrill({ txs, period }: { txs: DebtTransaction[]; period: string }) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const groups = groupByCategory(txs);
+  const total = groups.reduce((sum, g) => sum + Math.abs(g.total), 0) || 1;
+
+  return (
+    <div className="mt-2 rounded-xl border border-white/60 bg-white/70 p-3">
+      <p className="text-[11px] uppercase tracking-wide text-muted">
+        What it went on, {period}
       </p>
-      <p className="text-[11px] text-white/40">
-        {amount === 0 ? "nothing borrowed" : grew ? "borrowed" : "paid off"}
+
+      <div className="mt-2 space-y-1.5">
+        {groups.map((g) => {
+          const open = openKey === g.category.key;
+          const paidBack = g.total < 0;
+          return (
+            <div
+              key={g.category.key}
+              className="overflow-hidden rounded-lg"
+              style={{ background: g.category.tint }}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+                onClick={() => setOpenKey(open ? null : g.category.key)}
+                aria-expanded={open}
+              >
+                <span className="text-[15px]">{g.category.emoji}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium">
+                    {g.category.label}
+                  </span>
+                  {/* How big this heading is next to the others. */}
+                  <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-white/70">
+                    <span
+                      className="block h-full rounded-full"
+                      style={{
+                        width: `${(Math.abs(g.total) / total) * 100}%`,
+                        background: g.category.color,
+                      }}
+                    />
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span
+                    className="block text-[13px] font-semibold leading-tight"
+                    style={{ color: paidBack ? GREEN : g.category.color }}
+                  >
+                    {paidBack ? "−" : ""}
+                    {money(Math.abs(g.total))}
+                  </span>
+                  <span className="block text-[10px] text-muted">
+                    {g.items.length} charge{g.items.length === 1 ? "" : "s"}
+                  </span>
+                </span>
+                <ChevronDown
+                  size={13}
+                  className="shrink-0 text-muted transition-transform"
+                  style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+                />
+              </button>
+
+              {open && (
+                <ul className="space-y-2 px-2.5 pb-2.5 pl-9">
+                  {g.items.map((t) => (
+                    <li key={t.id} className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px]">
+                          {t.description}
+                        </span>
+                        <span className="block text-[11px] text-muted">
+                          {t.txDate}
+                        </span>
+                        {t.source && (
+                          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+                            <Landmark size={10} className="shrink-0" />
+                            <span className="truncate">{t.source}</span>
+                          </span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-right text-[13px]">
+                        {t.amount < 0 ? (
+                          <>
+                            {money(Math.abs(t.amount))}
+                            <span className="block text-[10px] text-muted">
+                              paid back
+                            </span>
+                          </>
+                        ) : (
+                          money(t.amount)
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-2.5 text-[11px] text-muted">
+        The headings are worked out from the name on each charge, so one may sit
+        under the wrong one. The charges themselves — and every total on this
+        page — are exactly as they came from Money App.
       </p>
     </div>
   );
@@ -710,40 +968,52 @@ function NewDebtTile({ label, amount }: { label: string; amount: number }) {
 // ── Credit score ─────────────────────────────────────────────────────────────
 // The number, what it means in words, and where it sits on the 300–850 scale —
 // so a score reads as a position rather than as three digits on their own.
+//
+// The whole card is a link to the Credit Report page. The score is the summary
+// of what's on that page, so tapping it is the obvious next question: which
+// accounts made it this number?
 function FicoCard({ score, date }: { score: number; date: string }) {
   const color =
     score >= 740 ? GREEN : score >= 670 ? SKY : score >= 580 ? AMBER : RED;
   const pct = Math.max(0, Math.min(100, ((score - 300) / 550) * 100));
 
   return (
-    <Card>
-      <div className="flex items-center justify-between">
-        <p className="flex items-center gap-1.5 text-[13px] text-muted">
-          <Gauge size={15} />
-          Credit score
+    <Link href="/credit-report" className="block">
+      <Card>
+        <div className="flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-[13px] text-muted">
+            <Gauge size={15} />
+            Credit score
+          </p>
+          <span
+            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+            style={{ background: color }}
+          >
+            {ficoLabel(score)}
+          </span>
+        </div>
+        <p className="mt-1 text-[34px] font-black leading-none" style={{ color }}>
+          {score}
         </p>
-        <span
-          className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
-          style={{ background: color }}
-        >
-          {ficoLabel(score)}
-        </span>
-      </div>
-      <p className="mt-1 text-[34px] font-black leading-none" style={{ color }}>
-        {score}
-      </p>
-      <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-tint">
-        <div
-          className="h-full rounded-full"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
-      <div className="mt-1 flex justify-between text-[10px] text-muted">
-        <span>300</span>
-        <span>850</span>
-      </div>
-      <p className="mt-1 text-xs text-muted">From Money App, updated {date}.</p>
-    </Card>
+        <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-tint">
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${pct}%`, background: color }}
+          />
+        </div>
+        <div className="mt-1 flex justify-between text-[10px] text-muted">
+          <span>300</span>
+          <span>850</span>
+        </div>
+        <p className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
+          <span>From Money App, updated {date}.</span>
+          <span className="flex shrink-0 items-center gap-0.5" style={{ color }}>
+            See the full report
+            <ChevronRight size={13} />
+          </span>
+        </p>
+      </Card>
+    </Link>
   );
 }
 

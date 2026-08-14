@@ -164,6 +164,83 @@ export function simulate(debts: Debt[], monthlyBudget: number): SimResult {
   return { months, totalInterest, paysOff };
 }
 
+// How long `payment` a month takes to clear `balance` at `apr` — the
+// amortisation formula run the other way round. Null when the payment doesn't
+// even cover the interest, because then it never clears at all.
+export function monthsToClear(
+  balance: number,
+  apr: number,
+  payment: number,
+): number | null {
+  if (balance <= 0) return 0;
+  if (payment <= 0) return null;
+  const r = apr / 100 / 12;
+  if (r === 0) return Math.ceil(balance / payment);
+  if (payment <= balance * r) return null;
+  return Math.ceil(-Math.log(1 - (balance * r) / payment) / Math.log(1 + r));
+}
+
+// ── What's actually inside the car loan ──────────────────────────────────────
+// The US Bank loan isn't one purchase. Roughly $60,000 of it bought the Taycan;
+// everything above that is negative equity rolled in from the cars before it —
+// money still owed on trade-ins that were worth less than the loans against
+// them. One loan on a statement, two very different things owed.
+//
+// The split is worth showing because the two halves mean different things. The
+// Taycan half bought something that exists and can be sold. The rolled-in half
+// bought nothing — it's the last cars still being paid for, quietly riding
+// along inside this one.
+//
+// Both halves sit in one loan at one rate over one term, so the payment splits
+// in exactly the same proportion as the balance. Nothing here is estimated:
+// it's the same $2,093 written as two lines that add back to it.
+export const TAYCAN_PRICE = 60_000;
+
+export type LoanPart = {
+  key: string;
+  emoji: string;
+  label: string;
+  note: string;
+  balance: number;
+  monthly: number;
+};
+
+// Null when there's nothing to split — the loan isn't the car loan, or it has
+// dropped to the point where it's all Taycan and no rolled-in equity.
+//
+// Matched on the name as well as the type on purpose. A second car loan one day
+// would also be an "auto_loan", and splitting $60,000 of a Taycan out of a car
+// that isn't the Taycan would be worse than not splitting at all. If Money App
+// ever renames this account the split quietly stops, which is the safe way to
+// be wrong.
+export function carLoanParts(debt: Debt): LoanPart[] | null {
+  if (!isCarLoan(debt)) return null;
+  if (!/us\s*bank/i.test(debt.name)) return null;
+  const car = Math.min(TAYCAN_PRICE, debt.balance);
+  const rolled = debt.balance - car;
+  if (rolled <= 0 || debt.balance <= 0) return null;
+
+  const share = (amount: number) => (debt.minPayment * amount) / debt.balance;
+  return [
+    {
+      key: "taycan",
+      emoji: "🏎️",
+      label: "The Taycan",
+      note: "the car itself — this part bought something you still have",
+      balance: car,
+      monthly: share(car),
+    },
+    {
+      key: "rolled",
+      emoji: "📉",
+      label: "Rolled in from earlier cars",
+      note: "owed on cars already gone — this part bought nothing",
+      balance: rolled,
+      monthly: share(rolled),
+    },
+  ];
+}
+
 // Turn a number of months into "2 yrs 3 mo".
 export function duration(months: number): string {
   if (!Number.isFinite(months) || months >= MAX_MONTHS) return "never";
