@@ -80,7 +80,10 @@ export type HouseholdPicture = {
   // ── Scene 1: what we owe ────────────────────────────────────────────────
   totalDebt: number;
   businessDebt: number;
+  /** Chris, Jamie and joint — the household's own debt, rental excluded. */
   personalDebt: number;
+  /** The rental property's own mortgage and deferred balance. */
+  rentalDebt: number;
   /** Every account behind those two numbers, biggest first. */
   accounts: HouseholdAccount[];
   /** Totals per owner, biggest slice of the story first. Drives the top cards. */
@@ -318,8 +321,16 @@ export async function getHouseholdPicture(): Promise<{
   }
 
   const accounts = debtResult.accounts;
-  const businessDebt = sum(accounts.filter((a) => a.scope === "business").map((a) => a.balance));
-  const personalDebt = sum(accounts.filter((a) => a.scope !== "business").map((a) => a.balance));
+  // Three buckets, not two. The rental property is a business of its own —
+  // its mortgage sits against an asset that earns rent, which is a different
+  // thing from what the two of them owe, and lumping it into "personal" made
+  // that number look far worse than it is.
+  const totalFor = (keep: (s: Scope) => boolean) =>
+    sum(accounts.filter((a) => keep(a.scope)).map((a) => a.balance));
+
+  const businessDebt = totalFor((s) => s === "business");
+  const rentalDebt = totalFor((s) => s === "lennon");
+  const personalDebt = totalFor((s) => s !== "business" && s !== "lennon");
 
   // Only owners who actually owe something. Joint in particular is usually
   // empty, and a $0 card next to four real ones just reads as a bug.
@@ -440,9 +451,10 @@ export async function getHouseholdPicture(): Promise<{
 
   return {
     picture: {
-      totalDebt: businessDebt + personalDebt,
+      totalDebt: businessDebt + personalDebt + rentalDebt,
       businessDebt,
       personalDebt,
+      rentalDebt,
       accounts,
       byScope,
 

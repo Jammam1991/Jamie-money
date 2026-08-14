@@ -125,18 +125,30 @@ function Hero({ picture }: { picture: HouseholdPicture }) {
 
 function Scene1Owed({ picture, index }: { picture: HouseholdPicture; index: number }) {
   const total = picture.totalDebt || 1;
-  const bizPct = (picture.businessDebt / total) * 100;
+  // The rental keeps its own band. Its mortgage sits against something that
+  // earns rent, so folding it into "personal" overstated what the two of them
+  // actually owe.
+  const bands = [
+    { key: "gym", color: AMBER, label: "🏋️ The gym's debt", amount: picture.businessDebt },
+    { key: "personal", color: VIOLET, label: "🏠 Our personal debt", amount: picture.personalDebt },
+    { key: "rental", color: SKY, label: "🏘️ Chris's rental property", amount: picture.rentalDebt },
+  ].filter((b) => b.amount > 0);
 
   return (
     <Scene index={index} emoji="🏔️" title="What we owe" accent={RED}>
       <div className="mt-3 flex h-6 w-full overflow-hidden rounded-full bg-tint">
-        <div style={{ width: `${bizPct}%`, background: AMBER }} />
-        <div style={{ width: `${100 - bizPct}%`, background: VIOLET }} />
+        {bands.map((b) => (
+          <div
+            key={b.key}
+            style={{ width: `${(b.amount / total) * 100}%`, background: b.color }}
+          />
+        ))}
       </div>
 
       <div className="mt-3 space-y-2">
-        <KeyRow color={AMBER} label="🏋️ The gym's debt" amount={picture.businessDebt} />
-        <KeyRow color={VIOLET} label="🏠 Our personal debt" amount={picture.personalDebt} />
+        {bands.map((b) => (
+          <KeyRow key={b.key} color={b.color} label={b.label} amount={b.amount} />
+        ))}
       </div>
 
       <Drill label={`See all ${picture.accounts.length} accounts`}>
