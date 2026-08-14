@@ -49,6 +49,8 @@ export type GymChapter = {
   tone: GymTone;
   paragraphs: string[];
   fact?: FinancialFact;
+  /** An optional pointer to where the real records live, e.g. the Debt page. */
+  link?: { href: string; label: string };
 };
 
 export type GymStory = {
@@ -336,6 +338,20 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
         ],
         mistakes: cuttingMistakes,
       },
+    },
+    {
+      id: "managing-the-money",
+      era: "Throughout the first year",
+      emoji: "💸",
+      title: "Managing the Money",
+      tone: "amber",
+      paragraphs: [
+        "Jamie took on managing the finances. He was also training clients off the books and keeping that cash — in his mind, it was his paycheck. The gym couldn't actually afford to pay him, but he took the money anyway, plus additional funds on top of it.",
+        "Chris had to keep funding the business more and more to cover the gap. That's a real part of how the debt piled up.",
+        "Jamie later secured a $50,000 business loan to help pay some of that back to Chris. Chris put the $25,000 grant from the Setbacks chapter toward paying down some of his own personal credit cards. Jamie also took out a $6,000 US Bank credit card and a $5,000 Pace business loan.",
+        "These are business debts, and the gym's actual balances on them — paid down or not — live on the Debt page, not here.",
+      ],
+      link: { href: "/debt", label: "See the Business Debt section on the Debt page" },
     },
     {
       id: "partnership",
