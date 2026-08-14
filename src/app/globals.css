@@ -77,3 +77,25 @@ body {
     padding-bottom: 2.5rem;
   }
 }
+
+/* Gym Story: chapters step in one after another instead of all landing at
+   once — the story reads top to bottom the way it's meant to. */
+@keyframes gymFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.gym-fade-in {
+  animation: gymFadeInUp 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gym-fade-in {
+    animation: none;
+  }
+}
