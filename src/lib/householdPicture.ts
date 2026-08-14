@@ -25,7 +25,11 @@
 // page down: the affected scene says in plain words what it doesn't know, and
 // the rest of the story still reads.
 
-import { getBusinessFinances, type Rollup } from "./businessFinances";
+import {
+  getBusinessFinances,
+  type Rollup,
+  type ScheduleCLine,
+} from "./businessFinances";
 import { getPayMonths } from "./gymPay";
 import { moneyAppReady } from "./moneyapp";
 import {
@@ -81,13 +85,28 @@ export type MonthDraw = {
 
 export type Slice = { label: string; amount: number };
 
-/** One rung of the waterfall: what gets taken, and what's still standing after. */
-export type FlowStep = {
-  key: string;
-  emoji: string;
+/** One line inside a drill-down — a category, an account, a transaction. */
+export type Detail = {
   label: string;
-  /** Always positive — it's money going out. */
+  /** A quieter second line: a date, an account, whatever says where it's from. */
+  sub?: string;
   amount: number;
+};
+
+/** A figure with what's behind it, so no number on the page is take-it-on-trust. */
+export type FlowPart = {
+  key: string;
+  label: string;
+  amount: number;
+  /** Biggest first. Empty when the source genuinely can't break it down. */
+  detail: Detail[];
+  /** Said under the drill-down: where these came from, or why they're thin. */
+  detailNote?: string;
+};
+
+/** One rung of the waterfall: what gets taken, and what's still standing after. */
+export type FlowStep = FlowPart & {
+  emoji: string;
   /** What's left of the month's income once this step is paid. Can go below 0. */
   remaining: number;
   /** Plain-words note under the step, where the source needs saying. */
@@ -97,7 +116,10 @@ export type FlowStep = {
 /** Everything in, everything out, and the order it leaves in. */
 export type MoneyFlow = {
   incomeMonthly: number;
-  incomeParts: Slice[];
+  incomeParts: FlowPart[];
+  /** Paycheck money Money App couldn't attribute to Chris, and why. Null when
+   *  there is none — which is the normal, healthy case. */
+  unattributedPay: { monthly: number; reason: string; detail: Detail[] } | null;
   /** Every step's amount added up — the "total expenses" headline. */
   outMonthly: number;
   steps: FlowStep[];
@@ -413,15 +435,45 @@ async function fetchLivingCosts(): Promise<{ total: number; lines: Slice[] } | n
  * balance that grows while being paid, and a negative here would quietly
  * cancel out real principal being paid elsewhere.
  */
-function bankSplit(accounts: HouseholdAccount[]): { interest: number; principal: number } {
+function bankSplit(accounts: HouseholdAccount[]): {
+  interest: number;
+  interestDetail: Detail[];
+  principal: number;
+  principalDetail: Detail[];
+} {
   let interest = 0;
   let principal = 0;
+  const interestDetail: Detail[] = [];
+  const principalDetail: Detail[] = [];
+
   for (const a of accounts) {
     const monthly = (a.balance * (a.apr / 100)) / 12;
+    const toBalance = Math.max(0, a.minPayment - monthly);
     interest += monthly;
-    principal += Math.max(0, a.minPayment - monthly);
+    principal += toBalance;
+    if (monthly > 0) {
+      interestDetail.push({
+        label: a.name,
+        sub: `${a.apr}% on ${Math.round(a.balance).toLocaleString("en-US")}`,
+        amount: monthly,
+      });
+    }
+    if (toBalance > 0) {
+      principalDetail.push({
+        label: a.name,
+        sub: `${Math.round(a.minPayment).toLocaleString("en-US")} minimum, less its interest`,
+        amount: toBalance,
+      });
+    }
   }
-  return { interest, principal };
+
+  const biggestFirst = (d: Detail[]) => d.sort((x, y) => y.amount - x.amount);
+  return {
+    interest,
+    interestDetail: biggestFirst(interestDetail),
+    principal,
+    principalDetail: biggestFirst(principalDetail),
+  };
 }
 
 // ── Chris's pay and the rent, read rather than typed ─────────────────────────
@@ -433,34 +485,85 @@ function bankSplit(accounts: HouseholdAccount[]): { interest: number; principal:
 // The figures Chris typed into Settings stay as a fallback: they're what the
 // page ran on before this feed existed, and they keep it standing if Money App
 // is unreachable or hasn't deployed the endpoint yet.
+type LedgerBucket = { monthly: number | null; detail: Detail[] };
+
+type LedgerIncome = {
+  chris: LedgerBucket;
+  rental: LedgerBucket;
+  /** Paycheck money Money App couldn't attribute to Chris, and its reason. */
+  unattributed: { monthly: number; reason: string; detail: Detail[] } | null;
+};
+
+const NO_LEDGER: LedgerIncome = {
+  chris: { monthly: null, detail: [] },
+  rental: { monthly: null, detail: [] },
+  unattributed: null,
+};
+
+type LedgerLine = {
+  date?: string;
+  payee?: string | null;
+  category?: string | null;
+  usage?: string | null;
+  amount?: number;
+};
+
 async function fetchLedgerIncome(
   months: { year: number; month: number }[],
-): Promise<{ chris: number | null; rental: number | null }> {
+): Promise<LedgerIncome> {
   const baseUrl = process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
   const apiKey = process.env.MONEYAPP_API_KEY;
-  if (!baseUrl || !apiKey || months.length === 0) return { chris: null, rental: null };
+  if (!baseUrl || !apiKey || months.length === 0) return NO_LEDGER;
 
   const first = months[0];
   const last = months[months.length - 1];
   const ym = (m: { year: number; month: number }) =>
     `${m.year}-${String(m.month).padStart(2, "0")}`;
+  const monthCount = months.length;
 
   try {
     const res = await fetch(
       `${baseUrl.replace(/\/$/, "")}/api/household/income?from=${ym(first)}&to=${ym(last)}`,
       { headers: { "x-api-key": apiKey }, cache: "no-store" },
     );
-    if (!res.ok) return { chris: null, rental: null };
+    if (!res.ok) return NO_LEDGER;
     const body = await res.json();
-    // A real zero is an answer — it means nothing landed in those months — but
-    // only when Money App actually found rows to look at. No rows at all is
-    // "we don't know", which has to stay null so the Settings figure can stand
-    // in rather than being overridden by a zero.
-    const read = (v: { monthly?: number; count?: number } | undefined) =>
-      v && typeof v.monthly === "number" && (v.count ?? 0) > 0 ? v.monthly : null;
-    return { chris: read(body?.chrisPay), rental: read(body?.rentalIncome) };
+
+    // The drill-down shows the real transactions across the whole window, not
+    // a monthly average of them — an average of individual paychecks would be
+    // a number that never actually happened.
+    const linesOf = (v: { lines?: LedgerLine[] } | undefined): Detail[] =>
+      (v?.lines ?? []).map((l) => ({
+        label: l.payee?.trim() || "—",
+        sub: [l.date, l.usage].filter(Boolean).join(" · "),
+        amount: Number(l.amount) || 0,
+      }));
+
+    // A real zero is an answer — nothing landed in those months — but only
+    // when Money App actually found rows to look at. No rows at all is "we
+    // don't know", which stays null so the Settings figure can stand in
+    // rather than being overridden by a zero.
+    const bucket = (v: { monthly?: number; count?: number } | undefined): LedgerBucket => ({
+      monthly:
+        v && typeof v.monthly === "number" && (v.count ?? 0) > 0 ? v.monthly : null,
+      detail: linesOf(v as { lines?: LedgerLine[] }),
+    });
+
+    const un = body?.unattributedPay;
+    return {
+      chris: bucket(body?.chrisPay),
+      rental: bucket(body?.rentalIncome),
+      unattributed:
+        un && (un.count ?? 0) > 0 && Number(un.total) > 0
+          ? {
+              monthly: Number(un.total) / monthCount,
+              reason: String(un.reason ?? "Money App couldn't attribute this pay."),
+              detail: linesOf(un),
+            }
+          : null,
+    };
   } catch {
-    return { chris: null, rental: null };
+    return NO_LEDGER;
   }
 }
 
@@ -638,14 +741,36 @@ export async function getHouseholdPicture(): Promise<{
   // ── Where the household's money goes ───────────────────────────────────
   // The ledger wins: it's what actually landed, month by month, classified by
   // Money App itself. The Settings figures only stand in where it has nothing.
+  // The gym's own categories, so "takes in" and "running the gym" each open to
+  // the lines behind them rather than being two totals to take on trust.
+  const gymLines = (keep: (c: ScheduleCLine["classification"]) => boolean): Detail[] => {
+    const byLabel = new Map<string, number>();
+    for (const r of gymRollups) {
+      for (const l of r.lines) {
+        if (!keep(l.classification)) continue;
+        byLabel.set(l.label, (byLabel.get(l.label) ?? 0) + l.amount);
+      }
+    }
+    return [...byLabel.entries()]
+      // Averaged the same way the totals above are, so the lines add up to the
+      // figure they sit under instead of being three months against one.
+      .map(([label, total]) => ({ label, amount: total / Math.max(1, gymRollups.length) }))
+      .filter((l) => l.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+  };
+
   const flow = buildFlow({
-    chrisIncome: ledgerIncome.chris ?? typedIncome.chris,
-    rentalIncome: ledgerIncome.rental ?? typedIncome.rental,
+    chrisIncome: ledgerIncome.chris.monthly ?? typedIncome.chris,
+    rentalIncome: ledgerIncome.rental.monthly ?? typedIncome.rental,
     jamieIncome: incomeMonthly,
+    jamieParts: incomeParts.map((p) => ({ label: p.label, amount: p.amount })),
     gymRevenue: gymRevenueMonthly,
+    gymRevenueLines: gymLines((c) => c === "income"),
     gymCosts: gymCostsMonthly,
+    gymCostLines: gymLines((c) => c === "cogs" || c === "expense"),
     living: livingCosts,
     bank: bankSplit(accounts),
+    ledger: ledgerIncome,
   });
 
   // ── The cash left to draw, and the burn against it ─────────────────────
@@ -786,53 +911,116 @@ function buildFlow(input: {
   chrisIncome: number | null;
   rentalIncome: number | null;
   jamieIncome: number;
+  jamieParts: Detail[];
   gymRevenue: number;
+  gymRevenueLines: Detail[];
   gymCosts: number;
-  living: { total: number; lines: Slice[] } | null;
-  bank: { interest: number; principal: number };
+  gymCostLines: Detail[];
+  living: { total: number; lines: Detail[] } | null;
+  bank: {
+    interest: number;
+    interestDetail: Detail[];
+    principal: number;
+    principalDetail: Detail[];
+  };
+  ledger: LedgerIncome;
 }): MoneyFlow | null {
-  const { chrisIncome, rentalIncome, jamieIncome, gymRevenue, gymCosts, living, bank } = input;
+  const {
+    chrisIncome,
+    rentalIncome,
+    jamieIncome,
+    jamieParts,
+    gymRevenue,
+    gymRevenueLines,
+    gymCosts,
+    gymCostLines,
+    living,
+    bank,
+    ledger,
+  } = input;
   if (chrisIncome === null && rentalIncome === null) return null;
 
-  const incomeParts: Slice[] = [
-    { label: "Chris's pay", amount: chrisIncome ?? 0 },
-    { label: "Jamie's income", amount: jamieIncome },
-    { label: "Rent from the rental", amount: rentalIncome ?? 0 },
-    { label: "The gym takes in", amount: gymRevenue },
+  // Every figure carries what it's made of. Not decoration: a wrong number is
+  // only findable if you can open it, and the first real numbers on this page
+  // came back with a take-home nobody could explain.
+  const incomeParts: FlowPart[] = [
+    {
+      key: "chris",
+      label: "Chris's pay",
+      amount: chrisIncome ?? 0,
+      detail: ledger.chris.detail,
+      detailNote:
+        ledger.chris.detail.length > 0
+          ? "Paychecks in the Money App over the last three whole months."
+          : "This is the backup figure from Settings — the Money App didn't have paychecks to show.",
+    },
+    {
+      key: "jamie",
+      label: "Jamie's income",
+      amount: jamieIncome,
+      detail: jamieParts,
+      detailNote:
+        "The gym figure is what actually came out of the business, from the gym dashboard. The massage figure is the weekly amount on the Settings screen, times 4.33 weeks.",
+    },
+    {
+      key: "rental",
+      label: "Rent from the rental",
+      amount: rentalIncome ?? 0,
+      detail: ledger.rental.detail,
+      detailNote:
+        ledger.rental.detail.length > 0
+          ? "Money into the rental's account that isn't a paycheck passing through it."
+          : "This is the backup figure from Settings — the Money App didn't have rent to show.",
+    },
+    {
+      key: "gymIn",
+      label: "The gym takes in",
+      amount: gymRevenue,
+      detail: gymRevenueLines,
+      detailNote: "The gym's own income categories, averaged over the last three whole months.",
+    },
   ].filter((p) => p.amount > 0);
   const incomeMonthly = sum(incomeParts.map((p) => p.amount));
 
-  const outgoings: { key: string; emoji: string; label: string; amount: number; note?: string }[] =
-    [
-      {
-        key: "living",
-        emoji: "🏠",
-        label: "Living expenses",
-        amount: living?.total ?? 0,
-        note: "Planned monthly budget from Money App, not what actually got spent.",
-      },
-      {
-        key: "gym",
-        emoji: "🏋️",
-        label: "Running the gym",
-        amount: gymCosts,
-        note: "What the gym really spent, averaged over the last three whole months.",
-      },
-      {
-        key: "interest",
-        emoji: "🏦",
-        label: "Interest to the banks",
-        amount: bank.interest,
-        note: "Every balance at its own rate, for one month. This buys nothing — it's the price of owing.",
-      },
-      {
-        key: "principal",
-        emoji: "📉",
-        label: "Paying the balances down",
-        amount: bank.principal,
-        note: "Whatever's left of the minimum payments once the interest is covered.",
-      },
-    ].filter((s) => s.amount > 0);
+  const outgoings: Omit<FlowStep, "remaining">[] = [
+    {
+      key: "living",
+      emoji: "🏠",
+      label: "Living expenses",
+      amount: living?.total ?? 0,
+      detail: living?.lines ?? [],
+      note: "Planned monthly budget from Money App, not what actually got spent.",
+      detailNote: "Every budgeted category across Chris, Jamie and Joint, biggest first.",
+    },
+    {
+      key: "gym",
+      emoji: "🏋️",
+      label: "Running the gym",
+      amount: gymCosts,
+      detail: gymCostLines,
+      note: "What the gym really spent, averaged over the last three whole months.",
+      detailNote: "The gym's Schedule C categories — the same ones Business Finances lists.",
+    },
+    {
+      key: "interest",
+      emoji: "🏦",
+      label: "Interest to the banks",
+      amount: bank.interest,
+      detail: bank.interestDetail,
+      note: "Every balance at its own rate, for one month. This buys nothing — it's the price of owing.",
+      detailNote: "One month of each account's own rate against its own balance.",
+    },
+    {
+      key: "principal",
+      emoji: "📉",
+      label: "Paying the balances down",
+      amount: bank.principal,
+      detail: bank.principalDetail,
+      note: "Whatever's left of the minimum payments once the interest is covered.",
+      detailNote:
+        "An account whose minimum doesn't cover its own interest shows nothing here — that balance grows while being paid.",
+    },
+  ].filter((s) => s.amount > 0);
 
   let remaining = incomeMonthly;
   const steps: FlowStep[] = outgoings.map((s) => {
@@ -843,6 +1031,7 @@ function buildFlow(input: {
   return {
     incomeMonthly,
     incomeParts,
+    unattributedPay: ledger.unattributed,
     outMonthly: sum(outgoings.map((s) => s.amount)),
     steps,
     shortfall: remaining,
