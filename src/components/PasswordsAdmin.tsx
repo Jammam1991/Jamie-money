@@ -41,10 +41,12 @@ export default function PasswordsAdmin({
   initialEntries,
   unlocked,
   configured,
+  minutes,
 }: {
   initialEntries: PasswordEntry[];
   unlocked: boolean;
   configured: boolean;
+  minutes: number;
 }) {
   const [rows, setRows] = useState(initialEntries);
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -84,7 +86,7 @@ export default function PasswordsAdmin({
     return (
       <div className="space-y-3">
         {heading}
-        <VaultUnlock minutes={15} />
+        <VaultUnlock minutes={minutes} />
       </div>
     );
   }

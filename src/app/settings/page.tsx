@@ -4,7 +4,7 @@ import SettingsClient from "@/components/SettingsClient";
 import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
 import PasswordsAdmin from "@/components/PasswordsAdmin";
-import { getRole, isVaultUnlocked } from "@/lib/auth";
+import { getRole, isVaultUnlocked, VAULT_MINUTES } from "@/lib/auth";
 import { getComingSoonPages, getHouseholdIncome } from "@/lib/store";
 import { getTaxDocuments } from "@/lib/taxCenter";
 import { getPasswordEntries, vaultConfigured } from "@/lib/passwords";
@@ -37,6 +37,7 @@ export default async function SettingsPage() {
         initialEntries={passwords}
         unlocked={vaultOpen}
         configured={vaultConfigured()}
+        minutes={VAULT_MINUTES}
       />
     </div>
   );
