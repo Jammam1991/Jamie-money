@@ -5,11 +5,15 @@ import { Card } from "@/components/ui";
 import { setHouseholdIncome } from "@/lib/actions";
 import type { HouseholdIncome } from "@/lib/store";
 
-// ── The two incomes The Big Picture can't work out for itself ────────────────
-// Jamie's pay comes from the gym dashboard, his massage work from the weekly
-// figure on the Bills page, and the gym's revenue from Money App. Chris's own
-// pay and the rent the rental brings in live nowhere this app can read, so they
-// get typed here.
+// ── A fallback, not the source ───────────────────────────────────────────────
+// Chris's pay and the rental's rent are read from Money App's own ledger, and
+// what it sends always wins over what's typed here. These boxes only stand in
+// where Money App has nothing to send — it's unreachable, or a month genuinely
+// has no paycheck on record.
+//
+// They're kept because they're what the page ran on before that feed existed,
+// and because a Big Picture that goes blank when another app is down is worse
+// than one running a month behind.
 //
 // Blank is not zero. An empty box means "not set", and the page says the income
 // is incomplete rather than showing a shortfall built on a missing wage.
@@ -47,11 +51,12 @@ export default function HouseholdIncomeAdmin({
 
   return (
     <div>
-      <h2 className="mb-1 text-lg font-medium">Household income</h2>
+      <h2 className="mb-1 text-lg font-medium">Household income (backup only)</h2>
       <p className="mb-3 text-[13px] text-muted">
-        Used by The Big Picture to work out what comes in each month. Jamie&apos;s
-        income and the gym&apos;s revenue are already read automatically — these
-        two aren&apos;t anywhere this app can reach.
+        The Big Picture reads both of these from the Money App&apos;s own ledger —
+        your paychecks and the rental&apos;s rent — and what it finds always wins
+        over what&apos;s here. These boxes only get used if the Money App
+        can&apos;t be reached. Safe to leave empty.
       </p>
 
       <Card>
