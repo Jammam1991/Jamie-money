@@ -36,6 +36,23 @@ function money(n: number): string {
   return `${rounded < 0 ? "-" : ""}$${Math.abs(rounded).toLocaleString("en-US")}`;
 }
 
+// ── Accounts filed under one owner that someone else actually owes ───────────
+// The Beacon HELOC is booked to the rental because the property is what
+// secures it, but the balance is Chris and Jamie's own borrowing. Without
+// saying so the rental's total reads as if the property ran it up.
+//
+// Matched on the name rather than the account id: an id changes if the account
+// is re-linked in Money App, the name doesn't. If Chris ever fills in the
+// account's Notes field over there, that becomes the better source and this
+// list can go.
+const ACCOUNT_NOTES: { match: RegExp; note: string }[] = [
+  { match: /beacon/i, note: "Chris/Jamie Debt" },
+];
+
+function accountNote(name: string): string | null {
+  return ACCOUNT_NOTES.find((n) => n.match.test(name))?.note ?? null;
+}
+
 export default function BigPictureClient({
   picture,
   admin,
@@ -144,7 +161,12 @@ function Hero({ picture }: { picture: HouseholdPicture }) {
               .filter((a) => a.scope === expanded)
               .map((a) => (
                 <li key={a.id} className="flex items-baseline justify-between gap-3 text-[12px]">
-                  <span className="min-w-0 truncate text-white/70">{a.name}</span>
+                  <span className="min-w-0 truncate text-white/70">
+                    {a.name}
+                    {accountNote(a.name) && (
+                      <span className="text-white/40"> ({accountNote(a.name)})</span>
+                    )}
+                  </span>
                   <span className="shrink-0 font-medium text-white">{money(a.balance)}</span>
                 </li>
               ))}
@@ -211,7 +233,12 @@ function Scene1Owed({ picture, index }: { picture: HouseholdPicture; index: numb
                       key={a.id}
                       className="flex items-baseline justify-between gap-3 text-[12px] text-muted"
                     >
-                      <span className="min-w-0 truncate">{a.name}</span>
+                      <span className="min-w-0 truncate">
+                        {a.name}
+                        {accountNote(a.name) && (
+                          <span className="text-faint"> ({accountNote(a.name)})</span>
+                        )}
+                      </span>
                       <span className="shrink-0">{money(a.balance)}</span>
                     </li>
                   ))}
