@@ -7,6 +7,8 @@ import { Card } from "@/components/ui";
 import {
   SCOPE_LABEL,
   type CreditLine,
+  type Detail,
+  type FlowPart,
   type FlowStep,
   type HouseholdPicture,
   type Investment,
@@ -340,7 +342,26 @@ function SceneSpending({ flow, index }: { flow: MoneyFlow; index: number }) {
       </div>
 
       <Drill label="See where the money comes from">
-        <SliceList title="" slices={flow.incomeParts} color={GREEN} />
+        <div className="space-y-1">
+          {flow.incomeParts.map((p) => (
+            <PartRow key={p.key} part={p} color={GREEN} />
+          ))}
+        </div>
+
+        {flow.unattributedPay && (
+          <div className="mt-3 rounded-lg bg-warn-bg p-2.5">
+            <div className="flex items-baseline justify-between gap-3 text-[12px]">
+              <span className="font-medium text-warn">Pay not counted as Chris&apos;s</span>
+              <span className="font-medium text-warn">
+                {money(flow.unattributedPay.monthly)}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-warn">{flow.unattributedPay.reason}</p>
+            {flow.unattributedPay.detail.length > 0 && (
+              <DetailList detail={flow.unattributedPay.detail} />
+            )}
+          </div>
+        )}
       </Drill>
 
       <p className="mt-5 text-center text-[13px] text-muted">
@@ -412,8 +433,70 @@ function FlowTop({ amount }: { amount: number }) {
   );
 }
 
+/** One income line that opens to the transactions or categories behind it. */
+function PartRow({ part, color }: { part: FlowPart; color: string }) {
+  const [open, setOpen] = useState(false);
+  const canOpen = part.detail.length > 0;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => canOpen && setOpen(!open)}
+        aria-expanded={canOpen ? open : undefined}
+        disabled={!canOpen}
+        className="flex w-full items-baseline justify-between gap-3 py-0.5 text-left text-[13px] disabled:cursor-default"
+      >
+        <span className="flex min-w-0 items-center gap-1 text-muted">
+          {canOpen && (
+            <ChevronDown
+              size={12}
+              className="shrink-0 transition-transform"
+              style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+            />
+          )}
+          <span className="truncate">{part.label}</span>
+        </span>
+        <span className="shrink-0 font-medium" style={{ color }}>
+          {money(part.amount)}
+        </span>
+      </button>
+      {open && (
+        <>
+          <DetailList detail={part.detail} />
+          {part.detailNote && (
+            <p className="mt-1 px-1 text-[11px] text-faint">{part.detailNote}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The rows behind a figure. Deliberately plain — it's evidence, not a chart. */
+function DetailList({ detail }: { detail: Detail[] }) {
+  return (
+    <ul className="mt-1 space-y-1 rounded-lg bg-tint px-2.5 py-2">
+      {detail.map((d, i) => (
+        <li
+          key={`${d.label}-${d.sub ?? ""}-${i}`}
+          className="flex items-baseline justify-between gap-3 text-[12px]"
+        >
+          <span className="min-w-0">
+            <span className="block truncate">{d.label}</span>
+            {d.sub && <span className="block text-[10px] text-muted">{d.sub}</span>}
+          </span>
+          <span className="shrink-0 font-medium">{money(d.amount)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function FlowRung({ step, income }: { step: FlowStep; income: number }) {
+  const [open, setOpen] = useState(false);
   const gone = step.remaining < 0;
+  const canOpen = step.detail.length > 0;
   // The bar measures what's LEFT, so an overdrawn month shows an empty bar and
   // the red number does the talking. A negative width would just vanish.
   const pct = income > 0 ? Math.max(0, (step.remaining / income) * 100) : 0;
@@ -422,27 +505,54 @@ function FlowRung({ step, income }: { step: FlowStep; income: number }) {
     <>
       <p className="py-1 text-center text-[16px] text-muted">↓</p>
       <div className="rounded-xl bg-tint p-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="min-w-0 text-[13px] font-medium">
-            {step.emoji} {step.label}
-          </span>
-          <span className="shrink-0 text-[15px] font-bold" style={{ color: RED }}>
-            −{money(step.amount)}
-          </span>
-        </div>
-        <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-card">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${pct}%`, background: gone ? RED : GREEN }}
-          />
-        </div>
-        <p className="mt-1 text-[11px] text-muted">
-          {gone ? "Nothing left — " : "Still left: "}
-          <span className="font-medium" style={{ color: gone ? RED : "inherit" }}>
-            {gone ? `over by ${money(-step.remaining)}` : money(step.remaining)}
-          </span>
-        </p>
+        {/* The whole rung is the button — a figure this size deserves a target
+            bigger than a chevron, especially on a phone. */}
+        <button
+          type="button"
+          onClick={() => canOpen && setOpen(!open)}
+          aria-expanded={canOpen ? open : undefined}
+          disabled={!canOpen}
+          className="w-full text-left disabled:cursor-default"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-1 text-[13px] font-medium">
+              {canOpen && (
+                <ChevronDown
+                  size={12}
+                  className="shrink-0 text-muted transition-transform"
+                  style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+                />
+              )}
+              <span className="truncate">
+                {step.emoji} {step.label}
+              </span>
+            </span>
+            <span className="shrink-0 text-[15px] font-bold" style={{ color: RED }}>
+              −{money(step.amount)}
+            </span>
+          </div>
+          <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-card">
+            <div
+              className="h-full rounded-full transition-all duration-700"
+              style={{ width: `${pct}%`, background: gone ? RED : GREEN }}
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-muted">
+            {gone ? "Nothing left — " : "Still left: "}
+            <span className="font-medium" style={{ color: gone ? RED : "inherit" }}>
+              {gone ? `over by ${money(-step.remaining)}` : money(step.remaining)}
+            </span>
+          </p>
+        </button>
         {step.note && <p className="mt-1 text-[11px] text-faint">{step.note}</p>}
+        {open && (
+          <>
+            <DetailList detail={step.detail} />
+            {step.detailNote && (
+              <p className="mt-1 px-1 text-[11px] text-faint">{step.detailNote}</p>
+            )}
+          </>
+        )}
       </div>
     </>
   );
