@@ -368,6 +368,46 @@ function bankSplit(accounts: HouseholdAccount[]): { interest: number; principal:
   return { interest, principal };
 }
 
+// ── Chris's pay and the rent, read rather than typed ─────────────────────────
+// Both live in Money App's personal ledger and are classified there — same
+// income-category test, same transfer rules, same dedupe for a paycheck split
+// across two accounts. Asking for the answer beats working it out here, where a
+// second opinion on "what counts as income" would drift from the first.
+//
+// The figures Chris typed into Settings stay as a fallback: they're what the
+// page ran on before this feed existed, and they keep it standing if Money App
+// is unreachable or hasn't deployed the endpoint yet.
+async function fetchLedgerIncome(
+  months: { year: number; month: number }[],
+): Promise<{ chris: number | null; rental: number | null }> {
+  const baseUrl = process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
+  const apiKey = process.env.MONEYAPP_API_KEY;
+  if (!baseUrl || !apiKey || months.length === 0) return { chris: null, rental: null };
+
+  const first = months[0];
+  const last = months[months.length - 1];
+  const ym = (m: { year: number; month: number }) =>
+    `${m.year}-${String(m.month).padStart(2, "0")}`;
+
+  try {
+    const res = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/household/income?from=${ym(first)}&to=${ym(last)}`,
+      { headers: { "x-api-key": apiKey }, cache: "no-store" },
+    );
+    if (!res.ok) return { chris: null, rental: null };
+    const body = await res.json();
+    // A real zero is an answer — it means nothing landed in those months — but
+    // only when Money App actually found rows to look at. No rows at all is
+    // "we don't know", which has to stay null so the Settings figure can stand
+    // in rather than being overridden by a zero.
+    const read = (v: { monthly?: number; count?: number } | undefined) =>
+      v && typeof v.monthly === "number" && (v.count ?? 0) > 0 ? v.monthly : null;
+    return { chris: read(body?.chrisPay), rental: read(body?.rentalIncome) };
+  } catch {
+    return { chris: null, rental: null };
+  }
+}
+
 // ── The months the averages are taken over ───────────────────────────────────
 
 const MONTH_SHORT = [
@@ -422,8 +462,17 @@ export async function getHouseholdPicture(): Promise<{
   const today = new Date();
   const months = lastWholeMonths(AVERAGE_MONTHS, today);
 
-  const [debtResult, payResult, bills, weekly, loans, gymMonths, livingCosts, extraIncome] =
-    await Promise.all([
+  const [
+    debtResult,
+    payResult,
+    bills,
+    weekly,
+    loans,
+    gymMonths,
+    livingCosts,
+    typedIncome,
+    ledgerIncome,
+  ] = await Promise.all([
       fetchAccounts(),
       getPayMonths(12),
       getBills(),
@@ -432,6 +481,7 @@ export async function getHouseholdPicture(): Promise<{
       Promise.all(months.map((m) => getBusinessFinances(m.year, m.month))),
       fetchLivingCosts(),
       getHouseholdIncome(),
+      fetchLedgerIncome(months),
     ]);
 
   if (debtResult.accounts.length === 0) {
@@ -528,9 +578,11 @@ export async function getHouseholdPicture(): Promise<{
   const gymCostsMonthly = average(gymRollups.map((r) => r.cogs + r.expenses));
 
   // ── Where the household's money goes ───────────────────────────────────
+  // The ledger wins: it's what actually landed, month by month, classified by
+  // Money App itself. The Settings figures only stand in where it has nothing.
   const flow = buildFlow({
-    chrisIncome: extraIncome.chris,
-    rentalIncome: extraIncome.rental,
+    chrisIncome: ledgerIncome.chris ?? typedIncome.chris,
+    rentalIncome: ledgerIncome.rental ?? typedIncome.rental,
     jamieIncome: incomeMonthly,
     gymRevenue: gymRevenueMonthly,
     gymCosts: gymCostsMonthly,

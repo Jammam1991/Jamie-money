@@ -92,9 +92,8 @@ export default function BigPictureClient({
       })()}
 
       <p className="px-2 text-center text-[11px] text-muted">
-        Read live from the Money App, the gym dashboard and this app&apos;s own
-        Bills page. The only figures typed in by hand are Chris&apos;s pay and the
-        rent from the rental — nothing else in the app knows those.
+        Every number here is read live from the Money App, the gym dashboard and
+        this app&apos;s own Bills page. Nothing is typed in by hand.
       </p>
 
       <Link
