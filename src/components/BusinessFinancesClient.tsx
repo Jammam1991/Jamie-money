@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Card, Tint } from "@/components/ui";
-import type { BusinessFinances, Mistake, Rollup } from "@/lib/businessFinances";
+import type { BusinessFinances, Mistake, Rollup, ScheduleCLine } from "@/lib/businessFinances";
 
 // ── The gym's books, as Jamie sees them ──────────────────────────────────────
 // Every section here is one of Chris's tick-boxes in the Money App (Settings →
@@ -596,12 +596,23 @@ function MonthlyStrip({
   );
 }
 
-// Where the money actually went, line by line.
+// Where the money actually went, line by line. Every category expands to the
+// individual transactions behind it — same interaction as the mistakes list
+// above, so a category isn't just a number Jamie has to take on faith.
 function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
   const income = rollup.lines.filter((l) => l.classification === "income");
   const spending = rollup.lines
     .filter((l) => l.classification !== "income")
     .sort((a, b) => b.amount - a.amount);
+
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (code: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
 
   if (income.length === 0 && spending.length === 0) return null;
 
@@ -621,12 +632,7 @@ function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
           <p className="mt-3 text-[13px] font-medium text-muted">Money coming in</p>
           <ul className="mt-1 space-y-1">
             {income.map((l) => (
-              <li key={l.code} className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate text-[14px]">{l.label}</span>
-                <span className="shrink-0 text-[14px] font-medium" style={{ color: "var(--good)" }}>
-                  {money(l.amount)}
-                </span>
-              </li>
+              <LineRow key={l.code} line={l} open={open.has(l.code)} onToggle={() => toggle(l.code)} good />
             ))}
           </ul>
         </>
@@ -637,10 +643,7 @@ function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
           <p className="mt-4 text-[13px] font-medium text-muted">Money going out</p>
           <ul className="mt-1 space-y-1">
             {spending.map((l) => (
-              <li key={l.code} className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate text-[14px]">{l.label}</span>
-                <span className="shrink-0 text-[14px] font-medium">{money(l.amount)}</span>
-              </li>
+              <LineRow key={l.code} line={l} open={open.has(l.code)} onToggle={() => toggle(l.code)} />
             ))}
           </ul>
         </>
@@ -655,5 +658,70 @@ function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
         </p>
       )}
     </Card>
+  );
+}
+
+// One Schedule C category — the total, and (once tapped) the individual
+// transactions behind it. `transactions` can be empty even with a non-zero
+// amount (untagged accounts, or an older cached response); the row still
+// opens, it just has nothing to list.
+function LineRow({
+  line,
+  open,
+  onToggle,
+  good,
+}: {
+  line: ScheduleCLine;
+  open: boolean;
+  onToggle: () => void;
+  good?: boolean;
+}) {
+  const txs = line.transactions ?? [];
+  return (
+    <li className="rounded-xl" style={{ background: "var(--tint)" }}>
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <ChevronDown
+            size={14}
+            className="shrink-0 text-muted transition-transform"
+            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+          />
+          <span className="truncate text-[14px]">{line.label}</span>
+          {txs.length > 0 && (
+            <span className="shrink-0 text-[12px] text-muted">({txs.length})</span>
+          )}
+        </span>
+        <span
+          className="shrink-0 text-[14px] font-medium"
+          style={good ? { color: "var(--good)" } : undefined}
+        >
+          {money(line.amount)}
+        </span>
+      </button>
+
+      {open && (
+        <ul className="space-y-2 px-3 pb-3">
+          {txs.length === 0 ? (
+            <li className="text-[12px] text-muted">No individual transactions to show.</li>
+          ) : (
+            txs.map((t) => (
+              <li
+                key={t.id}
+                className="flex items-baseline justify-between gap-3 rounded-lg bg-card px-2.5 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-[13px]">{t.name ?? "—"}</p>
+                  <p className="text-[11px] text-muted">{shortDate(t.date)}</p>
+                </div>
+                <span className="shrink-0 text-[13px] font-medium">{money(t.amount)}</span>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </li>
   );
 }

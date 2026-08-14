@@ -21,12 +21,17 @@
 //                       to be this app's own address, not Chris's and not the
 //                       accountant's.
 
+export type ScheduleCLineTx = { id: string; date: string; name: string | null; amount: number };
+
 export type ScheduleCLine = {
   code: string;
   label: string;
   scheduleCLine: string;
   classification: "income" | "cogs" | "expense";
   amount: number;
+  /** One entry per transaction behind this line, newest first — lets a
+   *  category expand to show what's actually in it. */
+  transactions: ScheduleCLineTx[];
 };
 
 /** Schedule C for one year: the totals, the tax lines, profit by month. */
