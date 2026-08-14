@@ -13,7 +13,8 @@ export type PageKey =
   | "credit-report"
   | "business-finances"
   | "tax-center"
-  | "divorce";
+  | "divorce"
+  | "gym-story";
 
 export interface AppPage {
   key: PageKey;
@@ -90,6 +91,13 @@ export const PAGES: AppPage[] = [
     label: "Divorce",
     where: "menu",
     blurb: "Support, the split, benefits, key dates.",
+  },
+  {
+    key: "gym-story",
+    href: "/gym-story",
+    label: "Gym Story",
+    where: "menu",
+    blurb: "How the gym started, backed by the real numbers from Money App.",
   },
 ];
 
