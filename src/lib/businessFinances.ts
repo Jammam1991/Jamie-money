@@ -32,15 +32,23 @@ export type ScheduleCLine = {
   transactions: ScheduleCLineTx[];
 };
 
+// These types are a hand-written mirror of what Money App's endpoint returns,
+// so they describe what we HOPE arrives, not what the compiler has checked. A
+// field added here ahead of the other app's deploy type-checks perfectly and
+// then arrives undefined — which is how `accountPath` took the Business
+// Finances page down. Anything Money App might not be sending yet is optional
+// here, so the crash becomes a missing detail instead.
 export type ScheduleCLineTx = {
   id: string;
   date: string;
   name: string | null;
-  memo: string | null;
   amount: number;
+  /** Added later — absent from an older Money App's response. */
+  memo?: string | null;
   /** The specific ledger account this booked to — one level more specific
-   *  than the Schedule C line it sits under. */
-  accountPath: string;
+   *  than the Schedule C line it sits under. Added later, so it can be
+   *  missing; the transactions then list ungrouped rather than not at all. */
+  accountPath?: string | null;
 };
 
 /** Schedule C for one year: the totals, the tax lines, profit by month. */

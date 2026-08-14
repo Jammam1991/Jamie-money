@@ -718,9 +718,24 @@ function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
 
 // The last segment of the ledger path — "Sales:Recurring Memberships"
 // reads as "Recurring Memberships" once it's under its Schedule C header.
-function accountLeaf(path: string): string {
-  return path.includes(":") ? path.split(":").pop()!.trim() : path;
+// A Money App too old to send `accountPath` — or one mid-deploy, which is
+// exactly how this first bit — leaves it undefined, and reaching straight for
+// `.includes` on that took the whole page down with "This page couldn't load".
+//
+// Every other cross-app read in this app treats a missing field as a thinner
+// answer rather than a crash (see the "an older Money App won't send them"
+// notes through src/lib/moneyapp.ts). This one has to as well: the two apps
+// deploy separately and there is always a window where one is ahead.
+function accountLeaf(path: string | null | undefined): string {
+  const trimmed = path?.trim();
+  if (!trimmed) return UNGROUPED;
+  return trimmed.includes(":") ? trimmed.split(":").pop()!.trim() : trimmed;
 }
+
+// What the one group is called when there's no account to split by. It reads
+// as a plain heading rather than an error, because for Jamie it isn't one —
+// the transactions are all still there, just not grouped.
+const UNGROUPED = "All transactions";
 
 type AccountGroup = { account: string; total: number; txs: ScheduleCLineTx[] };
 
