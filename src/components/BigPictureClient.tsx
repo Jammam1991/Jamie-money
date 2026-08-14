@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronLeft } from "lucide-react";
 import { Card } from "@/components/ui";
-import { SCOPE_LABEL, type CreditLine, type HouseholdPicture, type MonthDraw, type Slice } from "@/lib/householdPicture";
+import { SCOPE_LABEL, type CreditLine, type HouseholdPicture, type MonthDraw, type Scope, type Slice } from "@/lib/householdPicture";
 
 // ── The Big Picture ─────────────────────────────────────────────────────────
 // Seven scenes, in the order the money actually moves. Each one is a picture
@@ -13,6 +13,16 @@ import { SCOPE_LABEL, type CreditLine, type HouseholdPicture, type MonthDraw, ty
 //
 // Nothing is worked out in here. Every number arrives from
 // src/lib/householdPicture.ts, which reads it from wherever it already lives.
+
+// Objects rather than faces — a card that stands for a person shouldn't be
+// picking what that person looks like.
+const SCOPE_EMOJI: Record<Scope, string> = {
+  chris: "💳",
+  jamie: "💵",
+  joint: "🤝",
+  business: "🏋️",
+  lennon: "🏘️",
+};
 
 const RED = "#b3261e";
 const GREEN = "#167a5b";
@@ -83,21 +93,26 @@ function Hero({ picture }: { picture: HouseholdPicture }) {
       >
         {money(picture.totalDebt)}
       </p>
-      <div className="mx-auto mt-5 grid max-w-xs grid-cols-2 gap-2">
-        <div className="rounded-xl bg-white/5 p-2.5">
-          <p className="text-[18px]">🏋️</p>
-          <p className="mt-0.5 text-[11px] text-white/50">The gym</p>
-          <p className="text-[15px] font-semibold text-white">
-            {money(picture.businessDebt)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-white/5 p-2.5">
-          <p className="text-[18px]">🏠</p>
-          <p className="mt-0.5 text-[11px] text-white/50">Personal</p>
-          <p className="text-[15px] font-semibold text-white">
-            {money(picture.personalDebt)}
-          </p>
-        </div>
+      {/* One card per owner rather than a personal/business split — the first
+          question is whose it is, and the two-bucket cut is scene 1's job. */}
+      <div className="mx-auto mt-5 grid max-w-sm grid-cols-2 gap-2">
+        {picture.byScope.map((s, i) => (
+          <div
+            key={s.scope}
+            // An odd count would otherwise leave the last card stranded in half
+            // a row. Joint only appears when it has a balance, so the count
+            // genuinely varies.
+            className={`rounded-xl bg-white/5 p-2.5 ${
+              picture.byScope.length % 2 === 1 && i === picture.byScope.length - 1
+                ? "col-span-2"
+                : ""
+            }`}
+          >
+            <p className="text-[18px]">{SCOPE_EMOJI[s.scope]}</p>
+            <p className="mt-0.5 text-[11px] text-white/50">{s.name}</p>
+            <p className="text-[15px] font-semibold text-white">{money(s.amount)}</p>
+          </div>
+        ))}
       </div>
       <p className="mx-auto mt-4 max-w-xs text-[12px] text-white/50">
         Scroll down to see how it got there — and where it&apos;s going.
@@ -356,15 +371,29 @@ function Scene5Credit({ picture, index }: { picture: HouseholdPicture; index: nu
   );
 }
 
+// Under this much left and the line is done, whatever the percentage says.
+// "$49 left" on an $11,000 card invites one more swipe; MAXED OUT doesn't.
+const MAXED_OUT_UNDER = 500;
+
 function LineRow({ line }: { line: CreditLine }) {
-  const tone = line.leftPct <= 15 ? RED : line.leftPct <= 35 ? AMBER : GREEN;
+  const maxed = line.available < MAXED_OUT_UNDER;
+  const tone = maxed || line.leftPct <= 15 ? RED : line.leftPct <= 35 ? AMBER : GREEN;
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 truncate text-[13px]">{line.name}</span>
-        <span className="shrink-0 text-[13px] font-semibold" style={{ color: tone }}>
-          {money(line.available)} left
-        </span>
+        {maxed ? (
+          <span
+            className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-white"
+            style={{ background: RED }}
+          >
+            MAXED OUT
+          </span>
+        ) : (
+          <span className="shrink-0 text-[13px] font-semibold" style={{ color: tone }}>
+            {money(line.available)} left
+          </span>
+        )}
       </div>
       <div className="mt-1 h-2.5 w-full overflow-hidden rounded-full bg-tint">
         <div
