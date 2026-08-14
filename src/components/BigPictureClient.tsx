@@ -9,6 +9,7 @@ import {
   type CreditLine,
   type FlowStep,
   type HouseholdPicture,
+  type Investment,
   type MoneyFlow,
   type MonthDraw,
   type Scope,
@@ -78,6 +79,9 @@ export default function BigPictureClient({
       {(() => {
         const scenes: ((i: number) => React.ReactNode)[] = [
           (i) => <Scene1Owed key="owed" picture={picture} index={i} />,
+          ...(picture.investment
+            ? [(i: number) => <SceneInvestment key="investment" investment={picture.investment!} index={i} />]
+            : []),
           ...(picture.flow
             ? [(i: number) => <SceneSpending key="spending" flow={picture.flow!} index={i} />]
             : []),
@@ -267,6 +271,42 @@ function Scene1Owed({ picture, index }: { picture: HouseholdPicture; index: numb
           ))}
         </div>
       </Drill>
+    </Scene>
+  );
+}
+
+// ── Scene: what's actually gone into this business ───────────────────────────
+
+function SceneInvestment({ investment, index }: { investment: Investment; index: number }) {
+  const { initialInvestment, dueToChris, dueToChrisLastMonth, totalInvested } = investment;
+  const paidDown = dueToChrisLastMonth < 0;
+
+  return (
+    <Scene index={index} emoji="🌱" title="What we've put in" accent={VIOLET}>
+      <div className="mt-3 space-y-2">
+        <KeyRow color={VIOLET} label="Chris's initial investment" amount={initialInvestment} />
+        <KeyRow
+          color={AMBER}
+          label="Owed to Chris (covers Jamie's pay too)"
+          amount={dueToChris}
+        />
+      </div>
+
+      {dueToChrisLastMonth !== 0 && (
+        <p className="mt-2 text-[12px] text-muted">
+          {paidDown
+            ? `Last month we paid down ${money(Math.abs(dueToChrisLastMonth))} of it.`
+            : `Last month we added ${money(dueToChrisLastMonth)} to what's owed.`}
+        </p>
+      )}
+
+      <div className="mt-4 rounded-xl bg-tint p-3 text-center">
+        <p className="text-[12px] text-muted">Walking away would cost us</p>
+        <p className="text-[28px] font-black leading-tight" style={{ color: RED }}>
+          {money(totalInvested)}
+        </p>
+        <p className="mt-0.5 text-[11px] text-muted">Total invested so far</p>
+      </div>
     </Scene>
   );
 }

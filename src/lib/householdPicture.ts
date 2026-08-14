@@ -166,6 +166,26 @@ export type HouseholdPicture = {
   // ── Scene 7: what would close it ────────────────────────────────────────
   /** True when at least one account came back with a real credit limit. */
   hasLimits: boolean;
+
+  // ── What we've put into this ─────────────────────────────────────────────
+  /** Null when Money App doesn't have the investment feed yet (a caller
+   *  update ahead of Money App's own deploy). */
+  investment: Investment | null;
+};
+
+/** What's actually gone into the gym so far — two balance-sheet accounts,
+ *  not a year's activity, so there's no "through date" on this one. */
+export type Investment = {
+  /** Chris's contribution to buying the gym — Jamie's own pre-acquisition
+   *  money is excluded on Money App's side. */
+  initialInvestment: number;
+  /** What the business owes Chris back: the acquisition funding plus every
+   *  draw since that's covered Jamie's pay when the gym couldn't. */
+  dueToChris: number;
+  /** Net change in `dueToChris` over the most recently completed month. */
+  dueToChrisLastMonth: number;
+  /** `initialInvestment + dueToChris` — what walking away would cost. */
+  totalInvested: number;
 };
 
 // ── Reading the debt out of Money App ────────────────────────────────────────
@@ -296,6 +316,42 @@ async function fetchAccounts(): Promise<{
     return { accounts: [], error: "The Money App didn't send any debt accounts." };
   }
   return { accounts, error: null };
+}
+
+/**
+ * What's gone into the gym so far. Null on anything short of a clean
+ * response — an older Money App without the endpoint yet, a network hiccup —
+ * since this is a bonus scene, not one the rest of the page depends on.
+ */
+async function fetchInvestment(): Promise<Investment | null> {
+  const baseUrl = process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
+  const apiKey = process.env.MONEYAPP_API_KEY;
+  if (!baseUrl || !apiKey) return null;
+
+  try {
+    const res = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/api/business/investment`,
+      { headers: { "x-api-key": apiKey }, cache: "no-store" },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as Partial<Investment>;
+    if (
+      typeof body.initialInvestment !== "number" ||
+      typeof body.dueToChris !== "number" ||
+      typeof body.dueToChrisLastMonth !== "number" ||
+      typeof body.totalInvested !== "number"
+    ) {
+      return null;
+    }
+    return {
+      initialInvestment: body.initialInvestment,
+      dueToChris: body.dueToChris,
+      dueToChrisLastMonth: body.dueToChrisLastMonth,
+      totalInvested: body.totalInvested,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── What the household plans to spend, from Money App's budget ───────────────
@@ -472,6 +528,7 @@ export async function getHouseholdPicture(): Promise<{
     livingCosts,
     typedIncome,
     ledgerIncome,
+    investment,
   ] = await Promise.all([
       fetchAccounts(),
       getPayMonths(12),
@@ -482,6 +539,7 @@ export async function getHouseholdPicture(): Promise<{
       fetchLivingCosts(),
       getHouseholdIncome(),
       fetchLedgerIncome(months),
+      fetchInvestment(),
     ]);
 
   if (debtResult.accounts.length === 0) {
@@ -702,6 +760,8 @@ export async function getHouseholdPicture(): Promise<{
       monthsLeft,
 
       hasLimits: lines.length > 0,
+
+      investment,
     },
     error: null,
   };
