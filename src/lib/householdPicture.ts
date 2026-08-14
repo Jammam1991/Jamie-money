@@ -83,8 +83,8 @@ export type HouseholdPicture = {
   personalDebt: number;
   /** Every account behind those two numbers, biggest first. */
   accounts: HouseholdAccount[];
-  /** Totals per owner, for the drill-down. */
-  byScope: { scope: Scope; label: string; amount: number }[];
+  /** Totals per owner, biggest slice of the story first. Drives the top cards. */
+  byScope: { scope: Scope; label: string; name: string; amount: number }[];
 
   // ── Scene 2: Jamie's month ──────────────────────────────────────────────
   /** What lands in his pocket each month, all sources. */
@@ -145,16 +145,31 @@ type ExportAccount = {
 
 const SCOPES: Scope[] = ["chris", "jamie", "joint", "lennon", "business"];
 
+// The order the owners are read in, which is not the order above: the two of
+// them first, then what they own. Joint sits with the personal scopes because
+// that's what it is.
+const SCOPE_ORDER: Scope[] = ["chris", "jamie", "joint", "business", "lennon"];
+
 function asScope(v: string | null | undefined): Scope {
   return SCOPES.includes(v as Scope) ? (v as Scope) : "joint";
 }
 
+/** Possessive — reads as part of a sentence ("Chris's · $12,900 used of…"). */
 export const SCOPE_LABEL: Record<Scope, string> = {
   chris: "Chris's",
   jamie: "Jamie's",
   joint: "Both of ours",
   lennon: "The rental's",
   business: "The gym's",
+};
+
+/** Plain — the name on its own, for the cards at the top of the page. */
+export const SCOPE_NAME: Record<Scope, string> = {
+  chris: "Chris",
+  jamie: "Jamie",
+  joint: "Joint",
+  lennon: "Rental Property",
+  business: "Business",
 };
 
 /**
@@ -306,9 +321,12 @@ export async function getHouseholdPicture(): Promise<{
   const businessDebt = sum(accounts.filter((a) => a.scope === "business").map((a) => a.balance));
   const personalDebt = sum(accounts.filter((a) => a.scope !== "business").map((a) => a.balance));
 
-  const byScope = SCOPES.map((s) => ({
+  // Only owners who actually owe something. Joint in particular is usually
+  // empty, and a $0 card next to four real ones just reads as a bug.
+  const byScope = SCOPE_ORDER.map((s) => ({
     scope: s,
     label: SCOPE_LABEL[s],
+    name: SCOPE_NAME[s],
     amount: sum(accounts.filter((a) => a.scope === s).map((a) => a.balance)),
   })).filter((s) => s.amount > 0);
 
