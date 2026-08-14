@@ -19,6 +19,14 @@ export type TaxFilingResult = {
   taxesPaid: number | null;
   refundAmount: number | null;
   refundUsedFor: string | null;
+  jamieIncome: number | null;
+  chrisIncome: number | null;
+  /** What the year would've cost filing jointly vs. as two single returns —
+   *  present only when Money App has both a saved baseline for the year and
+   *  jamieIncome on file. Jamie's side carries only her income (no
+   *  deductions/withholding of her own), so this is a rough estimate. */
+  mfjTax: number | null;
+  singleTax: number | null;
 };
 
 export type TaxDocument = {

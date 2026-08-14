@@ -1,5 +1,6 @@
 import { PageTitle, Card } from "@/components/ui";
 import ComingSoon from "@/components/ComingSoon";
+import { TaxYearStory } from "@/components/TaxYearStory";
 import { pageGate } from "@/lib/visibility";
 import { getTaxDocuments, getTaxFilingResults, taxCenterReady } from "@/lib/taxCenter";
 
@@ -58,21 +59,21 @@ export default async function TaxCenterPage() {
         {sortedYears.map((year) => {
           const r = resultByYear.get(year);
           const docs = docsByYear.get(year) ?? [];
-          const paid = fmtMoney(r?.taxesPaid ?? null);
           const refund = fmtMoney(r?.refundAmount ?? null);
           return (
             <Card key={year}>
-              <p className="text-[15px] font-medium">{year}</p>
-              {(paid || refund) && (
-                <p className="mt-1 text-[14px] text-muted">
-                  {paid && <>Paid {paid}</>}
-                  {paid && refund && " · "}
-                  {refund && <>Refund {refund}</>}
-                </p>
-              )}
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[15px] font-medium">{year}</p>
+                {refund && (
+                  <p className="text-[14px] font-semibold" style={{ color: "var(--good)" }}>
+                    🎉 Refund {refund}
+                  </p>
+                )}
+              </div>
               {r?.refundUsedFor && (
                 <p className="mt-1 text-[13px] text-faint">Used for: {r.refundUsedFor}</p>
               )}
+              {r && <TaxYearStory result={r} />}
               {docs.length > 0 && (
                 <div className="mt-3 space-y-1.5 border-t border-border pt-3">
                   {docs.map((d) => (
