@@ -239,7 +239,13 @@ export default function DebtClient({
       emoji: "📄",
       color: RED,
       label: "Divorce settlement",
-      note: terms.total === null ? "an estimate, not agreed yet" : "what Jamie owes Chris",
+      // Flagged as not-final even once Chris has typed a figure. $200,000 is
+      // the number being worked to, not a number anyone has signed — and a row
+      // that just reads "what Jamie owes Chris" states it as settled fact.
+      note:
+        terms.total === null
+          ? "an estimate (Actual To Be Determined)"
+          : "what Jamie owes Chris (Actual To Be Determined)",
       balance: settlement.balance,
       monthly: settlement.minPayment,
       debts: [] as Debt[], // it has no rows — it opens its own panel instead
@@ -458,27 +464,37 @@ export default function DebtClient({
           </span>
         </div>
         <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
-          {terms.total === null && (
-            <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white"
-              style={{ background: RED }}
-            >
-              Estimated
-            </span>
-          )}
+          {/* Not final either way. With nothing set the figure is the page's
+              own guess; with a figure set it's the number being worked to, not
+              one anyone has signed. The badge says which. */}
+          <span
+            className="rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white"
+            style={{ background: RED }}
+          >
+            {terms.total === null ? "Estimated" : "Actual TBD"}
+          </span>
           <span>
             {settlement.apr > 0 ? `${settlement.apr}% interest` : "no interest"} ·{" "}
             {money(settlement.minPayment)}/mo over{" "}
             {duration(terms.months ?? SETTLEMENT_MONTHS)}
           </span>
         </p>
-        {terms.total === null && (
-          <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
-            <AlertCircle size={13} className="mt-0.5 shrink-0" />
-            A guess, not a number anyone agreed to: {money(settlement.minPayment)} a
-            month over five years. The real figure comes out of the settlement.
-          </p>
-        )}
+        <p className="mt-1 flex items-start gap-1.5 text-xs text-muted">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          {terms.total === null ? (
+            <>
+              A guess, not a number anyone agreed to:{" "}
+              {money(settlement.minPayment)} a month over five years. The real
+              figure comes out of the settlement.
+            </>
+          ) : (
+            <>
+              The actual is still to be determined. {money(settlement.balance)} is
+              the figure being worked to, not one anyone has signed — it comes
+              out of the settlement.
+            </>
+          )}
+        </p>
       </div>
     );
   }
