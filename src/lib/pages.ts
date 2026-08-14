@@ -14,7 +14,8 @@ export type PageKey =
   | "business-finances"
   | "tax-center"
   | "divorce"
-  | "gym-story";
+  | "gym-story"
+  | "big-picture";
 
 export interface AppPage {
   key: PageKey;
@@ -98,6 +99,16 @@ export const PAGES: AppPage[] = [
     label: "Gym Story",
     where: "menu",
     blurb: "How the gym started, backed by the real numbers from Money App.",
+  },
+  {
+    key: "big-picture",
+    href: "/big-picture",
+    label: "The Big Picture",
+    where: "menu",
+    // The one page that shows Jamie Chris's side of the ledger as well as his
+    // own — every debt across the household, and the credit left to draw on.
+    blurb:
+      "The whole household: all our debt, the monthly gap, and how much credit is left.",
   },
 ];
 
