@@ -19,6 +19,14 @@ import ComingSoon from "@/components/ComingSoon";
 
 export const dynamic = "force-dynamic";
 
+// This month as YYYY-MM, which is how transaction dates are stored — so "new
+// debt this month" can be a string comparison. Built from the local parts
+// rather than toISOString(), which would flip to next month late on the 31st.
+function monthKey(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export default async function DebtPage() {
   const { role, comingSoon } = await pageGate("debt");
   if (comingSoon) return <ComingSoon title="Debt" />;
@@ -71,6 +79,7 @@ export default async function DebtPage() {
         payMonths={payMonths.months}
         payProblem={payMonths.problem}
         currentYear={new Date().getFullYear()}
+        currentMonth={monthKey()}
         settlementMonthly={divorce.support.amount}
         settlementTerms={settlementTerms}
       />
