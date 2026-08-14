@@ -121,6 +121,16 @@ function Chapter({ chapter, index }: { chapter: GymChapter; index: number }) {
       </div>
 
       {chapter.fact && <FactBlock fact={chapter.fact} accent={accent} />}
+
+      {chapter.link && (
+        <Link
+          href={chapter.link.href}
+          className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium"
+          style={{ color: accent }}
+        >
+          {chapter.link.label} →
+        </Link>
+      )}
     </Card>
   );
 }
