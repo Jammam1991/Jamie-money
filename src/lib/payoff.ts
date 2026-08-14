@@ -8,6 +8,21 @@ import type { Debt } from "./data";
 
 const MAX_MONTHS = 1200; // 100 years — a safety stop so we never loop forever.
 
+// The level payment that clears `total` over `months` at `apr` — the standard
+// amortisation formula. At 0% it's just the total split evenly, which the
+// formula itself can't do (it divides by zero).
+//
+// Lives here rather than in a component because two screens now ask the same
+// question of different numbers: what Jamie owes Chris on the Debt page, and
+// what the gym investment would cost to pay back on The Big Picture. One
+// formula means the two can't quietly disagree.
+export function monthlyPayment(total: number, apr: number, months: number): number {
+  if (months <= 0) return total;
+  const r = apr / 100 / 12;
+  if (r === 0) return total / months;
+  return (total * r) / (1 - Math.pow(1 + r, -months));
+}
+
 export type SimResult = {
   months: number; // how many months until everything is paid off
   totalInterest: number; // total interest paid along the way

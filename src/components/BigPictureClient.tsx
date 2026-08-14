@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronLeft } from "lucide-react";
 import { Card } from "@/components/ui";
+import { monthlyPayment } from "@/lib/payoff";
 import {
   SCOPE_LABEL,
   type CreditLine,
@@ -35,6 +36,13 @@ const SCOPE_EMOJI: Record<Scope, string> = {
   business: "🏋️",
   lennon: "🏘️",
 };
+
+// Turning what's been put into the gym into a monthly payment, so the total
+// means something. Nobody is actually offering these terms — they're a plain
+// yardstick (roughly a used-car loan) chosen so the figure is easy to picture,
+// and the card says as much underneath it.
+const PAYBACK_YEARS = 7;
+const PAYBACK_APR = 10;
 
 const RED = "#b3261e";
 const GREEN = "#167a5b";
@@ -308,6 +316,23 @@ function SceneInvestment({ investment, index }: { investment: Investment; index:
           {money(totalInvested)}
         </p>
         <p className="mt-0.5 text-[11px] text-muted">Total invested so far</p>
+
+        {/* Six figures is a number most people can't feel. The same sum as a
+            payment is one anybody can: it's rent, or a car, every month for
+            seven years. */}
+        {totalInvested > 0 && (
+          <div className="mt-3 border-t border-border pt-3">
+            <p className="text-[12px] text-muted">Paid back, that&apos;s about</p>
+            <p className="text-[22px] font-bold leading-tight" style={{ color: RED }}>
+              {money(monthlyPayment(totalInvested, PAYBACK_APR, PAYBACK_YEARS * 12))}
+              <span className="text-[14px] font-medium"> / month</span>
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted">
+              for {PAYBACK_YEARS} years, at {PAYBACK_APR}%. An estimate — no loan
+              like this actually exists.
+            </p>
+          </div>
+        )}
       </div>
     </Scene>
   );
