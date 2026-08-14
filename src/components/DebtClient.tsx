@@ -23,6 +23,7 @@ import {
   isCarLoan,
   isUnsecured,
   monthlyInterest,
+  monthlyPayment,
   personalLoanBalance,
   simulate,
   totalBalance,
@@ -105,16 +106,6 @@ const SETTLEMENT_APR = 0; // a settlement doesn't charge interest unless Chris s
 
 // Nothing set — the shape the row falls back to.
 const NO_TERMS: SettlementTerms = { total: null, apr: null, months: null };
-
-// The level payment that clears `total` over `months` at `apr`. The standard
-// amortisation formula; at 0% it's just the total split evenly, which the
-// formula itself can't do (it divides by zero).
-function monthlyPayment(total: number, apr: number, months: number): number {
-  if (months <= 0) return total;
-  const r = apr / 100 / 12;
-  if (r === 0) return total / months;
-  return (total * r) / (1 - Math.pow(1 + r, -months));
-}
 
 function settlementLoan(supportMonthly: number, terms: SettlementTerms): Debt {
   const months = terms.months ?? SETTLEMENT_MONTHS;
