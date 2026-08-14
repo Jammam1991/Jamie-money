@@ -21,8 +21,6 @@
 //                       to be this app's own address, not Chris's and not the
 //                       accountant's.
 
-export type ScheduleCLineTx = { id: string; date: string; name: string | null; amount: number };
-
 export type ScheduleCLine = {
   code: string;
   label: string;
@@ -32,6 +30,17 @@ export type ScheduleCLine = {
   /** One entry per transaction behind this line, newest first — lets a
    *  category expand to show what's actually in it. */
   transactions: ScheduleCLineTx[];
+};
+
+export type ScheduleCLineTx = {
+  id: string;
+  date: string;
+  name: string | null;
+  memo: string | null;
+  amount: number;
+  /** The specific ledger account this booked to — one level more specific
+   *  than the Schedule C line it sits under. */
+  accountPath: string;
 };
 
 /** Schedule C for one year: the totals, the tax lines, profit by month. */
@@ -169,6 +178,10 @@ export async function getBusinessFinances(
   year?: number,
   month?: number,
   isAllTime?: boolean,
+  // Defaults to on, matching what this page always showed before the toggle
+  // existed — every caller that doesn't care (Big Picture, Gym Story) keeps
+  // reading the "how the gym actually runs" figures unless it asks otherwise.
+  operational: boolean = true,
 ): Promise<{ data: BusinessFinances | null; error: string | null }> {
   const baseUrl = apiUrl();
   const apiKey = process.env.MONEYAPP_API_KEY;
@@ -180,7 +193,7 @@ export async function getBusinessFinances(
   try {
     if (isAllTime) {
       // For all-time, fetch the first year to get the list of available years
-      const params = new URLSearchParams({ email, operational: "true" });
+      const params = new URLSearchParams({ email, operational: String(operational) });
       const firstRes = await fetch(
         `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${params}`,
         { headers: { "x-api-key": apiKey }, cache: "no-store" },
@@ -199,7 +212,7 @@ export async function getBusinessFinances(
       // Shared access settings, it'll show up in `years` and get included
       // here automatically — nothing else needs to change.
       const allYearPromises = firstData.years.map(async (y) => {
-        const yParams = new URLSearchParams({ email, year: String(y), operational: "true" });
+        const yParams = new URLSearchParams({ email, year: String(y), operational: String(operational) });
         const res = await fetch(
           `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${yParams}`,
           { headers: { "x-api-key": apiKey }, cache: "no-store" },
@@ -219,7 +232,7 @@ export async function getBusinessFinances(
       return { data: aggregated, error: null };
     }
 
-    const params = new URLSearchParams({ email, operational: "true" });
+    const params = new URLSearchParams({ email, operational: String(operational) });
     if (year) params.set("year", String(year));
     if (month && Number.isFinite(month) && month >= 1 && month <= 12) {
       params.set("month", String(month));

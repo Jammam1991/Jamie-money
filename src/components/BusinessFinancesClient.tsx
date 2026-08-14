@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Card, Tint } from "@/components/ui";
-import type { BusinessFinances, Mistake, Rollup, ScheduleCLine } from "@/lib/businessFinances";
+import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
 
 // ── The gym's books, as Jamie sees them ──────────────────────────────────────
 // Every section here is one of Chris's tick-boxes in the Money App (Settings →
@@ -211,6 +211,21 @@ function IntroCard({
     dateRangeText = `Counted up to ${shortDate(data.throughDate)}`;
   }
 
+  // Carries the current Operations-only choice across a year/month/all-time
+  // click, so picking a different month doesn't silently reset it back on.
+  const isOperational = data.actual.operational;
+  const withOp = (href: string) => (isOperational ? href : `${href}&operational=false`);
+  const toggleHref = (() => {
+    const params = new URLSearchParams();
+    if (isAllTime) params.set("year", "all-time");
+    else {
+      params.set("year", String(data.year));
+      if (data.month) params.set("month", String(data.month));
+    }
+    params.set("operational", String(!isOperational));
+    return `/business-finances?${params.toString()}`;
+  })();
+
   return (
     <Card>
       <p className="text-[15px] font-medium">{headerText}</p>
@@ -223,7 +238,7 @@ function IntroCard({
         <div className="mt-3 space-y-2">
           {/* All Time tab - never expandable */}
           <Link
-            href="/business-finances?year=all-time"
+            href={withOp("/business-finances?year=all-time")}
             scroll={false}
             className="inline-block rounded-lg border border-border px-3 py-1 text-[13px]"
             style={
@@ -259,7 +274,7 @@ function IntroCard({
                     </button>
                     {/* Year: navigates to that year's annual view and opens its months. */}
                     <Link
-                      href={`/business-finances?year=${y}`}
+                      href={withOp(`/business-finances?year=${y}`)}
                       scroll={false}
                       onClick={() => onSelectYear(y)}
                       className="rounded-lg border border-border px-3 py-1 text-[13px]"
@@ -283,7 +298,7 @@ function IntroCard({
                         return (
                           <Link
                             key={idx}
-                            href={`/business-finances?year=${y}&month=${monthNum}`}
+                            href={withOp(`/business-finances?year=${y}&month=${monthNum}`)}
                             scroll={false}
                             className="rounded-lg border border-border px-2 py-1 text-[12px]"
                             style={
@@ -308,6 +323,25 @@ function IntroCard({
           </div>
         </div>
       )}
+
+      {/* Same lens Money App's own "All / Operational" tabs offer. Full
+          sentence rather than a short label — mirrors the mistakes button
+          below, which does the same for its own toggle. */}
+      <Link
+        href={toggleHref}
+        scroll={false}
+        title="Removes bank interest, grant money, and tax depreciation from the numbers — what's left is just how the gym performed on its own, day to day."
+        className="mt-3 block w-full rounded-lg px-3 py-2 text-center text-[13px] font-medium transition-colors"
+        style={
+          isOperational
+            ? { background: "var(--tint)", color: "var(--text)" }
+            : { background: "var(--good)", color: "#fff" }
+        }
+      >
+        {isOperational
+          ? "Show everything (interest, grants, depreciation included)"
+          : "See how the gym performed strictly on operations income/expenses"}
+      </Link>
     </Card>
   );
 }
@@ -355,6 +389,9 @@ function Headline({
           Trending toward {money(projection)} by year end
         </p>
       )}
+      <p className="mt-1 text-[12px] text-muted">
+        Doesn&apos;t include Jamie&apos;s PT cash that hasn&apos;t been recorded yet.
+      </p>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Tint>
           <p className="text-[12px] text-muted">Money in</p>
@@ -550,6 +587,9 @@ function MonthlyStrip({
 }) {
   const months = rollup.monthlyNetProfit;
   const peak = Math.max(...months.map((m) => Math.abs(m)), 1);
+  // Also doubles as a tap target on mobile — click toggles the same tooltip
+  // hover shows, since there's no hover on a touchscreen.
+  const [hovered, setHovered] = useState<number | null>(null);
 
   return (
     <Card>
@@ -565,8 +605,23 @@ function MonthlyStrip({
         {months.map((v, i) => {
           const pct = (Math.abs(v) / peak) * 100;
           const up = v >= 0;
+          const label = labels ? labels[i] : MONTHS[i];
           return (
-            <div key={i} className="flex flex-1 flex-col items-center">
+            <div
+              key={i}
+              className="relative flex flex-1 flex-col items-center"
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered((h) => (h === i ? null : h))}
+              onClick={() => setHovered((h) => (h === i ? null : i))}
+            >
+              {hovered === i && (
+                <div
+                  className="absolute -top-8 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium shadow-md"
+                  style={{ background: "var(--text)", color: "var(--card)" }}
+                >
+                  {label}: {money(v)}
+                </div>
+              )}
               <div className="flex h-12 w-full items-end justify-center">
                 {up && (
                   <div
@@ -661,10 +716,40 @@ function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
   );
 }
 
-// One Schedule C category — the total, and (once tapped) the individual
-// transactions behind it. `transactions` can be empty even with a non-zero
-// amount (untagged accounts, or an older cached response); the row still
-// opens, it just has nothing to list.
+// The last segment of the ledger path — "Sales:Recurring Memberships"
+// reads as "Recurring Memberships" once it's under its Schedule C header.
+function accountLeaf(path: string): string {
+  return path.includes(":") ? path.split(":").pop()!.trim() : path;
+}
+
+type AccountGroup = { account: string; total: number; txs: ScheduleCLineTx[] };
+
+// One Schedule C line is usually several real accounts folded into one tax
+// category — "Gross receipts or sales" is Stripe, ClassPass, guest passes and
+// more, all at once. Splitting by account before listing transactions is
+// what makes a 177-transaction category actually readable, same as Money
+// App's own P&L page groups a category into its accounts.
+function groupByAccount(txs: ScheduleCLineTx[]): AccountGroup[] {
+  const byAccount = new Map<string, ScheduleCLineTx[]>();
+  for (const t of txs) {
+    const leaf = accountLeaf(t.accountPath);
+    const list = byAccount.get(leaf);
+    if (list) list.push(t);
+    else byAccount.set(leaf, [t]);
+  }
+  return [...byAccount.entries()]
+    .map(([account, list]) => ({
+      account,
+      total: list.reduce((s, t) => s + t.amount, 0),
+      txs: [...list].sort((a, b) => b.date.localeCompare(a.date)),
+    }))
+    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+}
+
+// One Schedule C category — its accounts, and (once an account is tapped)
+// the individual transactions behind it. `transactions` can be empty even
+// with a non-zero amount (untagged accounts, or an older cached response);
+// the row still opens, it just has nothing to list.
 function LineRow({
   line,
   open,
@@ -677,6 +762,16 @@ function LineRow({
   good?: boolean;
 }) {
   const txs = line.transactions ?? [];
+  const groups = groupByAccount(txs);
+  const [openAccounts, setOpenAccounts] = useState<Set<string>>(new Set());
+  const toggleAccount = (account: string) =>
+    setOpenAccounts((prev) => {
+      const next = new Set(prev);
+      if (next.has(account)) next.delete(account);
+      else next.add(account);
+      return next;
+    });
+
   return (
     <li className="rounded-xl" style={{ background: "var(--tint)" }}>
       <button
@@ -703,22 +798,55 @@ function LineRow({
       </button>
 
       {open && (
-        <ul className="space-y-2 px-3 pb-3">
-          {txs.length === 0 ? (
+        <ul className="space-y-1.5 px-3 pb-3">
+          {groups.length === 0 ? (
             <li className="text-[12px] text-muted">No individual transactions to show.</li>
           ) : (
-            txs.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-baseline justify-between gap-3 rounded-lg bg-card px-2.5 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-[13px]">{t.name ?? "—"}</p>
-                  <p className="text-[11px] text-muted">{shortDate(t.date)}</p>
-                </div>
-                <span className="shrink-0 text-[13px] font-medium">{money(t.amount)}</span>
-              </li>
-            ))
+            groups.map((g) => {
+              const gOpen = openAccounts.has(g.account);
+              return (
+                <li key={g.account} className="rounded-lg bg-card">
+                  <button
+                    onClick={() => toggleAccount(g.account)}
+                    className="flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <ChevronDown
+                        size={12}
+                        className="shrink-0 text-muted transition-transform"
+                        style={{ transform: gOpen ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                      <span className="truncate text-[13px] font-medium">{g.account}</span>
+                      <span className="shrink-0 text-[11px] text-muted">({g.txs.length})</span>
+                    </span>
+                    <span className="shrink-0 text-[13px] font-medium">{money(g.total)}</span>
+                  </button>
+
+                  {gOpen && (
+                    <ul className="space-y-1.5 px-2.5 pb-2.5">
+                      {g.txs.map((t) => (
+                        <li
+                          key={t.id}
+                          className="flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5"
+                          style={{ background: "var(--tint)" }}
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[12px]">{t.name ?? "—"}</p>
+                            <p className="text-[10px] text-muted">
+                              {shortDate(t.date)}
+                              {t.memo && ` · ${t.memo}`}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-[12px] font-medium">
+                            {money(t.amount)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })
           )}
         </ul>
       )}
