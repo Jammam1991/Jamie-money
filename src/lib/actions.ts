@@ -10,7 +10,9 @@ import {
   getBillPayments,
   getComingSoonPages,
   recordLogin,
+  HOUSEHOLD_INCOME_KEY,
   SETTLEMENT_TOTAL_KEY,
+  type HouseholdIncome,
   type SettlementTerms,
 } from "./store";
 import { AUTH_COOKIE, adminToken, viewerToken, isAdmin, isLoggedIn } from "./auth";
@@ -195,6 +197,38 @@ export async function setSettlementTerms(
         );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
+  return { ok: true };
+}
+
+// Chris's own pay and the rental's rent — the two incomes the Big Picture needs
+// and nothing else in the app can reach. Blank clears the figure back to "not
+// set", which the page shows as an unknown rather than as zero income.
+export async function setHouseholdIncome(
+  input: HouseholdIncome,
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const clean = (v: number | null) =>
+    v === null || !Number.isFinite(v) || v < 0 ? null : Math.round(v);
+  const income: HouseholdIncome = {
+    chris: clean(input.chris),
+    rental: clean(input.rental),
+  };
+
+  const { error } =
+    income.chris === null && income.rental === null
+      ? await c.from("settings").delete().eq("key", HOUSEHOLD_INCOME_KEY)
+      : await c
+          .from("settings")
+          .upsert(
+            { key: HOUSEHOLD_INCOME_KEY, value: JSON.stringify(income) },
+            { onConflict: "key" },
+          );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/big-picture");
   return { ok: true };
 }
 
