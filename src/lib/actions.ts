@@ -35,6 +35,9 @@ import {
   type RevealResult,
 } from "./passwords";
 import type { BillDocument, BillPayment, CashKind } from "./data";
+import { anyFeedConfigured, searchJobFeeds } from "./jobFeeds";
+import { readJobLink } from "./jobLink";
+import type { JobHit, LinkPreview } from "./jobSearch";
 import { findCleanupCandidates, type CleanupCandidate } from "./duplicateDebts";
 import { clearIgnoredMoneyAppDebts, ignoreMoneyAppDebt } from "./moneyapp";
 
@@ -1444,4 +1447,49 @@ export async function deleteNetworkSource(id: string): Promise<ActionResult> {
   if (error) return careerError(error.message);
   revalidatePath(CAREER_PATH);
   return { ok: true };
+}
+
+// ── Finding jobs ──────────────────────────────────────────────────────────────
+// Reads only — nothing here writes to Jamie's data. Both still need a login,
+// because both make this server go and fetch something on request and neither
+// should be an open door for a stranger.
+
+export async function searchJobs(input: {
+  what: string;
+  where: string;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  hits?: JobHit[];
+  problems?: string[];
+}> {
+  if (!(await isLoggedIn())) return { ok: false, error: "Please log in first." };
+  if (!anyFeedConfigured()) {
+    return {
+      ok: false,
+      error:
+        "Job search isn't switched on yet — Chris needs to add the search keys.",
+    };
+  }
+  const what = input.what.trim();
+  const where = input.where.trim();
+  if (!what && !where) {
+    return { ok: false, error: "Type what kind of work you're after." };
+  }
+  try {
+    const { hits, problems } = await searchJobFeeds(what, where);
+    return { ok: true, hits, problems };
+  } catch {
+    return { ok: false, error: "The search didn't come back. Try again in a moment." };
+  }
+}
+
+export async function previewJobLink(
+  url: string
+): Promise<{ ok: boolean; error?: string; preview?: LinkPreview }> {
+  if (!(await isLoggedIn())) return { ok: false, error: "Please log in first." };
+  const result = await readJobLink(url);
+  return result.ok
+    ? { ok: true, preview: result.preview }
+    : { ok: false, error: result.error };
 }
