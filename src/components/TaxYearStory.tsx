@@ -46,7 +46,7 @@ export function TaxYearStory({ result }: { result: TaxFilingResult }) {
       {taxesPaid != null && !breakdown && <TaxesPaidOnly amount={taxesPaid} />}
       {refunds.length > 0 && <RefundSection refunds={refunds} total={refundTotal} />}
       {savings != null && <SavingsCard savings={savings} year={result.year} />}
-      {breakdown?.estimated && <EstimateFootnote year={result.year} />}
+      {breakdown && <SourceFootnote breakdown={breakdown} year={result.year} />}
     </div>
   );
 }
@@ -405,13 +405,38 @@ function SavingsCard({ savings, year }: { savings: number; year: number }) {
   );
 }
 
-function EstimateFootnote({ year }: { year: number }) {
+/**
+ * Says where the year's figures came from, because "these are the real filed
+ * numbers" and "this is our best reconstruction" should never look alike on a
+ * page about tax.
+ */
+function SourceFootnote({ breakdown, year }: { breakdown: TaxBreakdown; year: number }) {
+  if (breakdown.source === "transcript") {
+    return (
+      <div
+        className="rounded-xl p-3"
+        style={{ background: "var(--good-bg)", border: "1px solid var(--good)" }}
+      >
+        <p className="text-[12px] font-semibold" style={{ color: "var(--good)" }}>
+          ✅ These are the real filed numbers
+        </p>
+        <p className="mt-1 text-[11px] text-muted">
+          Taken from the official IRS record of the {year} return — the return
+          as it was actually processed, not a reconstruction.
+          {breakdown.federalOnly
+            ? " That record covers federal tax only, so California tax isn't included above."
+            : ""}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <p className="px-1 text-[11px] text-faint">
-      The breakdown above is rebuilt from the numbers Chris saved in the Money
-      App for {year}, not copied line by line off the filed return. Treat it as
-      the shape of the year rather than exact figures. The refund and the tax
-      actually paid are the real numbers.
+      {breakdown.source === "baseline"
+        ? `The breakdown above is rebuilt from the numbers Chris saved in the Money App for ${year}.`
+        : `The breakdown above is worked out from Chris's ${year} books.`}
+      {" It isn't copied line by line off the filed return, so treat it as the shape of the year rather than exact figures. The refund and the tax actually paid are the real numbers."}
     </p>
   );
 }
