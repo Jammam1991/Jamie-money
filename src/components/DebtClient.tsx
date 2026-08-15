@@ -128,14 +128,14 @@ type Offset = {
 const OFFSETS: Offset[] = [
   {
     key: "rolex",
-    emoji: "\u231a",
+    emoji: "⌚",
     label: "Rolex",
     note: "bought with the debt \u2014 selling it pays that much back",
     amount: 25000,
   },
   {
     key: "medical",
-    emoji: "\U0001fa7a",
+    emoji: "🩺",
     label: "Medical payment coming",
     note: "owed to Jamie, not arrived yet",
     amount: 20000,
