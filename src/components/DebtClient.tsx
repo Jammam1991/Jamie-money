@@ -245,8 +245,7 @@ export default function DebtClient({
   const jamieOwesChris = Math.max(0, jamieInvestmentShare - businessTotal);
   const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
 
-  const securedTotal =
-    total + settlement.balance + businessTotal + dueToChrisTotal + jamieOwesChris;
+  const securedTotal = total + settlement.balance + businessTotal + jamieOwesChris;
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
@@ -300,22 +299,16 @@ export default function DebtClient({
       emoji: "💰",
       color: ROSE,
       label: "Personal debt for business",
-      note: "borrowed and lent to the gym",
-      balance: dueToChrisTotal,
-      monthly: 0, // no structured monthly payment
-      debts: [] as Debt[], // uses custom rendering with items
-      items: dueToChrisItems,
-    },
-    {
-      key: "investment-split",
-      emoji: "🤝",
-      color: TEAL,
-      label: "Jamie's share of the investment",
+      // The balance is Jamie's cut, not Chris's whole carry — the $153,000
+      // Chris personally put in only becomes Jamie's debt after the split and
+      // after netting out what Jamie already carries in his own name
+      // (businessTotal). Showing the raw $153,000 here double-counted it
+      // against the split math below.
       note: `${splitPct}% of what's gone into the gym`,
       balance: jamieOwesChris,
       monthly: 0, // no structured monthly payment — this is owed to Chris, not a lender
       debts: [] as Debt[], // uses custom rendering — see the split panel below
-      items: [] as PersonalDebtItem[],
+      items: dueToChrisItems,
     },
     {
       key: "divorce",
@@ -334,16 +327,10 @@ export default function DebtClient({
       debts: [] as Debt[], // it has no rows — it opens its own panel instead
       items: [] as PersonalDebtItem[],
     },
-    // Direct, due-to-Chris and investment-split rows show even at zero to be
-    // clear nothing is hiding: the names Chris expects there need to exist as
-    // debts before they can be sorted into them.
-  ].filter(
-    (row) =>
-      row.balance > 0 ||
-      row.key === "business" ||
-      row.key === "due-to-chris" ||
-      row.key === "investment-split",
-  );
+    // Direct and due-to-Chris rows show even at zero to be clear nothing is
+    // hiding: the names Chris expects there need to exist as debts before
+    // they can be sorted into them.
+  ].filter((row) => row.balance > 0 || row.key === "business" || row.key === "due-to-chris");
 
   // New debt added this month and this year. Both come from the same list of
   // charges, so the two numbers can never disagree about what counts.
@@ -657,6 +644,14 @@ export default function DebtClient({
             <span className="text-muted">+ Personal money Chris put in</span>
             <span>{money(dueToChrisTotal)}</span>
           </div>
+          <div className="space-y-1 border-l pl-2.5" style={{ borderColor: `${TEAL}33` }}>
+            {dueToChrisItems.map((item) => (
+              <div key={item.label} className="flex items-center justify-between text-[11px] text-muted">
+                <span>{item.label}</span>
+                <span>{money(item.amount)}</span>
+              </div>
+            ))}
+          </div>
           <div className="flex items-center justify-between border-t border-border pt-1.5 font-medium">
             <span>= Total put into the gym</span>
             <span>{money(totalInvestment)}</span>
@@ -804,17 +799,8 @@ export default function DebtClient({
                   >
                     {b.key === "divorce" ? (
                       settlementPanel()
-                    ) : b.key === "investment-split" ? (
+                    ) : b.key === "due-to-chris" ? (
                       splitPanel()
-                    ) : b.key === "due-to-chris" && b.items.length > 0 ? (
-                      <div className="space-y-2">
-                        {b.items.map((item, i) => (
-                          <div key={i} className="flex items-center justify-between py-2">
-                            <span className="text-sm">{item.label}</span>
-                            <span className="font-medium">{money(item.amount)}</span>
-                          </div>
-                        ))}
-                      </div>
                     ) : b.debts.length > 0 ? (
                       b.debts.map(row)
                     ) : (
