@@ -11,8 +11,10 @@ import {
   getComingSoonPages,
   recordLogin,
   HOUSEHOLD_INCOME_KEY,
+  INVESTMENT_SPLIT_KEY,
   SETTLEMENT_TOTAL_KEY,
   type HouseholdIncome,
+  type InvestmentSplitTerms,
   type SettlementTerms,
 } from "./store";
 import {
@@ -216,6 +218,36 @@ export async function setSettlementTerms(
           { key: SETTLEMENT_TOTAL_KEY, value: JSON.stringify(terms) },
           { onConflict: "key" },
         );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  return { ok: true };
+}
+
+// Jamie's share of the gym investment, as a percent. Null clears Chris's
+// figure and puts the split back on the page's own 50/50 default.
+export async function setInvestmentSplitTerms(
+  input: InvestmentSplitTerms,
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const pct =
+    input.splitPct === null || !Number.isFinite(input.splitPct) ||
+    input.splitPct < 0 || input.splitPct > 100
+      ? null
+      : Math.round(input.splitPct * 10) / 10;
+
+  const { error } =
+    pct === null
+      ? await c.from("settings").delete().eq("key", INVESTMENT_SPLIT_KEY)
+      : await c
+          .from("settings")
+          .upsert(
+            { key: INVESTMENT_SPLIT_KEY, value: JSON.stringify({ splitPct: pct }) },
+            { onConflict: "key" },
+          );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
   return { ok: true };

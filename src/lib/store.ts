@@ -215,6 +215,38 @@ export async function getSettlementTerms(): Promise<SettlementTerms> {
   }
 }
 
+// ── Jamie's share of the gym investment ───────────────────────────────────────
+// What percent of the combined business debt (the direct loans plus the
+// personal money Chris put in) is Jamie's. Null means Chris hasn't set a
+// figure, which the page reads as the 50/50 default rather than zero — same
+// rule as the settlement, and for the same reason: this is money Jamie is
+// being told he owes, so "unset" and "set to zero" can't look the same.
+export const INVESTMENT_SPLIT_KEY = "gym_investment_split";
+
+export type InvestmentSplitTerms = {
+  splitPct: number | null; // Jamie's share, 0–100
+};
+
+export const NO_INVESTMENT_SPLIT_TERMS: InvestmentSplitTerms = { splitPct: null };
+
+export async function getInvestmentSplitTerms(): Promise<InvestmentSplitTerms> {
+  const c = client();
+  if (!c) return NO_INVESTMENT_SPLIT_TERMS;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", INVESTMENT_SPLIT_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return NO_INVESTMENT_SPLIT_TERMS;
+  try {
+    const parsed = JSON.parse(String(data.value));
+    const pct = positive(parsed?.splitPct);
+    return { splitPct: pct !== null && pct <= 100 ? pct : null };
+  } catch {
+    return NO_INVESTMENT_SPLIT_TERMS;
+  }
+}
+
 export async function getMoneyAppFico(): Promise<{ score: number; date: string } | null> {
   const c = client();
   if (!c) return null;
