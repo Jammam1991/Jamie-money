@@ -8,6 +8,7 @@ import {
   getResumes,
 } from "@/lib/careerStore";
 import { pageGate } from "@/lib/visibility";
+import { anyFeedConfigured } from "@/lib/jobFeeds";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function CareerPage() {
         initialResumes={resumes}
         initialApplications={applications}
         initialSources={sources}
+        searchOn={anyFeedConfigured()}
       />
     </div>
   );

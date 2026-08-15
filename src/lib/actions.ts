@@ -11,8 +11,10 @@ import {
   getComingSoonPages,
   recordLogin,
   HOUSEHOLD_INCOME_KEY,
+  INVESTMENT_SPLIT_KEY,
   SETTLEMENT_TOTAL_KEY,
   type HouseholdIncome,
+  type InvestmentSplitTerms,
   type SettlementTerms,
 } from "./store";
 import {
@@ -35,6 +37,9 @@ import {
   type RevealResult,
 } from "./passwords";
 import type { BillDocument, BillPayment, CashKind } from "./data";
+import { anyFeedConfigured, searchJobFeeds } from "./jobFeeds";
+import { readJobLink } from "./jobLink";
+import type { JobHit, LinkPreview } from "./jobSearch";
 import { findCleanupCandidates, type CleanupCandidate } from "./duplicateDebts";
 import { clearIgnoredMoneyAppDebts, ignoreMoneyAppDebt } from "./moneyapp";
 
@@ -213,6 +218,36 @@ export async function setSettlementTerms(
           { key: SETTLEMENT_TOTAL_KEY, value: JSON.stringify(terms) },
           { onConflict: "key" },
         );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  return { ok: true };
+}
+
+// Jamie's share of the gym investment, as a percent. Null clears Chris's
+// figure and puts the split back on the page's own 50/50 default.
+export async function setInvestmentSplitTerms(
+  input: InvestmentSplitTerms,
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const pct =
+    input.splitPct === null || !Number.isFinite(input.splitPct) ||
+    input.splitPct < 0 || input.splitPct > 100
+      ? null
+      : Math.round(input.splitPct * 10) / 10;
+
+  const { error } =
+    pct === null
+      ? await c.from("settings").delete().eq("key", INVESTMENT_SPLIT_KEY)
+      : await c
+          .from("settings")
+          .upsert(
+            { key: INVESTMENT_SPLIT_KEY, value: JSON.stringify({ splitPct: pct }) },
+            { onConflict: "key" },
+          );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/debt");
   return { ok: true };
@@ -1444,4 +1479,49 @@ export async function deleteNetworkSource(id: string): Promise<ActionResult> {
   if (error) return careerError(error.message);
   revalidatePath(CAREER_PATH);
   return { ok: true };
+}
+
+// ── Finding jobs ──────────────────────────────────────────────────────────────
+// Reads only — nothing here writes to Jamie's data. Both still need a login,
+// because both make this server go and fetch something on request and neither
+// should be an open door for a stranger.
+
+export async function searchJobs(input: {
+  what: string;
+  where: string;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  hits?: JobHit[];
+  problems?: string[];
+}> {
+  if (!(await isLoggedIn())) return { ok: false, error: "Please log in first." };
+  if (!anyFeedConfigured()) {
+    return {
+      ok: false,
+      error:
+        "Job search isn't switched on yet — Chris needs to add the search keys.",
+    };
+  }
+  const what = input.what.trim();
+  const where = input.where.trim();
+  if (!what && !where) {
+    return { ok: false, error: "Type what kind of work you're after." };
+  }
+  try {
+    const { hits, problems } = await searchJobFeeds(what, where);
+    return { ok: true, hits, problems };
+  } catch {
+    return { ok: false, error: "The search didn't come back. Try again in a moment." };
+  }
+}
+
+export async function previewJobLink(
+  url: string
+): Promise<{ ok: boolean; error?: string; preview?: LinkPreview }> {
+  if (!(await isLoggedIn())) return { ok: false, error: "Please log in first." };
+  const result = await readJobLink(url);
+  return result.ok
+    ? { ok: true, preview: result.preview }
+    : { ok: false, error: result.error };
 }

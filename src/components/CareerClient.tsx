@@ -7,9 +7,11 @@ import {
   ExternalLink,
   FileText,
   Plus,
+  Search,
   Trash2,
   Upload,
   Users,
+  Wand2,
   X,
 } from "lucide-react";
 import { Card } from "./ui";
@@ -36,12 +38,15 @@ import {
   deleteJobApplication,
   deleteNetworkSource,
   deleteResume,
+  previewJobLink,
+  searchJobs,
   updateCareerPath,
   updateJobApplication,
   updateNetworkSource,
   uploadResume,
   type ActionResult,
 } from "@/lib/actions";
+import type { JobHit, LinkPreview } from "@/lib/jobSearch";
 
 // ── The Career page ──────────────────────────────────────────────────────────
 // Three jobs on one screen, one tab each:
@@ -96,11 +101,14 @@ export default function CareerClient({
   initialResumes,
   initialApplications,
   initialSources,
+  searchOn,
 }: {
   initialPaths: CareerPath[];
   initialResumes: Resume[];
   initialApplications: JobApplication[];
   initialSources: NetworkSource[];
+  /** Whether the search keys are set in Vercel. */
+  searchOn: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("paths");
   const [paths, setPaths] = useState(initialPaths);
@@ -174,6 +182,7 @@ export default function CareerClient({
           paths={paths}
           run={run}
           setError={setError}
+          searchOn={searchOn}
         />
       )}
       {tab === "people" && (
@@ -594,6 +603,7 @@ function ApplicationsTab({
   paths,
   run,
   setError,
+  searchOn,
 }: {
   apps: JobApplication[];
   setApps: React.Dispatch<React.SetStateAction<JobApplication[]>>;
@@ -602,6 +612,7 @@ function ApplicationsTab({
   paths: CareerPath[];
   run: Run;
   setError: (m: string | null) => void;
+  searchOn: boolean;
 }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({
@@ -696,9 +707,56 @@ function ApplicationsTab({
     run(() => deleteJobApplication(id), { onFail: () => setApps(before) });
   }
 
+  // Saving straight off a search result. Everything the feed knows goes in;
+  // the rest he fills in later on the card.
+  function saveHit(hit: JobHit) {
+    run(
+      () =>
+        addJobApplication({
+          companyName: hit.company || hit.source,
+          roleTitle: hit.title,
+          salary: hit.salary ?? undefined,
+          link: hit.url,
+          notes: hit.location ? `Where: ${hit.location}` : undefined,
+          status: "Interested",
+        }),
+      {
+        onDone: (res) => {
+          setApps((prev) => [
+            {
+              id: res.id!,
+              companyName: hit.company || hit.source,
+              roleTitle: hit.title,
+              salary: hit.salary,
+              link: hit.url,
+              status: "Interested",
+              notes: hit.location ? `Where: ${hit.location}` : null,
+              appliedOn: null,
+              resumeId: null,
+              pathId: null,
+              createdAt: new Date().toISOString(),
+            },
+            ...prev,
+          ]);
+        },
+      }
+    );
+  }
+
+  // So a result he's already saved says so instead of quietly going in twice.
+  const savedLinks = useMemo(
+    () => new Set(apps.map((a) => a.link).filter(Boolean) as string[]),
+    [apps]
+  );
+
   return (
     <div className="space-y-4">
-      <ResumeShelf resumes={resumes} setResumes={setResumes} run={run} setError={setError} />
+      <JobFinder
+        searchOn={searchOn}
+        savedLinks={savedLinks}
+        onSave={saveHit}
+        setError={setError}
+      />
 
       {/* ── Where things stand ────────────────────────────────────────────── */}
       {apps.length > 0 && (
@@ -804,12 +862,28 @@ function ApplicationsTab({
 
       {adding ? (
         <Card className="space-y-2">
+          <LinkPaste
+            setError={setError}
+            onRead={(preview) =>
+              setForm((f) => ({
+                ...f,
+                // Only fill what's still blank, so a re-read can't wipe
+                // something he already typed himself.
+                companyName: f.companyName || preview.companyName || "",
+                roleTitle: f.roleTitle || preview.roleTitle || "",
+                salary: f.salary || preview.salary || "",
+                link: preview.url,
+                notes:
+                  f.notes ||
+                  (preview.location ? `Where: ${preview.location}` : ""),
+              }))
+            }
+          />
           <Field
             label="Company"
             placeholder="Who's hiring"
             value={form.companyName}
             onChange={(v) => setForm({ ...form, companyName: v })}
-            autoFocus
           />
           <Field
             label="Job title"
@@ -862,6 +936,229 @@ function ApplicationsTab({
         </Card>
       ) : (
         <AddButton label="Add a job" onClick={() => setAdding(true)} />
+      )}
+
+      <ResumeShelf
+        resumes={resumes}
+        setResumes={setResumes}
+        run={run}
+        setError={setError}
+      />
+    </div>
+  );
+}
+
+// ── Find jobs ────────────────────────────────────────────────────────────────
+// Searches the free aggregators. They carry listings syndicated from a lot of
+// boards, which is as close to searching Indeed from in here as anyone can get:
+// Indeed's own API closed to new builders in 2024 and LinkedIn's has been
+// partner-only since 2015.
+
+function JobFinder({
+  searchOn,
+  savedLinks,
+  onSave,
+  setError,
+}: {
+  searchOn: boolean;
+  savedLinks: Set<string>;
+  onSave: (hit: JobHit) => void;
+  setError: (m: string | null) => void;
+}) {
+  const [what, setWhat] = useState("");
+  const [where, setWhere] = useState("");
+  const [hits, setHits] = useState<JobHit[] | null>(null);
+  const [notes, setNotes] = useState<string[]>([]);
+  const [busy, startSearch] = useTransition();
+
+  function go() {
+    setError(null);
+    startSearch(async () => {
+      const res = await searchJobs({ what, where });
+      if (!res.ok) {
+        setHits(null);
+        setNotes([]);
+        setError(res.error ?? "The search didn't come back.");
+        return;
+      }
+      setHits(res.hits ?? []);
+      setNotes(res.problems ?? []);
+    });
+  }
+
+  if (!searchOn) {
+    return (
+      <Card>
+        <div className="text-[15px] font-medium">🔍 Find jobs</div>
+        <p className="mt-1 text-[14px] leading-snug text-muted">
+          Searching isn&apos;t switched on yet — Chris needs to add the search
+          keys. You can still add jobs by hand below, or paste a link and let
+          the app fill it in.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="space-y-2.5">
+      <div className="text-[15px] font-medium">🔍 Find jobs</div>
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          value={what}
+          onChange={(e) => setWhat(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && go()}
+          placeholder="What kind of work?"
+          className="w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-[16px]"
+        />
+        <input
+          value={where}
+          onChange={(e) => setWhere(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && go()}
+          placeholder="Where?"
+          className="w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-[16px]"
+        />
+      </div>
+      <button
+        onClick={go}
+        disabled={busy}
+        className="flex w-full items-center justify-center gap-1.5 rounded-xl py-2.5 text-[15px] font-medium text-white disabled:opacity-60"
+        style={{ background: "var(--good)" }}
+      >
+        <Search size={15} /> {busy ? "Looking…" : "Search"}
+      </button>
+
+      {notes.map((n) => (
+        <p key={n} className="text-[12px]" style={{ color: "var(--warn)" }}>
+          {n}
+        </p>
+      ))}
+
+      {hits !== null && hits.length === 0 && (
+        <p className="text-[14px] text-muted">
+          Nothing came back for that. Try fewer words, or a bigger area.
+        </p>
+      )}
+
+      {hits !== null && hits.length > 0 && (
+        <div className="space-y-2.5 pt-1">
+          <p className="text-[12px] text-muted">
+            {hits.length} found · tap Save to add one to your list
+          </p>
+          {hits.map((hit) => {
+            const already = savedLinks.has(hit.url);
+            return (
+              <div key={hit.externalId} className="rounded-xl border border-border p-3">
+                <div className="text-[15px] font-medium leading-snug">
+                  {hit.title}
+                </div>
+                <div className="mt-0.5 text-[13px] text-muted">
+                  {[hit.company, hit.location].filter(Boolean).join(" · ") ||
+                    hit.source}
+                </div>
+                {hit.salary && (
+                  <div className="mt-0.5 text-[13px]" style={{ color: "var(--good)" }}>
+                    {hit.salary}
+                  </div>
+                )}
+                {hit.snippet && (
+                  <p className="mt-1.5 text-[13px] leading-snug text-muted">
+                    {hit.snippet}
+                  </p>
+                )}
+                <div className="mt-2.5 flex items-center gap-2">
+                  <button
+                    onClick={() => onSave(hit)}
+                    disabled={already}
+                    className="rounded-full px-3 py-1.5 text-[13px] font-medium disabled:opacity-60"
+                    style={
+                      already
+                        ? { background: "var(--tint)", color: "var(--muted)" }
+                        : { background: "var(--good)", color: "#fff" }
+                    }
+                  >
+                    {already ? "Already saved" : "Save it"}
+                  </button>
+                  <a
+                    href={hit.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[13px] text-muted"
+                  >
+                    Open <ExternalLink size={13} />
+                  </a>
+                  <span className="ml-auto text-[11px] text-faint">
+                    via {hit.source}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Paste a link, let the app fill the form in ───────────────────────────────
+// Reads the job page's own listing data — the same thing Google reads to build
+// its job results — so most boards and company career pages fill themselves in.
+
+function LinkPaste({
+  onRead,
+  setError,
+}: {
+  onRead: (preview: LinkPreview) => void;
+  setError: (m: string | null) => void;
+}) {
+  const [url, setUrl] = useState("");
+  const [done, setDone] = useState(false);
+  const [busy, startRead] = useTransition();
+
+  function read() {
+    if (!url.trim()) {
+      setError("Paste a link first.");
+      return;
+    }
+    setError(null);
+    setDone(false);
+    startRead(async () => {
+      const res = await previewJobLink(url);
+      if (!res.ok || !res.preview) {
+        setError(res.error ?? "Couldn't read that page.");
+        return;
+      }
+      onRead(res.preview);
+      setDone(true);
+    });
+  }
+
+  return (
+    <div className="rounded-xl bg-tint p-3">
+      <div className="mb-1.5 text-[13px] font-medium">
+        Got a link? Paste it and skip the typing
+      </div>
+      <input
+        value={url}
+        onChange={(e) => {
+          setUrl(e.target.value);
+          setDone(false);
+        }}
+        onKeyDown={(e) => e.key === "Enter" && read()}
+        placeholder="https://…"
+        autoFocus
+        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[16px]"
+      />
+      <button
+        onClick={read}
+        disabled={busy}
+        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-card py-2 text-[14px] disabled:opacity-60"
+      >
+        <Wand2 size={14} /> {busy ? "Reading the page…" : "Fill it in for me"}
+      </button>
+      {done && (
+        <p className="mt-1.5 text-[12px]" style={{ color: "var(--good)" }}>
+          Filled in below — check it over before saving.
+        </p>
       )}
     </div>
   );
