@@ -800,23 +800,26 @@ export default function DebtClient({
           Every account used to be listed on the page at once; now a row opens
           to show the accounts it was added up from. */}
       <Card>
-        <div className="flex items-baseline justify-between">
+        <div className="grid grid-cols-2 gap-6">
           <div>
             <p className="text-[11px] uppercase tracking-wide text-muted">
-              Total debt
+              Total balance
             </p>
-            <p
-              className="text-[30px] font-black leading-none"
-              style={{ color: RED }}
-            >
+            <p className="text-[30px] font-black leading-none">
               {money(securedTotal)}
             </p>
           </div>
-          <p className="text-[11px] text-muted">tap a row to open it</p>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted">
+              Total monthly payment
+            </p>
+            <p className="text-[30px] font-black leading-none">
+              {money(securedMin)}/mo
+            </p>
+          </div>
         </div>
         <p className="mt-1.5 text-[12px] text-muted">
-          {money(securedMin)} a month to keep up · {money(securedInterest)} of
-          that is pure interest
+          {money(securedInterest)} of that payment is pure interest · tap a row to open it
         </p>
         {offsetTotal > 0 && (
           <p className="mt-1 text-[12px]" style={{ color: GREEN }}>
@@ -861,10 +864,7 @@ export default function DebtClient({
                     </span>
                   </span>
                   <span className="shrink-0 text-right">
-                    <span
-                      className="block text-[16px] font-bold leading-tight"
-                      style={{ color: b.color }}
-                    >
+                    <span className="block text-[16px] font-bold leading-tight">
                       {money(b.balance)}
                     </span>
                     <span className="block text-[11px] text-muted">
@@ -1125,7 +1125,7 @@ function CarryCost({
           />
           Your share of carrying it
         </span>
-        <span className="text-[15px] font-semibold" style={{ color: ROSE }}>
+        <span className="text-[15px] font-semibold">
           {money(jamieMonthly)}/mo
         </span>
       </button>
@@ -1352,7 +1352,7 @@ function NewDebtCard({
   const overdrawn = pay.reduce((sum, p) => sum + p.difference, 0);
   const total = lent + overdrawn;
   const grew = total > 0;
-  const tone = grew ? RED : GREEN;
+  const tone = grew ? "#18181b" : GREEN;
 
   // A half with nothing in it drops out rather than sitting there as "$0" —
   // except when both are empty, and then the card just says nothing happened.
@@ -1696,7 +1696,7 @@ function OverdrawnDetail({ months }: { months: PayMonth[] }) {
 // accounts made it this number?
 function FicoCard({ score, date }: { score: number; date: string }) {
   const color =
-    score >= 740 ? GREEN : score >= 670 ? SKY : score >= 580 ? AMBER : RED;
+    score >= 740 ? GREEN : score >= 670 ? SKY : score >= 580 ? AMBER : "#a1a1a1";
   const pct = Math.max(0, Math.min(100, ((score - 300) / 550) * 100));
 
   return (
