@@ -488,10 +488,29 @@ function Headline({
         <Tint>
           <p className="text-[12px] text-muted">Money in</p>
           <p className="mt-0.5 text-[18px] font-semibold">{money(moneyIn)}</p>
+          {/* Grant money is the single biggest reason this tile disagrees with
+              a figure on Chris's own screens: the operating cut leaves it out
+              entirely, every other cut folds it in, and his Reports page keeps
+              it out of "Revenue" and adds it back lower down. Saying the
+              amount HERE answers that without anyone having to ask. */}
+          {rollup.otherIncome !== 0 && (
+            <p className="mt-1 text-[11px] leading-snug text-muted">
+              {mode.operational ? "Leaves out " : "Includes "}
+              {money(rollup.otherIncome)} of grant money
+            </p>
+          )}
         </Tint>
         <Tint>
           <p className="text-[12px] text-muted">Money out</p>
           <p className="mt-0.5 text-[18px] font-semibold">{money(moneyOut)}</p>
+          {/* Same idea on the other side — interest is what separates the
+              full picture from the gym's own numbers. */}
+          {(rollup.financeCharges ?? 0) !== 0 && (
+            <p className="mt-1 text-[11px] leading-snug text-muted">
+              {mode.operational ? "Leaves out " : "Includes "}
+              {money(rollup.financeCharges ?? 0)} of loan interest
+            </p>
+          )}
         </Tint>
       </div>
     </Card>
