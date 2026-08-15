@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Scale, CreditCard, FileText, BookOpen, Building2, Landmark, Dumbbell, Compass } from "lucide-react";
+import { Menu, X, Scale, CreditCard, FileText, BookOpen, Building2, Landmark, Dumbbell, Compass, Briefcase } from "lucide-react";
 
 // The slide-out menu. Every row always shows — a page parked as "Coming Soon"
 // on the Settings screen keeps its link and says so when Jamie opens it.
@@ -10,6 +10,9 @@ const links = [
   // First, because it's the one that frames everything under it.
   { href: "/big-picture", label: "The Big Picture", Icon: Compass },
   { href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
+  // Sits right under it — that page asks "job or gym?", this one is what to do
+  // about it once the answer is a job.
+  { href: "/career", label: "Career", Icon: Briefcase },
   { href: "/debt", label: "Debt", Icon: CreditCard },
   { href: "/credit-report", label: "Credit Report", Icon: FileText },
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },

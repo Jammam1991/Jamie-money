@@ -1080,3 +1080,368 @@ export async function deletePasswordEntry(id: string): Promise<ActionResult> {
   revalidatePath("/passwords");
   return { ok: true };
 }
+
+// ── Career ────────────────────────────────────────────────────────────────────
+// The paths Jamie is weighing up, the jobs he's applied for, his resumes, and
+// the people worth knowing. This is his own page about his own future, so every
+// write only needs a login — not Chris's admin password.
+
+// A missing table reads as a wall of Postgres. Say what it actually means, and
+// who has to do something about it.
+function careerError(message: string): ActionResult {
+  const missing =
+    /does not exist|schema cache|Bucket not found/i.test(message);
+  return {
+    ok: false,
+    error: missing
+      ? "Not saved — the Career page isn't set up in the database yet. Chris needs to run supabase/career.sql."
+      : message,
+  };
+}
+
+const CAREER_PATH = "/career";
+
+export async function addCareerPath(input: {
+  name: string;
+  whatItIs?: string;
+  whatItTakes?: string;
+  payLow?: number | null;
+  payHigh?: number | null;
+  notes?: string;
+}): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: "Give the path a name first." };
+  const { data, error } = await c
+    .from("career_paths")
+    .insert({
+      name,
+      what_it_is: input.whatItIs?.trim() || null,
+      what_it_takes: input.whatItTakes?.trim() || null,
+      pay_low: input.payLow ?? null,
+      pay_high: input.payHigh ?? null,
+      notes: input.notes?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true, id: String(data.id) };
+}
+
+export async function updateCareerPath(input: {
+  id: string;
+  name?: string;
+  whatItIs?: string | null;
+  whatItTakes?: string | null;
+  payLow?: number | null;
+  payHigh?: number | null;
+  wantIt?: number;
+  paysEnough?: number;
+  easyToStart?: number;
+  status?: string;
+  notes?: string | null;
+}): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  // Only the fields that were actually passed get written — the sliders save
+  // one at a time and must not blank out the rest of the row.
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) patch.name = input.name.trim();
+  if (input.whatItIs !== undefined) patch.what_it_is = input.whatItIs?.trim() || null;
+  if (input.whatItTakes !== undefined)
+    patch.what_it_takes = input.whatItTakes?.trim() || null;
+  if (input.payLow !== undefined) patch.pay_low = input.payLow;
+  if (input.payHigh !== undefined) patch.pay_high = input.payHigh;
+  if (input.wantIt !== undefined) patch.want_it = clampScore(input.wantIt);
+  if (input.paysEnough !== undefined) patch.pays_enough = clampScore(input.paysEnough);
+  if (input.easyToStart !== undefined)
+    patch.easy_to_start = clampScore(input.easyToStart);
+  if (input.status !== undefined) patch.status = input.status;
+  if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
+
+  const { error } = await c.from("career_paths").update(patch).eq("id", input.id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true };
+}
+
+// The database check constraint would reject anything outside 1–5 with a
+// Postgres error; catching it here keeps a stray value from looking like a
+// broken page.
+function clampScore(n: number): number {
+  return Math.max(1, Math.min(5, Math.round(n)));
+}
+
+export async function deleteCareerPath(id: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("career_paths").delete().eq("id", id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true };
+}
+
+// ── Resumes ───────────────────────────────────────────────────────────────────
+// FormData rather than a plain object because it carries a File.
+
+const RESUME_TYPES: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+};
+
+// Kept under next.config.ts's serverActions body limit, with room to spare for
+// the bytes multipart adds around the file itself.
+const MAX_RESUME_BYTES = 5 * 1024 * 1024;
+
+export async function uploadResume(formData: FormData): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const file = formData.get("file");
+  const label = String(formData.get("label") ?? "").trim();
+  const aimedAt = String(formData.get("aimedAt") ?? "").trim();
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Pick a file first." };
+  }
+  const ext = RESUME_TYPES[file.type];
+  if (!ext) {
+    return { ok: false, error: "Only PDF and Word files (.pdf, .doc, .docx) work here." };
+  }
+  if (file.size > MAX_RESUME_BYTES) {
+    return { ok: false, error: "That file is over 5 MB — too big to upload." };
+  }
+  if (!label) return { ok: false, error: "Give this resume a name so you can tell them apart." };
+
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await c.storage
+    .from("resumes")
+    .upload(path, file, { contentType: file.type });
+  if (uploadError) return careerError(uploadError.message);
+
+  const { data, error } = await c
+    .from("resumes")
+    .insert({
+      label,
+      aimed_at: aimedAt || null,
+      file_name: file.name,
+      storage_path: path,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    // Don't leave the file orphaned in the bucket if the row didn't land.
+    await c.storage.from("resumes").remove([path]);
+    return careerError(error.message);
+  }
+
+  revalidatePath(CAREER_PATH);
+  return { ok: true, id: String(data.id) };
+}
+
+export async function deleteResume(id: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { data: row } = await c
+    .from("resumes")
+    .select("storage_path")
+    .eq("id", id)
+    .maybeSingle();
+  if (row?.storage_path) {
+    await c.storage.from("resumes").remove([String(row.storage_path)]);
+  }
+  const { error } = await c.from("resumes").delete().eq("id", id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true };
+}
+
+// ── Applications ──────────────────────────────────────────────────────────────
+// Writes to `job_postings`, the same list the Job vs Business page reads, so
+// both screens always show the same jobs.
+
+export async function addJobApplication(input: {
+  companyName: string;
+  roleTitle: string;
+  salary?: string;
+  link?: string;
+  status?: string;
+  appliedOn?: string | null;
+  resumeId?: string | null;
+  pathId?: string | null;
+  notes?: string;
+}): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const companyName = input.companyName.trim();
+  const roleTitle = input.roleTitle.trim();
+  if (!companyName || !roleTitle) {
+    return { ok: false, error: "Needs at least a company and a job title." };
+  }
+  const { data, error } = await c
+    .from("job_postings")
+    .insert({
+      company_name: companyName,
+      role_title: roleTitle,
+      salary: input.salary?.trim() || null,
+      link: input.link?.trim() || null,
+      status: input.status || "Interested",
+      applied_on: input.appliedOn || null,
+      resume_id: input.resumeId || null,
+      path_id: input.pathId || null,
+      notes: input.notes?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  revalidatePath("/job-vs-business");
+  return { ok: true, id: String(data.id) };
+}
+
+export async function updateJobApplication(input: {
+  id: string;
+  companyName?: string;
+  roleTitle?: string;
+  salary?: string | null;
+  link?: string | null;
+  status?: string;
+  appliedOn?: string | null;
+  resumeId?: string | null;
+  pathId?: string | null;
+  notes?: string | null;
+}): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.companyName !== undefined) patch.company_name = input.companyName.trim();
+  if (input.roleTitle !== undefined) patch.role_title = input.roleTitle.trim();
+  if (input.salary !== undefined) patch.salary = input.salary?.trim() || null;
+  if (input.link !== undefined) patch.link = input.link?.trim() || null;
+  if (input.status !== undefined) patch.status = input.status;
+  if (input.appliedOn !== undefined) patch.applied_on = input.appliedOn || null;
+  if (input.resumeId !== undefined) patch.resume_id = input.resumeId || null;
+  if (input.pathId !== undefined) patch.path_id = input.pathId || null;
+  if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
+
+  const { error } = await c.from("job_postings").update(patch).eq("id", input.id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  revalidatePath("/job-vs-business");
+  return { ok: true };
+}
+
+export async function deleteJobApplication(id: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("job_postings").delete().eq("id", id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  revalidatePath("/job-vs-business");
+  return { ok: true };
+}
+
+// ── People and places ─────────────────────────────────────────────────────────
+
+export async function addNetworkSource(input: {
+  name: string;
+  kind?: string;
+  company?: string;
+  howToReach?: string;
+  link?: string;
+  lastContact?: string | null;
+  nextStep?: string;
+  notes?: string;
+}): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const name = input.name.trim();
+  if (!name) return { ok: false, error: "Needs a name." };
+  const { data, error } = await c
+    .from("networking_sources")
+    .insert({
+      name,
+      kind: input.kind || "Person",
+      company: input.company?.trim() || null,
+      how_to_reach: input.howToReach?.trim() || null,
+      link: input.link?.trim() || null,
+      last_contact: input.lastContact || null,
+      next_step: input.nextStep?.trim() || null,
+      notes: input.notes?.trim() || null,
+    })
+    .select("id")
+    .single();
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true, id: String(data.id) };
+}
+
+export async function updateNetworkSource(input: {
+  id: string;
+  name?: string;
+  kind?: string;
+  company?: string | null;
+  howToReach?: string | null;
+  link?: string | null;
+  lastContact?: string | null;
+  nextStep?: string | null;
+  notes?: string | null;
+}): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (input.name !== undefined) patch.name = input.name.trim();
+  if (input.kind !== undefined) patch.kind = input.kind;
+  if (input.company !== undefined) patch.company = input.company?.trim() || null;
+  if (input.howToReach !== undefined)
+    patch.how_to_reach = input.howToReach?.trim() || null;
+  if (input.link !== undefined) patch.link = input.link?.trim() || null;
+  if (input.lastContact !== undefined) patch.last_contact = input.lastContact || null;
+  if (input.nextStep !== undefined) patch.next_step = input.nextStep?.trim() || null;
+  if (input.notes !== undefined) patch.notes = input.notes?.trim() || null;
+
+  const { error } = await c
+    .from("networking_sources")
+    .update(patch)
+    .eq("id", input.id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true };
+}
+
+export async function deleteNetworkSource(id: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c.from("networking_sources").delete().eq("id", id);
+  if (error) return careerError(error.message);
+  revalidatePath(CAREER_PATH);
+  return { ok: true };
+}
