@@ -17,11 +17,16 @@ import {
 
 // Every box holds text, not a number, so a half-typed "6." doesn't get snapped
 // back to 6 under his fingers. The maths reads through `n()` instead.
+//
+// `yearlyMassage` is the odd one out: the box asks for a month's takings,
+// because that's the figure Jamie can answer off the top of his head, and the
+// year is worked out from it. What's stored stays yearly so the sums and the
+// saved settings don't have to change shape.
 type Draft = Record<keyof HomeBuyingInputs, string>;
 
 function toDraft(i: HomeBuyingInputs): Draft {
   return {
-    yearlyMassage: String(i.yearlyMassage),
+    yearlyMassage: String(Math.round(i.yearlyMassage / 12)),
     taxPct: String(i.taxPct),
     place: i.place,
     downPct: String(i.downPct),
@@ -46,7 +51,7 @@ function n(v: string, fallback = 0): number {
 function toInputs(d: Draft): HomeBuyingInputs {
   const pinned = d.propertyTaxPct.trim();
   return {
-    yearlyMassage: n(d.yearlyMassage),
+    yearlyMassage: n(d.yearlyMassage) * 12,
     taxPct: n(d.taxPct),
     place: d.place,
     downPct: n(d.downPct),
@@ -137,10 +142,10 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
                   What it would take to get off zero
                 </div>
                 <div className="text-[17px] font-semibold">
-                  {money(result.breakEvenGrossYear)} a year from massage
+                  {money(result.breakEvenGrossYear / 12)} a month from massage
                 </div>
                 <div className="mt-1 text-[13px] text-muted">
-                  That&apos;s {money(result.breakEvenGrossYear / 12)} a month, and
+                  That&apos;s {money(result.breakEvenGrossYear)} over a year, and
                   it only gets you to the doorstep — every dollar past it is what
                   actually buys house. Clearing the car or the cards moves this
                   number down far faster than earning more moves it up.
@@ -155,18 +160,22 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
       <section>
         <h2 className="mb-1 text-lg font-medium">Step 1 — what massage brings in</h2>
         <p className="mb-3 text-[13px] text-muted">
-          Put in what you think you can earn from massage over the next 12 months.
-          The taxman takes a slice before any of it counts.
+          Put in a normal month of massage work. The year works itself out from
+          there, and the taxman takes a slice before any of it counts.
         </p>
         <Card>
           <div className="space-y-4">
             <Field
-              label="Massage money over the next 12 months"
+              label="Massage money in a month"
               prefix="$"
               value={draft.yearlyMassage}
               onChange={set("yearlyMassage")}
-              placeholder="60000"
-              hint="Before tax — the whole amount that comes in."
+              placeholder="5000"
+              hint={
+                result.grossYear > 0
+                  ? `Before tax. Over 12 months that's ${money(result.grossYear)}.`
+                  : "Before tax — everything that comes in, in a normal month."
+              }
             />
             <Field
               label="Tax on that"
@@ -178,13 +187,14 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
             />
 
             <Tint>
-              <Row label="Comes in" value={money(result.grossYear)} />
+              <Row label="Comes in each month" value={money(result.grossMonth)} />
+              <Row label="Over 12 months" value={money(result.grossYear)} />
               <Row
                 label={`Tax takes (${inputs.taxPct}%)`}
                 value={`− ${money(result.taxTaken)}`}
                 tone="neg"
               />
-              <Row label="You actually keep" value={money(result.netYear)} strong />
+              <Row label="You keep, over the year" value={money(result.netYear)} strong />
               <Row
                 label="Which is, per month"
                 value={money(result.netMonth)}
