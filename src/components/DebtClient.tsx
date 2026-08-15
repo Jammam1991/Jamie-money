@@ -34,6 +34,7 @@ import {
   totalMinimum,
 } from "@/lib/payoff";
 import { groupByCategory } from "@/lib/debtCategories";
+import { CARRY_CATEGORIES, type ChrisCarry } from "@/lib/chrisCarry";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
@@ -201,6 +202,7 @@ export default function DebtClient({
   settlementMonthly,
   settlementTerms,
   investmentSplitTerms,
+  chrisCarry,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -216,6 +218,7 @@ export default function DebtClient({
   settlementMonthly: number; // monthly support from the Divorce page
   settlementTerms: SettlementTerms; // what Chris set; nulls fall back to the estimate
   investmentSplitTerms: InvestmentSplitTerms; // what % of the gym investment is Jamie's; null falls back to 50/50
+  chrisCarry: ChrisCarry; // what Chris really pays each month on the money he lent the gym
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -262,12 +265,7 @@ export default function DebtClient({
   const businessTotal = totalBalance(businessDebts);
   // Hardcoded personal debt used for business (Due to Chris) — calculated in breakdown
   const dueToChrisItems: PersonalDebtItem[] = [
-    { label: "SoFi personal loans", amount: 39000 },
-    { label: "Kinecta line of credit", amount: 33000 },
-    { label: "Credit cards", amount: 32000 },
-    { label: "LOC draws & advances", amount: 25000 },
-    { label: "Income borrowed", amount: 15000 },
-    { label: "Other personal debt", amount: 9000 },
+    ...CARRY_CATEGORIES.map((c) => ({ label: c.label, amount: c.balance })),
     // Due back from the gym's landlord. It belongs here rather than with the
     // things that come off Jamie's total, because it reduces what went into the
     // gym — and what went in is what gets split. So it cuts Jamie's share by
@@ -291,6 +289,17 @@ export default function DebtClient({
   const jamieInvestmentShare = totalInvestment * (splitPct / 100);
   const jamieOwesChris = Math.max(0, jamieInvestmentShare - businessTotal);
   const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
+
+  // The row used to read "$0/mo", as though Jamie's share of the gym cost
+  // nothing to carry. It isn't free — Chris services it every month out of his
+  // own accounts — so his real payments come across from Money App and Jamie
+  // takes the same slice of them that he takes of the balance.
+  //
+  // Same ratio as the balance on purpose: he owes $35,288 of the $123,000 Chris
+  // is carrying, so he owes that fraction of the cost of carrying it. Anything
+  // else would be a second, different split nobody agreed to.
+  const jamieCarryShare = dueToChrisTotal > 0 ? jamieOwesChris / dueToChrisTotal : 0;
+  const jamieMonthlyToChris = chrisCarry.monthly * jamieCarryShare;
 
   const securedTotal = total + settlement.balance + businessTotal + jamieOwesChris;
   // What's left once the things coming back are counted. The deposit is already
@@ -358,7 +367,9 @@ export default function DebtClient({
       // against the split math below.
       note: `${splitPct}% of what's gone into the gym`,
       balance: jamieOwesChris,
-      monthly: 0, // no structured monthly payment — this is owed to Chris, not a lender
+      // Jamie's slice of what Chris really pays each month. Zero only when
+      // Money App is unreachable or nothing matched — the panel says which.
+      monthly: jamieMonthlyToChris,
       debts: [] as Debt[], // uses custom rendering — see the split panel below
       items: dueToChrisItems,
     },
@@ -733,6 +744,16 @@ export default function DebtClient({
           </div>
         </div>
 
+        {/* What carrying it costs each month. The balance above is what Jamie
+            owes; this is what it costs Chris to hold it, and Jamie's slice of
+            that. Shown with the working because it's a figure nobody could
+            otherwise check. */}
+        <CarryCost
+          carry={chrisCarry}
+          share={jamieCarryShare}
+          jamieMonthly={jamieMonthlyToChris}
+        />
+
         <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
           <AlertCircle size={13} className="mt-0.5 shrink-0" />
           This is your {splitPct}% of what&apos;s gone into the gym, minus the{" "}
@@ -1054,6 +1075,117 @@ function LoanParts({ debt, color }: { debt: Debt; color: string }) {
         The Taycan is counted at {money(TAYCAN_PRICE)}; the rest is what was
         carried over from earlier trade-ins.
       </p>
+    </div>
+  );
+}
+
+// ── What carrying the gym debt costs each month ──────────────────────────────
+// The balance above is what Jamie owes. This is what it costs to hold that
+// money, and Jamie's slice of the cost.
+//
+// The whole thing is shown with its working. The figure is built out of Chris's
+// own accounts in Money App, matched by name to the categories of what he lent
+// the gym, so the only way Jamie can judge it is by seeing which accounts went
+// into it and what they cost. It also says what it does NOT cover: two of the
+// six categories have no lender behind them at all.
+function CarryCost({
+  carry,
+  share,
+  jamieMonthly,
+}: {
+  carry: ChrisCarry;
+  share: number;
+  jamieMonthly: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const covered = carry.lines.filter((l) => l.matchedBalance > 0);
+
+  if (carry.problem || covered.length === 0) {
+    return (
+      <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
+        <AlertCircle size={13} className="mt-0.5 shrink-0" />
+        {carry.problem ??
+          "None of Chris's accounts matched this money, so what it costs to carry each month isn't known."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-lg bg-card p-2.5">
+      <button
+        type="button"
+        className="flex w-full items-baseline justify-between gap-2"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-1 text-[13px] text-muted">
+          <ChevronDown
+            size={12}
+            className={`shrink-0 transition-transform ${open ? "rotate-0" : "-rotate-90"}`}
+          />
+          Your share of carrying it
+        </span>
+        <span className="text-[15px] font-semibold" style={{ color: ROSE }}>
+          {money(jamieMonthly)}/mo
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="mt-2 space-y-1 text-[11px]">
+            {covered.map((l) => (
+              <div key={l.key}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted">{l.label}</span>
+                  <span>{money(l.monthly)}/mo</span>
+                </div>
+                {/* Which real accounts this came from, so the line can be
+                    checked against a statement rather than trusted. */}
+                <p className="flex items-start gap-1 text-[10px] text-faint">
+                  <Landmark size={9} className="mt-0.5 shrink-0" />
+                  <span className="truncate">{l.accounts.join(", ")}</span>
+                </p>
+                {/* Chris carries personal debt on these accounts too, so only
+                    the part that went to the gym is counted. */}
+                {l.matchedBalance > l.balance && (
+                  <p className="text-[10px] text-faint">
+                    {money(l.balance)} of the {money(l.matchedBalance)} on{" "}
+                    {l.accounts.length === 1 ? "that account" : "those accounts"}{" "}
+                    went to the gym, so that much of the payment is counted.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-2 space-y-1 border-t border-border pt-2 text-[12px]">
+            <div className="flex items-center justify-between">
+              <span className="text-muted">Chris pays each month</span>
+              <span>{money(carry.monthly)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">
+                × your share ({Math.round(share * 1000) / 10}%)
+              </span>
+              <span>{money(jamieMonthly)}</span>
+            </div>
+          </div>
+
+          <p className="mt-2 text-[10px] text-muted">
+            Your share here is the same fraction as the balance — you owe{" "}
+            {Math.round(share * 1000) / 10}% of what Chris is carrying, so you
+            owe that much of what it costs him to carry it.
+            {carry.uncoveredBalance > 0 && (
+              <>
+                {" "}
+                It doesn&apos;t cover {money(carry.uncoveredBalance)} of the
+                total: income Chris didn&apos;t take and other personal debt have
+                no lender and no monthly payment behind them.
+              </>
+            )}
+          </p>
+        </>
+      )}
     </div>
   );
 }

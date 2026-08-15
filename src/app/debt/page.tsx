@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import { autoSyncMoneyAppDebts } from "@/lib/moneyapp";
 import { getPayMonths } from "@/lib/gymPay";
+import { getChrisCarry } from "@/lib/chrisCarry";
 import { pageGate } from "@/lib/visibility";
 import ComingSoon from "@/components/ComingSoon";
 
@@ -55,6 +56,7 @@ export default async function DebtPage() {
     divorce,
     settlementTerms,
     investmentSplitTerms,
+    chrisCarry,
   ] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
@@ -66,6 +68,7 @@ export default async function DebtPage() {
     getDivorce(),
     getSettlementTerms(),
     getInvestmentSplitTerms(),
+    getChrisCarry(),
   ]);
 
   return (
@@ -86,6 +89,7 @@ export default async function DebtPage() {
         settlementMonthly={divorce.support.amount}
         settlementTerms={settlementTerms}
         investmentSplitTerms={investmentSplitTerms}
+        chrisCarry={chrisCarry}
       />
     </div>
   );
