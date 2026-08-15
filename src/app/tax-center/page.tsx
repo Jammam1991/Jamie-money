@@ -62,6 +62,15 @@ export default async function TaxCenterPage({
 
       <TaxYearPicker years={sortedYears} selected={year} />
 
+      {result && !result.filed && (
+        <p
+          className="mb-3 inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium"
+          style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
+        >
+          🔮 Projected — {year} hasn&apos;t been filed yet, so this is Money App&apos;s best guess.
+        </p>
+      )}
+
       <TaxYearsOverview results={results} selected={year} />
 
       {result ? (
