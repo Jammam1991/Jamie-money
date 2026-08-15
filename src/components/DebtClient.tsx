@@ -99,6 +99,48 @@ interface PersonalDebtItem {
   amount: number;
 }
 
+// ── What comes back off the pile ─────────────────────────────────────────────
+// Two kinds of thing, and the difference matters, so they're kept apart.
+//
+// The gym's security deposit reduces what went INTO the gym, and what went in
+// is what Chris and Jamie split — so it lowers Jamie's share by half of itself,
+// not all of it. It lives in the investment list below and must not be
+// subtracted a second time further down the page.
+//
+// The Rolex and the medical payment are Jamie's own: one is an asset bought
+// with the debt that could be sold, the other is money owed to him that hasn't
+// landed. Both come off his total in full.
+//
+// None of this money has moved yet, which is why it sits beside the total
+// rather than inside it. A headline that quietly assumes a watch sells and a
+// payment arrives is not what Jamie owes today.
+const SECURITY_DEPOSIT = 30000;
+
+type Offset = {
+  key: string;
+  emoji: string;
+  label: string;
+  note: string;
+  amount: number;
+};
+
+const OFFSETS: Offset[] = [
+  {
+    key: "rolex",
+    emoji: "\u231a",
+    label: "Rolex",
+    note: "bought with the debt \u2014 selling it pays that much back",
+    amount: 25000,
+  },
+  {
+    key: "medical",
+    emoji: "\U0001fa7a",
+    label: "Medical payment coming",
+    note: "owed to Jamie, not arrived yet",
+    amount: 20000,
+  },
+];
+
 // Which rows belong to the gym rather than to Jamie personally. Money App says
 // so outright, which is the only thing that gets it right: the names give no
 // usable rule — "Business Platinum Card" and "US Bank Card (JM)" are the gym's
@@ -226,6 +268,11 @@ export default function DebtClient({
     { label: "LOC draws & advances", amount: 25000 },
     { label: "Income borrowed", amount: 15000 },
     { label: "Other personal debt", amount: 9000 },
+    // Due back from the gym's landlord. It belongs here rather than with the
+    // things that come off Jamie's total, because it reduces what went into the
+    // gym — and what went in is what gets split. So it cuts Jamie's share by
+    // half of itself, and can't be counted again lower down.
+    { label: "Security deposit coming back", amount: -SECURITY_DEPOSIT },
   ];
   const dueToChrisTotal = dueToChrisItems.reduce((s, item) => s + item.amount, 0);
 
@@ -246,6 +293,11 @@ export default function DebtClient({
   const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
 
   const securedTotal = total + settlement.balance + businessTotal + jamieOwesChris;
+  // What's left once the things coming back are counted. The deposit is already
+  // inside `securedTotal` — it came off the gym investment above — so only the
+  // Rolex and the medical payment come off again here.
+  const offsetTotal = OFFSETS.reduce((sum, o) => sum + o.amount, 0);
+  const netTotal = securedTotal - offsetTotal;
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
@@ -648,7 +700,15 @@ export default function DebtClient({
             {dueToChrisItems.map((item) => (
               <div key={item.label} className="flex items-center justify-between text-[11px] text-muted">
                 <span>{item.label}</span>
-                <span>{money(item.amount)}</span>
+                {/* money() puts the sign after the dollar sign — "$-30,000" —
+                    which reads as a typo. Money coming back gets its minus in
+                    front and the colour the rest of the page uses for good
+                    news. */}
+                <span style={item.amount < 0 ? { color: GREEN } : undefined}>
+                  {item.amount < 0
+                    ? `\u2212${money(Math.abs(item.amount))}`
+                    : money(item.amount)}
+                </span>
               </div>
             ))}
           </div>
@@ -737,6 +797,11 @@ export default function DebtClient({
           {money(securedMin)} a month to keep up · {money(securedInterest)} of
           that is pure interest
         </p>
+        {offsetTotal > 0 && (
+          <p className="mt-1 text-[12px]" style={{ color: GREEN }}>
+            {money(netTotal)} once what&apos;s coming back lands — see below
+          </p>
+        )}
 
         {/* One bar, one colour per bucket: the shape of the pile at a glance. */}
         <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-tint">
@@ -831,6 +896,17 @@ export default function DebtClient({
             </button>
           ))}
       </Card>
+
+      {/* What comes back off the pile. Its own card rather than netted into the
+          total above, because none of this money has moved yet. */}
+      <OffsetsCard
+        gross={securedTotal}
+        net={netTotal}
+        offsets={OFFSETS}
+        deposit={SECURITY_DEPOSIT}
+        depositShare={SECURITY_DEPOSIT * (splitPct / 100)}
+        splitPct={splitPct}
+      />
 
       {/* Credit score, last pulled from Money App */}
       {fico && <FicoCard score={fico.score} date={fico.date} />}
@@ -979,6 +1055,134 @@ function LoanParts({ debt, color }: { debt: Debt; color: string }) {
         carried over from earlier trade-ins.
       </p>
     </div>
+  );
+}
+
+// ── What comes back off the pile ─────────────────────────────────────────────
+// Assets that could be sold, and money owed to Jamie that hasn't landed. Shown
+// beside the total rather than folded into it: none of this has happened yet,
+// and a smaller headline that quietly assumes a watch sells and a payment
+// arrives is not what Jamie owes today.
+//
+// The security deposit is listed too, but greyed and marked as already counted.
+// It came off what went into the gym, so it has already shrunk Jamie's share by
+// half of itself further up the page. Listing it here without saying that would
+// subtract it twice; leaving it out entirely would leave "where did the deposit
+// go?" unanswered.
+function OffsetsCard({
+  gross,
+  net,
+  offsets,
+  deposit,
+  depositShare,
+  splitPct,
+}: {
+  gross: number;
+  net: number;
+  offsets: Offset[];
+  deposit: number;
+  depositShare: number;
+  splitPct: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const total = offsets.reduce((sum, o) => sum + o.amount, 0);
+  if (total <= 0) return null;
+
+  return (
+    <Card>
+      <button
+        className="flex w-full items-center justify-between gap-3"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="min-w-0 text-left">
+          <span className="block text-[11px] uppercase tracking-wide text-muted">
+            What comes off it
+          </span>
+          <span
+            className="block text-[26px] font-black leading-none"
+            style={{ color: GREEN }}
+          >
+            −{money(total)}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="text-right">
+            <span className="block text-[11px] text-muted">would leave</span>
+            <span className="block text-[16px] font-bold">{money(net)}</span>
+          </span>
+          <ChevronDown
+            size={16}
+            className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="mt-3 space-y-2">
+            {offsets.map((o) => (
+              <div
+                key={o.key}
+                className="flex items-start gap-2.5 rounded-xl p-2.5"
+                style={{ background: "var(--good-bg)" }}
+              >
+                <span className="text-[17px]">{o.emoji}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium">{o.label}</span>
+                  <span className="block text-[11px] text-muted">{o.note}</span>
+                </span>
+                <span
+                  className="shrink-0 text-[15px] font-bold"
+                  style={{ color: GREEN }}
+                >
+                  −{money(o.amount)}
+                </span>
+              </div>
+            ))}
+
+            {/* Already counted further up — greyed, and it says where it went. */}
+            <div className="flex items-start gap-2.5 rounded-xl bg-tint p-2.5">
+              <span className="text-[17px] opacity-60">🔑</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium text-muted">
+                  Security deposit coming back
+                </span>
+                <span className="block text-[11px] text-muted">
+                  already taken off what went into the gym — {money(depositShare)}{" "}
+                  of it is Jamie&apos;s, being his {splitPct}% share
+                </span>
+              </span>
+              <span className="shrink-0 text-[15px] font-bold text-muted">
+                −{money(deposit)}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
+            <div className="flex items-center justify-between">
+              <span className="text-muted">Owed today</span>
+              <span>{money(gross)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">− Assets and money coming</span>
+              <span style={{ color: GREEN }}>−{money(total)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+              <span>= If all of it lands</span>
+              <span>{money(net)}</span>
+            </div>
+          </div>
+
+          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
+            <AlertCircle size={13} className="mt-0.5 shrink-0" />
+            None of this has happened yet — the watch has to sell and the payment
+            has to arrive. So the headline above stays at what&apos;s owed today,
+            and this is what it would become.
+          </p>
+        </>
+      )}
+    </Card>
   );
 }
 
