@@ -14,7 +14,7 @@
 
 import type { Rollup } from "@/lib/businessFinances";
 
-export type ViewModeId = "full" | "operating" | "slim" | "cpa" | "clean";
+export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "clean";
 
 export type ViewMode = {
   id: ViewModeId;
@@ -66,8 +66,8 @@ export const VIEW_MODES: ViewMode[] = [
     taxLayout: false,
   },
   {
-    id: "slim",
-    label: "Slim view — what a buyer would see",
+    id: "seller",
+    label: "Seller view — what a buyer would see",
     blurb: "Leaves out the one-off spending a new owner wouldn't be taking on.",
     profitTitle: "Profit a buyer would see",
     lossTitle: "Loss a buyer would see",
@@ -126,6 +126,10 @@ export const modeById = (id: ViewModeId): ViewMode =>
 export function readViewMode(sp: { view?: string; operational?: string }): ViewModeId {
   const asked = VIEW_MODES.find((m) => m.id === sp.view);
   if (asked) return asked.id;
+  // `?view=slim` was this mode's name for the few hours before it was renamed
+  // to "seller", and `?operational=false` was the switch that predates the
+  // selector entirely. Both still land where they meant to.
+  if (sp.view === "slim") return "seller";
   if (sp.operational === "false") return "full";
   return DEFAULT_VIEW_MODE;
 }
