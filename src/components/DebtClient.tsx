@@ -40,6 +40,7 @@ import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DuplicateCleanup from "@/components/DuplicateCleanup";
 import DebtByYear from "@/components/DebtByYear";
+import BusinessPayMonth from "@/components/BusinessPayMonth";
 import type {
   DebtSnapshotRow,
   DebtTransaction,
@@ -1299,36 +1300,67 @@ function LentDetail({ txs }: { txs: DebtTransaction[] }) {
 // gap Chris covered. A month where less came out than was earned shows as such
 // rather than as a negative gap nobody can read.
 function OverdrawnDetail({ months }: { months: PayMonth[] }) {
+  const [openMonth, setOpenMonth] = useState<string | null>(null);
   const ordered = [...months].sort((a, b) => b.month.localeCompare(a.month));
 
   return (
     <div className="space-y-2 rounded-lg bg-card p-2.5">
       {ordered.map((m) => {
         const over = m.difference > 0;
+        const open = openMonth === m.month;
         return (
           <div key={m.month}>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[12px] font-medium">{m.label}</span>
-              <span
-                className="text-[12px] font-semibold"
-                style={{ color: over ? AMBER : GREEN }}
-              >
-                {over ? "+" : "−"}
-                {money(Math.abs(m.difference))}
+            <button
+              type="button"
+              className="w-full text-left"
+              onClick={() => setOpenMonth(open ? null : m.month)}
+              aria-expanded={open}
+            >
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="flex items-center gap-1 text-[12px] font-medium">
+                  <ChevronDown
+                    size={11}
+                    className={`shrink-0 text-muted transition-transform ${open ? "rotate-0" : "-rotate-90"}`}
+                  />
+                  {m.label}
+                </span>
+                <span
+                  className="text-[12px] font-semibold"
+                  style={{ color: over ? AMBER : GREEN }}
+                >
+                  {over ? "+" : "−"}
+                  {money(Math.abs(m.difference))}
+                </span>
               </span>
-            </div>
-            <p className="text-[10px] text-muted">
-              earned {money(m.earned)} · took {money(m.took)} ·{" "}
-              {over
-                ? "Chris put in the difference"
-                : "took less than the work was worth"}
-            </p>
+              <span className="block pl-4 text-[10px] text-muted">
+                earned {money(m.earned)} · took {money(m.took)} ·{" "}
+                {over
+                  ? "Chris put in the difference"
+                  : "took less than the work was worth"}
+              </span>
+              {/* A month still running has only part of its earnings in, while
+                  a draw taken at the start of it is already counted in full.
+                  The gym dashboard pro-rates on purpose — the management fee
+                  accrues day by day, a session counts once it has happened — so
+                  the gap always reads high mid-month and shrinks as the month
+                  finishes. The row says so rather than presenting a
+                  half-finished month as a settled one. */}
+              {m.isCurrentMonth && (
+                <span className="mt-0.5 block pl-4 text-[10px]" style={{ color: AMBER }}>
+                  Still running — earnings only count up to today, so this gap
+                  will shrink as the month finishes.
+                </span>
+              )}
+            </button>
+
+            {open && <BusinessPayMonth pay={m} />}
           </div>
         );
       })}
       <p className="border-t border-border pt-2 text-[10px] text-muted">
         Earnings come from the gym dashboard and the draws from Money App.
-        Neither is typed in by hand.
+        Neither is typed in by hand. Open a month to check either against the
+        sessions and transfers behind it.
       </p>
     </div>
   );
