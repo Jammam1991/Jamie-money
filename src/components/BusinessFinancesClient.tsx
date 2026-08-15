@@ -5,6 +5,14 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { Card, Tint } from "@/components/ui";
 import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
+import { showsProfit } from "@/lib/businessFinances";
+import {
+  headlineFor,
+  modeById,
+  VIEW_MODES,
+  type ViewMode,
+  type ViewModeId,
+} from "@/lib/businessViewModes";
 
 // ── The gym's books, as Jamie sees them ──────────────────────────────────────
 // Every section here is one of Chris's tick-boxes in the Money App (Settings →
@@ -12,9 +20,11 @@ import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx 
 // and a hidden list look the same from in here, and that's on purpose: this
 // component draws what it was sent and doesn't try to explain the gaps.
 //
-// The one piece of state is the mistakes button. Both versions of the year come
-// down in the same response, so switching between them is instant and doesn't
-// ask Money App anything twice.
+// WHICH CUT is a URL question, not component state. Four of the five modes
+// change what Money App is asked for, so they can't be a `useState` toggle
+// anyway — and putting all five in `?view=` means every mode is a link Chris
+// can send, the back button steps between them, and a reload doesn't quietly
+// drop Jamie back on a different set of numbers than he left on.
 //
 // Year tabs are now expandable dropdowns showing months. All start collapsed.
 
@@ -49,8 +59,13 @@ function shortDate(iso: string): string {
   return `${Number(m)}/${Number(d)}/${y.slice(2)}`;
 }
 
-export default function BusinessFinancesClient({ data }: { data: BusinessFinances }) {
-  const [hideMistakes, setHideMistakes] = useState(false);
+export default function BusinessFinancesClient({
+  data,
+  modeId,
+}: {
+  data: BusinessFinances;
+  modeId: ViewModeId;
+}) {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
 
   // The chevron toggles open/closed without changing what's loaded — lets
@@ -72,43 +87,82 @@ export default function BusinessFinancesClient({ data }: { data: BusinessFinance
   };
 
   const { view, noMistakes } = data;
-  // The button can only be on while there's something to switch to — a year with
-  // no mistakes marked still has a `noMistakes` block, just an empty one.
-  const canSwitch = Boolean(noMistakes && noMistakes.mistakes.length > 0);
-  const on = hideMistakes && canSwitch;
-  const rollup: Rollup = on && noMistakes ? noMistakes.rollup : data.actual;
+  const mode = modeById(modeId);
+
+  // A year with no mistakes marked still has a `noMistakes` block, just an
+  // empty one — so whether the clean cut is worth offering is a question about
+  // the list, not about the block being there.
+  const hasMistakes = Boolean(noMistakes && noMistakes.mistakes.length > 0);
+  // Showing "minus our mistakes" over a year with none marked would promise a
+  // different number and then show the same one. Fall back to the plain
+  // figures instead, and the picker below drops the option entirely.
+  const cleanShowing = mode.noMistakes && hasMistakes;
+  const rollup: Rollup = cleanShowing && noMistakes ? noMistakes.rollup : data.actual;
+
+  // Switching cuts keeps the year/month you're on, and switching year/month
+  // keeps the cut — neither picker resets the other.
+  const hrefFor = (id: ViewModeId) => {
+    const params = new URLSearchParams();
+    if (data.year === "all-time") params.set("year", "all-time");
+    else {
+      params.set("year", String(data.year));
+      if (data.month) params.set("month", String(data.month));
+    }
+    params.set("view", id);
+    return `/business-finances?${params.toString()}`;
+  };
+
+  // Both sides of the mistakes comparison read through the CUT ON SCREEN, not
+  // a fixed basis: the two roll-ups came down in the same response under the
+  // same switches, so measuring them the same way is what makes the difference
+  // below equal the gap between the two figures shown. (Money App's own
+  // `profitDifference` is worked out against `netProfit` regardless of cut,
+  // which is a different basis than this panel displays.)
+  const actualProfit = headlineFor(data.actual, mode).profit;
+  const fixedProfit = noMistakes ? headlineFor(noMistakes.rollup, mode).profit : actualProfit;
+
+  const linesSection = view.show_schedule_c ? <Lines rollup={rollup} mode={mode} /> : null;
 
   return (
     <div className="space-y-4">
       <IntroCard
         data={data}
+        modeId={modeId}
         expandedYears={expandedYears}
         onToggleYear={toggleYear}
         onSelectYear={expandYear}
       />
 
-      {view.show_headline && (
-        <Headline rollup={rollup} on={on} year={data.year} month={data.month} />
+      {showsProfit(view) && (
+        <ViewPicker mode={mode} hrefFor={hrefFor} offerClean={hasMistakes} />
       )}
 
-      {canSwitch && noMistakes && (
+      {view.show_headline && (
+        <Headline rollup={rollup} mode={mode} year={data.year} month={data.month} />
+      )}
+
+      {/* The CPA cut leads with the tax lines: the question it answers is
+          "which box does this go in", so the breakdown IS the answer and the
+          month-by-month strip is beside the point. Every other cut keeps the
+          strip first, where it's always been. */}
+      {mode.taxLayout && linesSection}
+
+      {hasMistakes && noMistakes && (
         <MistakesPanel
-          on={on}
-          onToggle={() => setHideMistakes((v) => !v)}
-          actualProfit={data.actual.operatingProfit}
-          fixedProfit={noMistakes.rollup.operatingProfit}
-          // Computed from the same two figures shown above rather than trusting
-          // Money App's `profitDifference`, which is worked out against
-          // `netProfit` (grants included) — a different basis than the
-          // Operating Profit this panel actually displays.
-          difference={noMistakes.rollup.operatingProfit - data.actual.operatingProfit}
+          on={cleanShowing}
+          toggleHref={hrefFor(cleanShowing ? "full" : "clean")}
+          actualProfit={actualProfit}
+          fixedProfit={fixedProfit}
+          difference={fixedProfit - actualProfit}
           mistakes={noMistakes.mistakes}
         />
       )}
 
-      {view.show_monthly && <MonthlyStrip rollup={rollup} on={on} labels={data.monthLabels} />}
+      {view.show_monthly && (
+        <MonthlyStrip rollup={rollup} mode={mode} labels={data.monthLabels} />
+      )}
 
-      {view.show_schedule_c && <Lines rollup={rollup} on={on} />}
+      {!mode.taxLayout && linesSection}
 
       {view.show_flagged && data.flagged.length > 0 && (
         <Card>
@@ -185,16 +239,85 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <p className="text-[16px] font-semibold">{children}</p>;
 }
 
+// Repeated in the corner of every section that shows a figure, so a cut number
+// can't be mistaken for the raw one by anyone who scrolled past the headline.
+// The full picture has no tag — it's the one that needs no qualifying.
+function CutTag({ mode }: { mode: ViewMode }) {
+  if (!mode.tag) return null;
+  return (
+    <span className="shrink-0 text-[12px] font-medium" style={{ color: "var(--warn)" }}>
+      {mode.tag}
+    </span>
+  );
+}
+
+// The question at the top of the page: five ways to read the same year.
+//
+// Links, not buttons — four of the five change what Money App is asked for
+// (see the note at the top of this file). Stacked full-width rather than a row
+// of chips because each one needs its sentence: "Slim view" means nothing on
+// its own, and a mode nobody can tell apart from its neighbour is the problem
+// this card exists to fix.
+function ViewPicker({
+  mode,
+  hrefFor,
+  offerClean,
+}: {
+  mode: ViewMode;
+  hrefFor: (id: ViewModeId) => string;
+  offerClean: boolean;
+}) {
+  const modes = VIEW_MODES.filter((m) => m.id !== "clean" || offerClean);
+
+  return (
+    <Card>
+      <SectionTitle>How do you want to see the numbers?</SectionTitle>
+      <p className="mt-1 text-[13px] text-muted">
+        Same books every time. Each one just leaves something different out.
+      </p>
+      <div className="mt-3 space-y-2">
+        {modes.map((m) => {
+          const active = m.id === mode.id;
+          return (
+            <Link
+              key={m.id}
+              href={hrefFor(m.id)}
+              scroll={false}
+              aria-current={active ? "true" : undefined}
+              className="block rounded-xl border px-3 py-2.5 transition-colors"
+              style={
+                active
+                  ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
+                  : { borderColor: "var(--border)" }
+              }
+            >
+              <p className="text-[14px] font-semibold">{m.label}</p>
+              <p
+                className="mt-0.5 text-[12px]"
+                style={active ? { color: "rgba(255,255,255,0.88)" } : { color: "var(--muted)" }}
+              >
+                {m.blurb}
+              </p>
+            </Link>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 // The year (expandable to months), how current the books are, and — when more
 // than one year is allowed — the other years to jump to. Year tabs are now
 // collapsible dropdowns showing 12 months. "All Time" is a special non-expandable tab.
 function IntroCard({
   data,
+  modeId,
   expandedYears,
   onToggleYear,
   onSelectYear,
 }: {
   data: BusinessFinances;
+  modeId: ViewModeId;
   expandedYears: Set<number>;
   onToggleYear: (year: number) => void;
   onSelectYear: (year: number) => void;
@@ -211,20 +334,9 @@ function IntroCard({
     dateRangeText = `Counted up to ${shortDate(data.throughDate)}`;
   }
 
-  // Carries the current Operations-only choice across a year/month/all-time
-  // click, so picking a different month doesn't silently reset it back on.
-  const isOperational = data.actual.operational;
-  const withOp = (href: string) => (isOperational ? href : `${href}&operational=false`);
-  const toggleHref = (() => {
-    const params = new URLSearchParams();
-    if (isAllTime) params.set("year", "all-time");
-    else {
-      params.set("year", String(data.year));
-      if (data.month) params.set("month", String(data.month));
-    }
-    params.set("operational", String(!isOperational));
-    return `/business-finances?${params.toString()}`;
-  })();
+  // Carries the chosen cut across a year/month/all-time click, so picking a
+  // different month doesn't silently drop Jamie back on the default view.
+  const withView = (href: string) => `${href}&view=${modeId}`;
 
   return (
     <Card>
@@ -238,7 +350,7 @@ function IntroCard({
         <div className="mt-3 space-y-2">
           {/* All Time tab - never expandable */}
           <Link
-            href={withOp("/business-finances?year=all-time")}
+            href={withView("/business-finances?year=all-time")}
             scroll={false}
             className="inline-block rounded-lg border border-border px-3 py-1 text-[13px]"
             style={
@@ -274,7 +386,7 @@ function IntroCard({
                     </button>
                     {/* Year: navigates to that year's annual view and opens its months. */}
                     <Link
-                      href={withOp(`/business-finances?year=${y}`)}
+                      href={withView(`/business-finances?year=${y}`)}
                       scroll={false}
                       onClick={() => onSelectYear(y)}
                       className="rounded-lg border border-border px-3 py-1 text-[13px]"
@@ -298,7 +410,7 @@ function IntroCard({
                         return (
                           <Link
                             key={idx}
-                            href={withOp(`/business-finances?year=${y}&month=${monthNum}`)}
+                            href={withView(`/business-finances?year=${y}&month=${monthNum}`)}
                             scroll={false}
                             className="rounded-lg border border-border px-2 py-1 text-[12px]"
                             style={
@@ -324,24 +436,6 @@ function IntroCard({
         </div>
       )}
 
-      {/* Same lens Money App's own "All / Operational" tabs offer. Full
-          sentence rather than a short label — mirrors the mistakes button
-          below, which does the same for its own toggle. */}
-      <Link
-        href={toggleHref}
-        scroll={false}
-        title="Removes bank interest, grant money, and tax depreciation from the numbers — what's left is just how the gym performed on its own, day to day."
-        className="mt-3 block w-full rounded-lg px-3 py-2 text-center text-[13px] font-medium transition-colors"
-        style={
-          isOperational
-            ? { background: "var(--tint)", color: "var(--text)" }
-            : { background: "var(--good)", color: "#fff" }
-        }
-      >
-        {isOperational
-          ? "Show everything (interest, grants, depreciation included)"
-          : "See how the gym performed strictly on operations income/expenses"}
-      </Link>
     </Card>
   );
 }
@@ -349,34 +443,28 @@ function IntroCard({
 // Money in, money out, what's left. The three numbers everything else explains.
 function Headline({
   rollup,
-  on,
+  mode,
   year,
   month,
 }: {
   rollup: Rollup;
-  on: boolean;
+  mode: ViewMode;
   year: number | "all-time";
   month?: number;
 }) {
-  const out = rollup.cogs + rollup.expenses;
-  // Operating profit, not netProfit — netProfit folds grant/forgiveness
-  // income back in, which reads as the gym earning far more than it actually
-  // brought in from running the business. This is the figure that lines up
-  // with the Business P&L Budget's "Operating Profit" on Chris's dashboard.
-  const profit = rollup.operatingProfit;
+  // What "money in", "money out" and "profit" mean depends on the cut — see
+  // headlineFor. The three always tie out, so the two tiles explain the big
+  // number rather than sitting near it.
+  const { moneyIn, moneyOut, profit } = headlineFor(rollup, mode);
   // Only show year-end projection for current year, not for months or all-time
   const projection =
     typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;
 
   return (
     <Card>
-      <div className="flex items-baseline justify-between">
-        <SectionTitle>{profit >= 0 ? "Made a profit" : "Lost money"}</SectionTitle>
-        {on && (
-          <span className="text-[12px] font-medium" style={{ color: "var(--warn)" }}>
-            mistakes taken out
-          </span>
-        )}
+      <div className="flex items-baseline justify-between gap-3">
+        <SectionTitle>{profit >= 0 ? mode.profitTitle : mode.lossTitle}</SectionTitle>
+        <CutTag mode={mode} />
       </div>
       <p
         className="mt-1 text-4xl font-bold"
@@ -389,17 +477,21 @@ function Headline({
           Trending toward {money(projection)} by year end
         </p>
       )}
+      {/* The same sentence as the picked button up in the selector, repeated
+          under the number itself — this is the one place a figure gets quoted
+          out of context, so what it leaves out travels with it. */}
+      <p className="mt-1 text-[13px] text-muted">{mode.blurb}</p>
       <p className="mt-1 text-[12px] text-muted">
         Doesn&apos;t include Jamie&apos;s PT cash that hasn&apos;t been recorded yet.
       </p>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <Tint>
           <p className="text-[12px] text-muted">Money in</p>
-          <p className="mt-0.5 text-[18px] font-semibold">{money(rollup.income)}</p>
+          <p className="mt-0.5 text-[18px] font-semibold">{money(moneyIn)}</p>
         </Tint>
         <Tint>
           <p className="text-[12px] text-muted">Money out</p>
-          <p className="mt-0.5 text-[18px] font-semibold">{money(out)}</p>
+          <p className="mt-0.5 text-[18px] font-semibold">{money(moneyOut)}</p>
         </Tint>
       </div>
     </Card>
@@ -433,14 +525,18 @@ function groupMistakes(mistakes: Mistake[]): MistakeGroup[] {
 
 function MistakesPanel({
   on,
-  onToggle,
+  toggleHref,
   actualProfit,
   fixedProfit,
   difference,
   mistakes,
 }: {
   on: boolean;
-  onToggle: () => void;
+  /** Where the button goes — the clean cut, or back to the full picture.
+   *  A link rather than local state, because "minus our mistakes" is one of
+   *  the five modes in the picker above and the two must never disagree
+   *  about which one is showing. */
+  toggleHref: string;
   actualProfit: number;
   fixedProfit: number;
   difference: number;
@@ -459,9 +555,10 @@ function MistakesPanel({
 
   return (
     <Card>
-      <button
-        onClick={onToggle}
-        className="w-full rounded-xl px-4 py-3 text-[15px] font-semibold transition-colors"
+      <Link
+        href={toggleHref}
+        scroll={false}
+        className="block w-full rounded-xl px-4 py-3 text-center text-[15px] font-semibold transition-colors"
         style={
           on
             ? { background: "var(--tint)", color: "var(--text)" }
@@ -469,7 +566,7 @@ function MistakesPanel({
         }
       >
         {on ? "Show the real numbers" : "Profit after removing mistakes"}
-      </button>
+      </Link>
 
       {!on && (
         <p className="mt-2 text-center text-[13px] text-muted">
@@ -578,11 +675,11 @@ function MistakesPanel({
 // years), since indexing the fixed MONTHS array past 11 would crash.
 function MonthlyStrip({
   rollup,
-  on,
+  mode,
   labels,
 }: {
   rollup: Rollup;
-  on: boolean;
+  mode: ViewMode;
   labels?: string[];
 }) {
   const months = rollup.monthlyNetProfit;
@@ -593,13 +690,9 @@ function MonthlyStrip({
 
   return (
     <Card>
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between gap-3">
         <SectionTitle>Month by month</SectionTitle>
-        {on && (
-          <span className="text-[12px] font-medium" style={{ color: "var(--warn)" }}>
-            mistakes taken out
-          </span>
-        )}
+        <CutTag mode={mode} />
       </div>
       <div className="mt-4 flex items-stretch gap-1">
         {months.map((v, i) => {
@@ -654,7 +747,7 @@ function MonthlyStrip({
 // Where the money actually went, line by line. Every category expands to the
 // individual transactions behind it — same interaction as the mistakes list
 // above, so a category isn't just a number Jamie has to take on faith.
-function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
+function Lines({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
   const income = rollup.lines.filter((l) => l.classification === "income");
   const spending = rollup.lines
     .filter((l) => l.classification !== "income")
@@ -673,14 +766,20 @@ function Lines({ rollup, on }: { rollup: Rollup; on: boolean }) {
 
   return (
     <Card>
-      <div className="flex items-baseline justify-between">
-        <SectionTitle>Line by line</SectionTitle>
-        {on && (
-          <span className="text-[12px] font-medium" style={{ color: "var(--warn)" }}>
-            mistakes taken out
-          </span>
-        )}
+      <div className="flex items-baseline justify-between gap-3">
+        <SectionTitle>{mode.taxLayout ? "Line by line, as the tax return sees it" : "Line by line"}</SectionTitle>
+        <CutTag mode={mode} />
       </div>
+
+      {/* Only said in the CPA cut, where it's the whole point: these headings
+          are the boxes on Schedule C, and a grant is taxable income even
+          though the operating view carves it out. */}
+      {mode.taxLayout && (
+        <p className="mt-1 text-[13px] text-muted">
+          These headings are the boxes on the tax form. Grant money counts as
+          income here, even though it&apos;s left out of the gym&apos;s own numbers.
+        </p>
+      )}
 
       {income.length > 0 && (
         <>

@@ -61,6 +61,11 @@ export type Rollup = {
   otherIncome: number;
   cogs: number;
   expenses: number;
+  /** Loan interest and finance charges — kept out of `expenses` so that figure
+   *  reads real running cost, but still subtracted in `netProfit`. Optional
+   *  for the reason above: it arrived in a later Money App, and a missing one
+   *  should cost a line of interest, not the page. */
+  financeCharges?: number;
   /** `income - cogs - expenses` — real revenue against real running costs,
    *  grants left out of both sides. What "Made a profit" now shows, since
    *  it's the figure that lines up with the Business P&L Budget's Operating
@@ -75,6 +80,10 @@ export type Rollup = {
   fedDroppedCount: number;
   mistakesRemoved: boolean;
   operational: boolean;
+  /** True when the transactions Chris marked "Remove from P&L" were left out —
+   *  the Slim (seller's view) cut. Optional: it landed in Money App after this
+   *  type did. */
+  slimmed?: boolean;
 };
 
 /** One transaction Chris marked as a start-up mistake in Money App. */
@@ -190,6 +199,9 @@ export async function getBusinessFinances(
   // existed — every caller that doesn't care (Big Picture, Gym Story) keeps
   // reading the "how the gym actually runs" figures unless it asks otherwise.
   operational: boolean = true,
+  // The Slim (seller's view) cut: drop the transactions Chris marked "Remove
+  // from P&L". Off unless asked for, so no existing caller moves.
+  slim: boolean = false,
 ): Promise<{ data: BusinessFinances | null; error: string | null }> {
   const baseUrl = apiUrl();
   const apiKey = process.env.MONEYAPP_API_KEY;
@@ -198,10 +210,20 @@ export async function getBusinessFinances(
     return { data: null, error: "This page isn't connected to the Money App yet." };
   }
 
+  // Every request below asks for the same cut — building it in one place is
+  // what keeps the all-time total honest, since a year fetched under different
+  // switches than its siblings would be summed into the same figure as if it
+  // weren't. `trim=slim` is the spelling Money App's own P&L screens use.
+  const cutParams = (extra?: Record<string, string>) => {
+    const p = new URLSearchParams({ email, operational: String(operational), ...extra });
+    if (slim) p.set("trim", "slim");
+    return p;
+  };
+
   try {
     if (isAllTime) {
       // For all-time, fetch the first year to get the list of available years
-      const params = new URLSearchParams({ email, operational: String(operational) });
+      const params = cutParams();
       const firstRes = await fetch(
         `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${params}`,
         { headers: { "x-api-key": apiKey }, cache: "no-store" },
@@ -220,7 +242,7 @@ export async function getBusinessFinances(
       // Shared access settings, it'll show up in `years` and get included
       // here automatically — nothing else needs to change.
       const allYearPromises = firstData.years.map(async (y) => {
-        const yParams = new URLSearchParams({ email, year: String(y), operational: String(operational) });
+        const yParams = cutParams({ year: String(y) });
         const res = await fetch(
           `${baseUrl.replace(/\/$/, "")}/api/shared-access/portal?${yParams}`,
           { headers: { "x-api-key": apiKey }, cache: "no-store" },
@@ -240,7 +262,7 @@ export async function getBusinessFinances(
       return { data: aggregated, error: null };
     }
 
-    const params = new URLSearchParams({ email, operational: String(operational) });
+    const params = cutParams();
     if (year) params.set("year", String(year));
     if (month && Number.isFinite(month) && month >= 1 && month <= 12) {
       params.set("month", String(month));
@@ -374,6 +396,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
   const sumOtherIncome = unique.reduce((sum, r) => sum + r.otherIncome, 0);
   const sumCogs = unique.reduce((sum, r) => sum + r.cogs, 0);
   const sumExpenses = unique.reduce((sum, r) => sum + r.expenses, 0);
+  const sumFinanceCharges = unique.reduce((sum, r) => sum + (r.financeCharges ?? 0), 0);
 
   const monthlyNetProfit = months.map(
     ({ year, month }) => byYear.get(year)?.monthlyNetProfit[month] ?? 0,
@@ -386,8 +409,14 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     otherIncome: sumOtherIncome,
     cogs: sumCogs,
     expenses: sumExpenses,
+    financeCharges: sumFinanceCharges,
     operatingProfit: sumIncome - sumCogs - sumExpenses,
-    netProfit: sumIncome + sumOtherIncome - sumCogs - sumExpenses,
+    // Interest belongs in the bottom line even though it's carved out of
+    // `expenses` — this used to drop it, so all-time net profit read better
+    // than it was by every dollar of loan interest the gym has ever paid.
+    // Same formula Money App uses per year (see `netProfit` in its
+    // tax-actuals-server), so a year and the all-time total agree.
+    netProfit: sumIncome + sumOtherIncome - sumCogs - sumExpenses - sumFinanceCharges,
     untagged: unique.reduce(
       (sum, r) => ({
         income: sum.income + r.untagged.income,
@@ -402,6 +431,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     fedDroppedCount: unique.reduce((sum, r) => sum + r.fedDroppedCount, 0),
     mistakesRemoved: unique.some((r) => r.mistakesRemoved),
     operational: unique.some((r) => r.operational),
+    slimmed: unique.some((r) => r.slimmed),
   };
 }
 
