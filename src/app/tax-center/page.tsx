@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageTitle, Card } from "@/components/ui";
 import ComingSoon from "@/components/ComingSoon";
 import { TaxYearStory } from "@/components/TaxYearStory";
+import { TaxYearsOverview } from "@/components/TaxYearsOverview";
 import { pageGate } from "@/lib/visibility";
 import { getTaxDocuments, getTaxFilingResults, taxCenterReady } from "@/lib/taxCenter";
 
@@ -78,6 +79,8 @@ export default async function TaxCenterPage({
           ))}
         </div>
       )}
+
+      <TaxYearsOverview results={results} selected={year} />
 
       {result ? (
         <TaxYearStory result={result} />

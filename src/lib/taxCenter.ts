@@ -53,7 +53,15 @@ export type FiledAs = {
  * Chris's return shape.
  */
 export type TaxBreakdown = {
+  /**
+   * Where these figures came from. "transcript" is the real filed return as
+   * the IRS processed it; "baseline" is Chris's saved planning numbers for
+   * the year; "books" is built from the ledger. Only the first is exact.
+   */
+  source: "transcript" | "baseline" | "books";
   estimated: boolean;
+  /** Transcripts are federal only — California tax never appears on one. */
+  federalOnly?: boolean;
   income: {
     chris: TaxLine[];
     jamie: TaxLine[];
@@ -203,7 +211,10 @@ function normalize(row: Record<string, unknown>): TaxFilingResult {
     mfjTax: r.mfjTax ?? null,
     singleTax: r.singleTax ?? null,
     filedAs: r.filedAs ?? null,
-    breakdown: r.breakdown ?? null,
+    // `source` arrived after `breakdown` did. A feed that predates it was
+    // always the saved-baseline path, so say that rather than letting an
+    // undefined fall through to the books wording.
+    breakdown: r.breakdown ? { ...r.breakdown, source: r.breakdown.source ?? "baseline" } : null,
   };
 }
 
