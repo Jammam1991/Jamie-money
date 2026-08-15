@@ -7,7 +7,12 @@ import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
 import { getRole, isViewingAsJamie } from "@/lib/auth";
-import { getCashLog, getComingSoonPages, getOwesCharges } from "@/lib/store";
+import {
+  getCashLog,
+  getComingSoonPages,
+  getMenuOrder,
+  getOwesCharges,
+} from "@/lib/store";
 import { computePastDue, monthStart } from "@/lib/pastDue";
 
 const geistSans = Geist({
@@ -47,6 +52,10 @@ export default async function RootLayout({
 
   const admin = role === "admin" && !viewingAsJamie;
 
+  // The order Chris dragged the slide-out menu into. Jamie gets the same one —
+  // it's the menu, not a per-person preference.
+  const menuOrder = await getMenuOrder();
+
   // The "Past Due" tab only exists when something is actually late. Chris keeps
   // it always so he can log new charges — and if he's parked the page as
   // "Coming Soon" for Jamie, the tab stays so Jamie sees that message.
@@ -81,7 +90,7 @@ export default async function RootLayout({
             spacing on every screen. */}
         <main className="app-shell mx-auto min-h-screen max-w-md px-4 pt-6 md:max-w-3xl md:px-6">
           <AdminBar admin={role === "admin"} loggedIn={role !== null} viewingAsJamie={viewingAsJamie} />
-          <Header />
+          <Header admin={admin} menuOrder={menuOrder} />
           <UpdateNotice />
           {children}
         </main>
