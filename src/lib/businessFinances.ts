@@ -98,6 +98,9 @@ export type Rollup = {
     interest: CutBucket;
     nonOperational: CutBucket;
     removedFromPl: CutBucket;
+    /** Empty whenever Chris's tick-box hides FED from this app — Money App
+     *  won't name what it's hiding, so there's nothing to render. */
+    fed: CutBucket;
   };
 };
 
@@ -217,6 +220,9 @@ export async function getBusinessFinances(
   // The Slim (seller's view) cut: drop the transactions Chris marked "Remove
   // from P&L". Off unless asked for, so no existing caller moves.
   slim: boolean = false,
+  // Drop FED-tagged transactions. One-way: Money App ORs this with Chris's own
+  // tick-box, so asking is only ever a request to see LESS.
+  noFed: boolean = false,
 ): Promise<{ data: BusinessFinances | null; error: string | null }> {
   const baseUrl = apiUrl();
   const apiKey = process.env.MONEYAPP_API_KEY;
@@ -232,6 +238,7 @@ export async function getBusinessFinances(
   const cutParams = (extra?: Record<string, string>) => {
     const p = new URLSearchParams({ email, operational: String(operational), ...extra });
     if (slim) p.set("trim", "slim");
+    if (noFed) p.set("fed", "hide");
     return p;
   };
 
@@ -476,6 +483,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
       interest: mergeBuckets((r) => r.cutDetail?.interest),
       nonOperational: mergeBuckets((r) => r.cutDetail?.nonOperational),
       removedFromPl: mergeBuckets((r) => r.cutDetail?.removedFromPl),
+      fed: mergeBuckets((r) => r.cutDetail?.fed),
     },
   };
 }

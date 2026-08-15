@@ -35,6 +35,7 @@ export default async function BusinessFinancesPage({
     isAllTime,
     mode.operational,
     mode.slim,
+    mode.noFed,
   );
 
   if (!data) {
