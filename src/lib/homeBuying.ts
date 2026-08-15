@@ -281,7 +281,28 @@ export type HomeBuyingResult = {
   afterTax: LoanSize;
   /** The same sum run on the pre-tax figure, which is what a lender really uses. */
   beforeTax: LoanSize;
+  /**
+   * The massage income at which a lender would start allowing anything at all —
+   * the point where the cap finally clears the car and the cards. Null when the
+   * knobs make it unreachable (a 0% cap, or all income going to tax).
+   */
+  breakEvenGrossYear: number | null;
 };
+
+// Read the DTI sum backwards: what income does it take before the cap clears
+// what's already owed? Below this figure the answer is zero no matter what the
+// house costs, which is worth saying out loud rather than showing a blank.
+function breakEvenIncome(input: HomeBuyingInputs): number | null {
+  const dti = clamp(input.dtiPct, 0, 100) / 100;
+  const keep = 1 - clamp(input.taxPct, 0, 100) / 100;
+  if (dti <= 0 || keep <= 0) return null;
+  const owed =
+    Math.max(0, input.cardPayments) +
+    Math.max(0, input.carPayment) +
+    Math.max(0, input.otherPayments) +
+    Math.max(0, input.hoaMonthly);
+  return ((owed * 12) / dti) / keep;
+}
 
 export function homeBuyingMath(input: HomeBuyingInputs): HomeBuyingResult {
   const grossYear = Math.max(0, input.yearlyMassage);
@@ -308,6 +329,7 @@ export function homeBuyingMath(input: HomeBuyingInputs): HomeBuyingResult {
     taxRatePinned,
     afterTax: sizeLoan(netYear / 12, taxRatePct, input),
     beforeTax: sizeLoan(grossYear / 12, taxRatePct, input),
+    breakEvenGrossYear: breakEvenIncome(input),
   };
 }
 

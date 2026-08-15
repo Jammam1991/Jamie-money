@@ -475,15 +475,18 @@ export async function getHouseholdIncome(): Promise<HouseholdIncome> {
 // default for that one knob rather than throwing the whole set away.
 export const HOME_BUYING_KEY = "home_buying";
 
-export async function getHomeBuying(): Promise<HomeBuyingInputs> {
+// Null means Jamie has never touched the page, which is different from him
+// having saved something that happens to match the defaults — the page starts
+// him off from his own weekly earnings rather than a made-up figure.
+export async function getHomeBuying(): Promise<HomeBuyingInputs | null> {
   const c = client();
-  if (!c) return DEFAULT_HOME_BUYING;
+  if (!c) return null;
   const { data, error } = await c
     .from("settings")
     .select("value")
     .eq("key", HOME_BUYING_KEY)
     .maybeSingle();
-  if (error || !data?.value) return DEFAULT_HOME_BUYING;
+  if (error || !data?.value) return null;
   try {
     const saved = JSON.parse(String(data.value)) as Partial<HomeBuyingInputs>;
     const num = (v: unknown, fallback: number) => {
@@ -508,7 +511,7 @@ export async function getHomeBuying(): Promise<HomeBuyingInputs> {
       hoaMonthly: num(saved.hoaMonthly, DEFAULT_HOME_BUYING.hoaMonthly),
     };
   } catch {
-    return DEFAULT_HOME_BUYING;
+    return null;
   }
 }
 

@@ -129,8 +129,24 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
             </div>
           </>
         ) : (
-          <div className="mt-2 text-[14px]">
-            Nothing, yet. {shortfallLine(best.shortfall, best.ceiling)}
+          <div className="mt-2 space-y-3 text-[14px]">
+            <p>Nothing, yet. {shortfallLine(best.shortfall, best.ceiling)}</p>
+            {result.breakEvenGrossYear !== null && (
+              <Tint>
+                <div className="text-[12px] text-muted">
+                  What it would take to get off zero
+                </div>
+                <div className="text-[17px] font-semibold">
+                  {money(result.breakEvenGrossYear)} a year from massage
+                </div>
+                <div className="mt-1 text-[13px] text-muted">
+                  That&apos;s {money(result.breakEvenGrossYear / 12)} a month, and
+                  it only gets you to the doorstep — every dollar past it is what
+                  actually buys house. Clearing the car or the cards moves this
+                  number down far faster than earning more moves it up.
+                </div>
+              </Tint>
+            )}
           </div>
         )}
       </Card>
@@ -478,8 +494,8 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
               you typed.
             </li>
             <li>
-              <strong>Self-employed money needs a history.</strong> Most lenders
-              want two years of tax returns showing the massage income before
+              <strong>Self-employed money needs a history.</strong>{" "}
+              Most lenders want two years of tax returns showing the massage income before
               they&apos;ll count a dollar of it. What you expect to earn next year
               isn&apos;t something they can lend against yet.
             </li>
@@ -490,13 +506,13 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
             </li>
             <li>
               <strong>Paying off the card and the car changes everything.</strong>{" "}
-              Those two take {money(inputs.cardPayments + inputs.carPayment)} a
-              month off the top before a house gets a look in. Set them to zero
+              Those two take {money(inputs.cardPayments + inputs.carPayment)}{" "}
+              a month off the top before a house gets a look in. Set them to zero
               above and see what that&apos;s worth.
             </li>
             <li>
-              <strong>The cap is not the target.</strong> Borrowing right up to a
-              50% DTI leaves nothing for a broken furnace. Lenders lend to the
+              <strong>The cap is not the target.</strong>{" "}
+              Borrowing right up to a {inputs.dtiPct}% DTI leaves nothing for a broken furnace. Lenders lend to the
               edge; you don&apos;t have to stand on it.
             </li>
           </ul>
