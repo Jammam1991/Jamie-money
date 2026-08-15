@@ -7,12 +7,8 @@ import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
 import { getRole, isViewingAsJamie } from "@/lib/auth";
-import {
-  getCashLog,
-  getComingSoonPages,
-  getMenuOrder,
-  getOwesCharges,
-} from "@/lib/store";
+import { getCashLog, getComingSoonPages, getOwesCharges } from "@/lib/store";
+import { getMenuOrder } from "@/lib/menuOrder";
 import { computePastDue, monthStart } from "@/lib/pastDue";
 
 const geistSans = Geist({
@@ -52,8 +48,9 @@ export default async function RootLayout({
 
   const admin = role === "admin" && !viewingAsJamie;
 
-  // The order Chris dragged the slide-out menu into. Jamie gets the same one —
-  // it's the menu, not a per-person preference.
+  // The slide-out menu in whatever order the person looking at it dragged it
+  // into. Chris and Jamie each have their own, so this is read for whoever is
+  // logged in — including Chris in "View as Jamie", who gets Jamie's.
   const menuOrder = await getMenuOrder();
 
   // The "Past Due" tab only exists when something is actually late. Chris keeps
@@ -90,7 +87,11 @@ export default async function RootLayout({
             spacing on every screen. */}
         <main className="app-shell mx-auto min-h-screen max-w-md px-4 pt-6 md:max-w-3xl md:px-6">
           <AdminBar admin={role === "admin"} loggedIn={role !== null} viewingAsJamie={viewingAsJamie} />
-          <Header admin={admin} menuOrder={menuOrder} />
+          <Header
+            canReorder={role !== null}
+            forJamie={viewingAsJamie}
+            menuOrder={menuOrder}
+          />
           <UpdateNotice />
           {children}
         </main>

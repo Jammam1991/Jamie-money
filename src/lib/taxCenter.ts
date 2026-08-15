@@ -94,6 +94,11 @@ export type TaxBreakdown = {
 
 export type TaxFilingResult = {
   year: number;
+  /** False for a year with no hand-entered Filed record in Money App yet —
+   *  everything below is still a projection, not what actually happened.
+   *  Missing on an older Money App deploy, so `normalize` treats absence as
+   *  filed rather than mislabeling every already-working year unfiled. */
+  filed: boolean;
   taxesPaid: number | null;
   refundAmount: number | null;
   refundUsedFor: string | null;
@@ -202,6 +207,7 @@ function normalize(row: Record<string, unknown>): TaxFilingResult {
   const r = row as Partial<TaxFilingResult> & Record<string, unknown>;
   return {
     year: Number(r.year),
+    filed: r.filed ?? true,
     taxesPaid: r.taxesPaid ?? null,
     refundAmount: r.refundAmount ?? null,
     refundUsedFor: r.refundUsedFor ?? null,

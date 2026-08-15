@@ -94,11 +94,13 @@ export default function BusinessFinancesClient({
   };
 
   const { view, noMistakes } = data;
-  // Chris's tick-box wins over the URL: a `?view=fed` link opened after he
-  // switched FED hiding on would otherwise show a headline promising a
-  // difference the feed can no longer describe.
+  // Whether FED can be NAMED on this screen. The tax view drops those items
+  // either way — when Chris's tick-box is on they never reach the feed at all,
+  // so there's nothing left to drop — but saying "leaving out everything Chris
+  // tagged FED" out loud would undo the hiding he asked for. So this gates the
+  // wording and the itemised list, not the cut itself.
   const offerFed = !data.view.hide_fed;
-  const mode = modeById(modeId === "fed" && !offerFed ? "full" : modeId);
+  const mode = modeById(modeId);
 
   // A year with no mistakes marked still has a `noMistakes` block, just an
   // empty one — so whether the clean cut is worth offering is a question about
@@ -330,9 +332,7 @@ function ViewPicker({
   offerClean: boolean;
   offerFed: boolean;
 }) {
-  const modes = VIEW_MODES.filter(
-    (m) => (m.id !== "clean" || offerClean) && (m.id !== "fed" || offerFed),
-  );
+  const modes = VIEW_MODES.filter((m) => m.id !== "clean" || offerClean);
 
   return (
     <Card>
@@ -361,7 +361,7 @@ function ViewPicker({
                 className="mt-0.5 text-[12px]"
                 style={active ? { color: "rgba(255,255,255,0.88)" } : { color: "var(--muted)" }}
               >
-                {m.blurb}
+                {!offerFed && m.blurbFedHidden ? m.blurbFedHidden : m.blurb}
               </p>
             </Link>
           );

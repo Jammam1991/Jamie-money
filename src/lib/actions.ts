@@ -9,6 +9,8 @@ import {
   getBillDocuments,
   getBillPayments,
   getComingSoonPages,
+  getDeferredDebtIds,
+  DEFERRED_DEBTS_KEY,
   recordLogin,
   HOME_BUYING_KEY,
   HOUSEHOLD_INCOME_KEY,
@@ -37,7 +39,7 @@ import {
   vaultConfigured,
   type RevealResult,
 } from "./passwords";
-import { MENU_ORDER_KEY } from "./store";
+import { menuOrderKey } from "./menuOrder";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
 import type { HomeBuyingInputs } from "./homeBuying";
 import type { BillDocument, BillPayment, CashKind } from "./data";
@@ -159,6 +161,38 @@ export async function toggleViewAsJamie(): Promise<void> {
 // Seconds fit inside Postgres' integer column; milliseconds would overflow.
 function nextSort(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+// ── Which debts have their payments deferred ─────────────────────────────────
+// A deferred debt is still owed and still counts in every balance on the page.
+// All this changes is the monthly figure: it's what isn't being paid right now,
+// so Jamie can see what actually leaves each month next to what will once these
+// start.
+//
+// Stored as one JSON list of debt ids under the `deferred_debts` setting.
+export async function setDebtDeferred(
+  id: string,
+  deferred: boolean,
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const next = new Set(await getDeferredDebtIds());
+  if (deferred) next.add(id);
+  else next.delete(id);
+
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: DEFERRED_DEBTS_KEY, value: JSON.stringify([...next]) },
+      { onConflict: "key" },
+    );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  revalidatePath("/settings");
+  return { ok: true };
 }
 
 // ── Which pages say "Coming Soon" to Jamie ────────────────────────────────────
@@ -1613,16 +1647,23 @@ export async function previewJobLink(
 }
 
 // ── The order of the slide-out menu ──────────────────────────────────────────
-// Chris drags the rows; this saves the result. Admin-only, like everything else
-// that shapes what Jamie sees.
+// Whoever is looking drags their own rows; this saves them. Chris and Jamie
+// each have their own order, so neither rearranges the other's menu — this is
+// how someone likes their own screen, not something Chris sets for Jamie.
+//
+// Which order gets written is decided by `menuOrderKey()` from the session, not
+// passed in from the browser. A key coming from the client would let Jamie hand
+// back Chris's and overwrite it.
 //
 // An empty list deletes the setting and puts the menu back to the order it has
 // in the code, which is what the "Reset" button sends.
 export async function setMenuOrder(hrefs: string[]): Promise<ActionResult> {
-  const denied = await guard();
+  const denied = await guardLoggedIn();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
+  const key = await menuOrderKey();
+  if (key === null) return NOT_ALLOWED;
 
   // Strings only, each once. A duplicate would render one row twice and push
   // another off the end of the menu.
@@ -1633,13 +1674,10 @@ export async function setMenuOrder(hrefs: string[]): Promise<ActionResult> {
 
   const { error } =
     clean.length === 0
-      ? await c.from("settings").delete().eq("key", MENU_ORDER_KEY)
+      ? await c.from("settings").delete().eq("key", key)
       : await c
           .from("settings")
-          .upsert(
-            { key: MENU_ORDER_KEY, value: JSON.stringify(clean) },
-            { onConflict: "key" },
-          );
+          .upsert({ key, value: JSON.stringify(clean) }, { onConflict: "key" });
   if (error) return { ok: false, error: error.message };
 
   // The menu is in the layout, so every page renders it — the whole tree has to

@@ -216,40 +216,6 @@ export async function getSettlementTerms(): Promise<SettlementTerms> {
   }
 }
 
-// ── The order of the slide-out menu ──────────────────────────────────────────
-// A list of hrefs, saved by Chris dragging the rows around. It's only an
-// ordering: the menu itself is still the list in Header.tsx, so a page can
-// never appear here that doesn't exist, and one dropped from the code just
-// falls out of the saved order harmlessly.
-//
-// Anything not in the saved list keeps its place at the end rather than
-// vanishing — so adding a page later doesn't need this setting touched, and a
-// half-written order can't hide a screen from Jamie.
-export const MENU_ORDER_KEY = "menu_order";
-
-export async function getMenuOrder(): Promise<string[]> {
-  const c = client();
-  if (!c) return [];
-  const { data, error } = await c
-    .from("settings")
-    .select("value")
-    .eq("key", MENU_ORDER_KEY)
-    .maybeSingle();
-  if (error || !data?.value) return [];
-  try {
-    const parsed = JSON.parse(String(data.value));
-    if (!Array.isArray(parsed)) return [];
-    // Strings only, and each href once — a duplicate would otherwise render the
-    // same row twice and drop another off the end.
-    const seen = new Set<string>();
-    return parsed
-      .filter((h): h is string => typeof h === "string")
-      .filter((h) => (seen.has(h) ? false : (seen.add(h), true)));
-  } catch {
-    return [];
-  }
-}
-
 // ── Jamie's share of the gym investment ───────────────────────────────────────
 // What percent of the combined business debt (the direct loans plus the
 // personal money Chris put in) is Jamie's. Null means Chris hasn't set a
@@ -311,6 +277,34 @@ export async function getMoneyAppFico(): Promise<{ score: number; date: string }
 // page asks again through pageGate — two round trips to the database for the
 // same short list on every single page view. Wrapped, the second one is free,
 // and it still re-reads on the next request.
+// ── Debts whose payments are deferred ────────────────────────────────────────
+// Chris ticks these in Settings. A deferred debt is still owed and still shows
+// its balance everywhere — it's only the monthly payment that isn't being made
+// right now, so the Debt page can show what's actually going out each month
+// next to what will go out once these start.
+//
+// Stored as one JSON list of debt ids under the `deferred_debts` setting.
+export const getDeferredDebtIds = cache(async function getDeferredDebtIds(): Promise<
+  string[]
+> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", DEFERRED_DEBTS_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return [];
+  try {
+    const parsed = JSON.parse(String(data.value));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+});
+
+export const DEFERRED_DEBTS_KEY = "deferred_debts";
+
 export const getComingSoonPages = cache(async function getComingSoonPages(): Promise<
   string[]
 > {
