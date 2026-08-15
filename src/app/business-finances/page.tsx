@@ -4,6 +4,7 @@ import BusinessFinancesClient from "@/components/BusinessFinancesClient";
 import { pageGate } from "@/lib/visibility";
 import { businessFinancesReady, getBusinessFinances } from "@/lib/businessFinances";
 import { modeById, readViewMode } from "@/lib/businessViewModes";
+import { getJamieEarnedPay } from "@/lib/gymPay";
 
 export const dynamic = "force-dynamic";
 
@@ -29,14 +30,14 @@ export default async function BusinessFinancesPage({
   const modeId = readViewMode(sp);
   const mode = modeById(modeId);
 
-  const { data, error } = await getBusinessFinances(
-    year,
-    month,
-    isAllTime,
-    mode.operational,
-    mode.slim,
-    mode.noFed,
-  );
+  // Fetched alongside Money App rather than after it — the two have nothing
+  // to do with each other, so there's no reason to pay for them one at a
+  // time. jamiePay is a bonus figure (see the toggle in the client): null on
+  // any failure, never what takes this page down.
+  const [{ data, error }, jamiePay] = await Promise.all([
+    getBusinessFinances(year, month, isAllTime, mode.operational, mode.slim, mode.noFed),
+    getJamieEarnedPay(year, month, isAllTime),
+  ]);
 
   if (!data) {
     return (
@@ -61,7 +62,7 @@ export default async function BusinessFinancesPage({
   return (
     <div>
       <PageTitle>Business Finances</PageTitle>
-      <BusinessFinancesClient data={data} modeId={modeId} />
+      <BusinessFinancesClient data={data} modeId={modeId} jamiePay={jamiePay} />
     </div>
   );
 }
