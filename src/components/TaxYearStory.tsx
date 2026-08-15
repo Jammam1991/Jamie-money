@@ -267,7 +267,7 @@ function TaxSection({
 
       <div className="mt-3 space-y-1 border-t border-border pt-2">
         <Row label="Total tax for the year" amount={tax.total} strong />
-        <Row label="Already paid in through the year" amount={paidIn} />
+        <Row label="Chris paid through the year at the bank" amount={paidIn} />
       </div>
 
       {taxesPaid != null && (
