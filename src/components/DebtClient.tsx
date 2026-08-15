@@ -66,7 +66,8 @@ function ficoLabel(score: number): string {
 // separate kinds of debt and not one thing at four sizes.
 const VIOLET = "#6d28d9"; // Jamie's cards
 const SKY = "#0369a1"; // Jamie's car
-const AMBER = "#b45309"; // the gym
+const AMBER = "#b45309"; // direct business debt
+const ROSE = "#d1495a"; // personal debt used for business (Due to Chris)
 const RED = "#b3261e"; // the settlement
 const GREEN = "#167a5b";
 
@@ -74,6 +75,11 @@ const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
 const primaryBtn =
   "rounded-lg px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
+
+interface PersonalDebtItem {
+  label: string;
+  amount: number;
+}
 
 // Which rows belong to the gym rather than to Jamie personally. Money App says
 // so outright, which is the only thing that gets it right: the names give no
@@ -189,20 +195,31 @@ export default function DebtClient({
 
   // The sections at the top, which do count everything that's owed.
   const businessTotal = totalBalance(businessDebts);
-  const securedTotal = total + settlement.balance + businessTotal;
+  // Hardcoded personal debt used for business (Due to Chris) — calculated in breakdown
+  const dueToChrisItems: PersonalDebtItem[] = [
+    { label: "SoFi personal loans", amount: 39000 },
+    { label: "Kinecta line of credit", amount: 33000 },
+    { label: "Credit cards", amount: 32000 },
+    { label: "LOC draws & advances", amount: 25000 },
+    { label: "Income borrowed", amount: 15000 },
+    { label: "Other personal debt", amount: 9000 },
+  ];
+  const dueToChrisTotal = dueToChrisItems.reduce((s, item) => s + item.amount, 0);
+  const securedTotal = total + settlement.balance + businessTotal + dueToChrisTotal;
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
   // The same money cut a different way: Jamie's own unsecured debt, his car,
   // the gym's debt, and the settlement — kept apart rather than lumped into
   // one "Unsecured" line, so a business balance never reads as Jamie's. These
-  // four still add up to the total exactly.
+  // still add up to the total exactly.
   //
   // Each one carries the debts behind it, so tapping a bucket opens the very
   // rows it was added up from. The whole list used to sit open on the page,
   // which meant scrolling past a dozen accounts to reach anything else.
   const personalUnsecuredDebts = personalDebts.filter(isUnsecured);
   const personalCarDebts = personalDebts.filter(isCarLoan);
+
   const breakdown = [
     {
       key: "personal-cards",
@@ -228,11 +245,22 @@ export default function DebtClient({
       key: "business",
       emoji: "🏋️",
       color: AMBER,
-      label: "The gym",
+      label: "Direct business debt",
       note: "the gym's loans and cards",
       balance: businessTotal,
       monthly: totalMinimum(businessDebts),
       debts: businessDebts,
+    },
+    {
+      key: "due-to-chris",
+      emoji: "💰",
+      color: ROSE,
+      label: "Personal debt used for business",
+      note: "borrowed and lent to the gym (Due to Chris)",
+      balance: dueToChrisTotal,
+      monthly: 0, // no structured monthly payment
+      debts: [] as Debt[], // uses custom rendering with items
+      items: dueToChrisItems,
     },
     {
       key: "divorce",
@@ -250,10 +278,10 @@ export default function DebtClient({
       monthly: settlement.minPayment,
       debts: [] as Debt[], // it has no rows — it opens its own panel instead
     },
-    // The gym's row stays even at zero, so it's clear nothing is hiding: the
-    // names Chris expects there (AMPAC, Pace, the US Bank card) have to exist
-    // as debts before they can be sorted into it.
-  ].filter((row) => row.balance > 0 || row.key === "business");
+    // Both direct and due-to-Chris rows show even at zero to be clear nothing
+    // is hiding: the names Chris expects there need to exist as debts before
+    // they can be sorted into them.
+  ].filter((row) => row.balance > 0 || row.key === "business" || row.key === "due-to-chris");
 
   // New debt added this month and this year. Both come from the same list of
   // charges, so the two numbers can never disagree about what counts.
@@ -628,6 +656,17 @@ export default function DebtClient({
                   >
                     {b.key === "divorce" ? (
                       settlementPanel()
+                    ) : b.key === "due-to-chris" && (b as any).items ? (
+                      <div className="space-y-2">
+                        {(b as any).items.map((item: PersonalDebtItem, i: number) => (
+                          <div key={i} className="flex items-center justify-between py-2">
+                            <span className="text-sm text-zinc-100">{item.label}</span>
+                            <span className="font-medium text-zinc-100">
+                              {money(item.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     ) : b.debts.length > 0 ? (
                       b.debts.map(row)
                     ) : (
