@@ -51,6 +51,12 @@ export type ScheduleCLineTx = {
   accountPath?: string | null;
 };
 
+/** One named thing inside a cut's difference — a category and what it came to. */
+export type CutItem = { label: string; amount: number; count: number };
+
+/** One reason two cuts of the same year disagree, itemized. */
+export type CutBucket = { total: number; items: CutItem[] };
+
 /** Schedule C for one year: the totals, the tax lines, profit by month. */
 export type Rollup = {
   year: number;
@@ -81,9 +87,18 @@ export type Rollup = {
   mistakesRemoved: boolean;
   operational: boolean;
   /** True when the transactions Chris marked "Remove from P&L" were left out —
-   *  the Slim (seller's view) cut. Optional: it landed in Money App after this
-   *  type did. */
+   *  the Seller cut. Optional: it landed in Money App after this type did. */
   slimmed?: boolean;
+  /** WHY this cut differs from the others, named category by category. Money
+   *  App works these out; this app only decides which are "left out" and which
+   *  are "counted", which depends on the cut on screen. Optional — an older
+   *  Money App sends nothing and the lists simply don't render. */
+  cutDetail?: {
+    grants: CutBucket;
+    interest: CutBucket;
+    nonOperational: CutBucket;
+    removedFromPl: CutBucket;
+  };
 };
 
 /** One transaction Chris marked as a start-up mistake in Money App. */
@@ -398,6 +413,30 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
   const sumExpenses = unique.reduce((sum, r) => sum + r.expenses, 0);
   const sumFinanceCharges = unique.reduce((sum, r) => sum + (r.financeCharges ?? 0), 0);
 
+  // Same category across two years is one row in the all-time list, not two.
+  const mergeBuckets = (pick: (r: Rollup) => CutBucket | undefined): CutBucket => {
+    const items = new Map<string, CutItem>();
+    let total = 0;
+    for (const r of unique) {
+      const b = pick(r);
+      if (!b) continue;
+      total += b.total;
+      for (const item of b.items) {
+        const existing = items.get(item.label);
+        if (existing) {
+          existing.amount += item.amount;
+          existing.count += item.count;
+        } else {
+          items.set(item.label, { ...item });
+        }
+      }
+    }
+    return {
+      total,
+      items: [...items.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+    };
+  };
+
   const monthlyNetProfit = months.map(
     ({ year, month }) => byYear.get(year)?.monthlyNetProfit[month] ?? 0,
   );
@@ -432,6 +471,12 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     mistakesRemoved: unique.some((r) => r.mistakesRemoved),
     operational: unique.some((r) => r.operational),
     slimmed: unique.some((r) => r.slimmed),
+    cutDetail: {
+      grants: mergeBuckets((r) => r.cutDetail?.grants),
+      interest: mergeBuckets((r) => r.cutDetail?.interest),
+      nonOperational: mergeBuckets((r) => r.cutDetail?.nonOperational),
+      removedFromPl: mergeBuckets((r) => r.cutDetail?.removedFromPl),
+    },
   };
 }
 

@@ -17,6 +17,7 @@ export type PageKey =
   | "divorce"
   | "married-vs-divorce"
   | "gym-story"
+  | "home-buying"
   | "big-picture";
 
 export interface AppPage {
@@ -117,6 +118,14 @@ export const PAGES: AppPage[] = [
     label: "Gym Story",
     where: "menu",
     blurb: "How the gym started, backed by the real numbers from Money App.",
+  },
+  {
+    key: "home-buying",
+    href: "/home-buying",
+    label: "Home Buying",
+    where: "menu",
+    blurb:
+      "What massage income could buy: the biggest mortgage and house a lender would allow.",
   },
   {
     key: "big-picture",

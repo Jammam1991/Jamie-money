@@ -18,6 +18,7 @@ import {
   type OwesCharge,
 } from "./data";
 import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
+import { DEFAULT_HOME_BUYING, type HomeBuyingInputs } from "./homeBuying";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
@@ -464,6 +465,50 @@ export async function getHouseholdIncome(): Promise<HouseholdIncome> {
     return { chris: positive(parsed?.chris), rental: positive(parsed?.rental) };
   } catch {
     return NO_HOUSEHOLD_INCOME;
+  }
+}
+
+// ── Home Buying ──────────────────────────────────────────────────────────────
+// The whole page is knobs, and Jamie should find them where he left them next
+// time. One JSON row in `settings`, same as the household income above, so
+// there's no table to create. Anything missing or malformed falls back to the
+// default for that one knob rather than throwing the whole set away.
+export const HOME_BUYING_KEY = "home_buying";
+
+export async function getHomeBuying(): Promise<HomeBuyingInputs> {
+  const c = client();
+  if (!c) return DEFAULT_HOME_BUYING;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", HOME_BUYING_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return DEFAULT_HOME_BUYING;
+  try {
+    const saved = JSON.parse(String(data.value)) as Partial<HomeBuyingInputs>;
+    const num = (v: unknown, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : fallback;
+    };
+    return {
+      yearlyMassage: num(saved.yearlyMassage, DEFAULT_HOME_BUYING.yearlyMassage),
+      taxPct: num(saved.taxPct, DEFAULT_HOME_BUYING.taxPct),
+      place: typeof saved.place === "string" ? saved.place : DEFAULT_HOME_BUYING.place,
+      downPct: num(saved.downPct, DEFAULT_HOME_BUYING.downPct),
+      ratePct: num(saved.ratePct, DEFAULT_HOME_BUYING.ratePct),
+      years: num(saved.years, DEFAULT_HOME_BUYING.years),
+      cardPayments: num(saved.cardPayments, DEFAULT_HOME_BUYING.cardPayments),
+      carPayment: num(saved.carPayment, DEFAULT_HOME_BUYING.carPayment),
+      otherPayments: num(saved.otherPayments, DEFAULT_HOME_BUYING.otherPayments),
+      dtiPct: num(saved.dtiPct, DEFAULT_HOME_BUYING.dtiPct),
+      // Null is a real answer here — it means "work the rate out from the place".
+      propertyTaxPct: positive(saved.propertyTaxPct),
+      insurancePct: num(saved.insurancePct, DEFAULT_HOME_BUYING.insurancePct),
+      pmiPct: num(saved.pmiPct, DEFAULT_HOME_BUYING.pmiPct),
+      hoaMonthly: num(saved.hoaMonthly, DEFAULT_HOME_BUYING.hoaMonthly),
+    };
+  } catch {
+    return DEFAULT_HOME_BUYING;
   }
 }
 

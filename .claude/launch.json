@@ -7,6 +7,12 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "verify",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["next", "start", "--port", "3987"],
+      "port": 3987
     }
   ]
 }
