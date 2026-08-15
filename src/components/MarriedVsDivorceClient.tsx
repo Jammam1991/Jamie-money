@@ -83,6 +83,8 @@ export default function MarriedVsDivorceClient({
       <LifeCard low={data.lifeCoverLow} high={data.lifeCoverHigh} />
       <HealthCard benefits={data} />
 
+      <NotAReasonToMarry value={value} />
+
       <TiedTogether />
     </div>
   );
@@ -307,6 +309,44 @@ function HealthCard({ benefits }: { benefits: MarriageBenefits }) {
         </>
       )}
     </Benefit>
+  );
+}
+
+// ── The honest caveat ────────────────────────────────────────────────────────
+// Everything above is a list of reasons a marriage pays. Left on its own that
+// reads like an argument for getting married, which nobody believes and which
+// makes the rest of the page easier to wave off. It isn't the argument.
+//
+// The question here isn't whether to get married — that already happened. It's
+// whether to undo it right now, while the income isn't built yet. Those are
+// different questions with different answers, and saying so out loud is what
+// makes the second half worth reading.
+
+function NotAReasonToMarry({ value }: { value: ReturnType<typeof yearlyValue> }) {
+  const known = value.missing < 3;
+
+  return (
+    <Card>
+      <p className="text-[15px] font-semibold">
+        <span className="mr-1.5">🤝</span>
+        Nobody gets married for this
+      </p>
+      <p className="mt-2 text-[14px] text-muted">
+        Worth saying plainly: none of the money above is a reason to get married.
+        Nobody picks a marriage for a car insurance discount, and this page
+        isn&apos;t arguing that they should.
+      </p>
+      <p className="mt-2 text-[14px]">
+        But that isn&apos;t the question. We&apos;re already married. The only
+        question on the table is whether to undo it right now — and undoing it
+        costs {known ? `${money(value.total)} a year` : "everything listed above"}{" "}
+        and buys back nothing.
+      </p>
+      <p className="mt-2 text-[14px] font-medium">
+        Staying married until the income is built is simply the cheaper way
+        through. Not a reason to have married — a reason not to unwind it yet.
+      </p>
+    </Card>
   );
 }
 
