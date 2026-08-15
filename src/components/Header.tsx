@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, X, Scale, CreditCard, FileText, BookOpen, Building2, Landmark, Dumbbell, Compass, Briefcase } from "lucide-react";
+import { Menu, X, Scale, CreditCard, FileText, BookOpen, Building2, Landmark, Dumbbell, Compass, Briefcase, HeartHandshake } from "lucide-react";
 
 // The slide-out menu. Every row always shows — a page parked as "Coming Soon"
 // on the Settings screen keeps its link and says so when Jamie opens it.
@@ -18,6 +18,9 @@ const links = [
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },
   { href: "/tax-center", label: "Tax Center", Icon: Landmark },
   { href: "/divorce", label: "Divorce", Icon: Scale },
+  // Sits right under it — that page is the mechanics of splitting up, this one
+  // is what the splitting up would actually cost.
+  { href: "/married-vs-divorce", label: "Married vs Divorce", Icon: HeartHandshake },
   {
     href: "/story",
     label: "The Debt Story",

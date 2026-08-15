@@ -15,6 +15,7 @@ export type PageKey =
   | "business-finances"
   | "tax-center"
   | "divorce"
+  | "married-vs-divorce"
   | "gym-story"
   | "big-picture";
 
@@ -101,6 +102,14 @@ export const PAGES: AppPage[] = [
     label: "Divorce",
     where: "menu",
     blurb: "Support, the split, benefits, key dates.",
+  },
+  {
+    key: "married-vs-divorce",
+    href: "/married-vs-divorce",
+    label: "Married vs Divorce",
+    where: "menu",
+    blurb:
+      "What staying married is worth in dollars, and why the guarantees aren't about the marriage.",
   },
   {
     key: "gym-story",
