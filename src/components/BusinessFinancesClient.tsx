@@ -7,9 +7,11 @@ import { Card, Tint } from "@/components/ui";
 import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
 import { showsProfit } from "@/lib/businessFinances";
 import {
+  cutLines,
   headlineFor,
   modeById,
   VIEW_MODES,
+  type CutLine,
   type ViewMode,
   type ViewModeId,
 } from "@/lib/businessViewModes";
@@ -140,6 +142,8 @@ export default function BusinessFinancesClient({
       {view.show_headline && (
         <Headline rollup={rollup} mode={mode} year={data.year} month={data.month} />
       )}
+
+      {view.show_headline && <CutDetailCard rollup={rollup} mode={mode} />}
 
       {/* The CPA cut leads with the tax lines: the question it answers is
           "which box does this go in", so the breakdown IS the answer and the
@@ -440,6 +444,137 @@ function IntroCard({
   );
 }
 
+// What this cut left out, and what it counted that another cut wouldn't —
+// itemized, because "leaves out one-off spending" is exactly the sentence that
+// makes someone go and ask WHICH one-off spending.
+//
+// Both lists, always. Showing only the exclusions reads as though the other
+// cuts are the honest ones; showing both makes the point that these are the
+// same four things every time, counted or not.
+function CutDetailCard({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
+  const { leftOut, counted } = cutLines(rollup, mode);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  // An older Money App sends no detail at all, and the full picture leaves
+  // nothing out. Either way there's no card to draw.
+  if (leftOut.length === 0 && counted.length === 0) return null;
+
+  return (
+    <Card>
+      <SectionTitle>What this view leaves in and out</SectionTitle>
+      <p className="mt-1 text-[13px] text-muted">
+        Tap any line to see exactly what&apos;s in it.
+      </p>
+
+      {leftOut.length > 0 && (
+        <>
+          <p className="mt-3 text-[13px] font-medium text-muted">Left out of the numbers above</p>
+          <ul className="mt-1 space-y-1">
+            {leftOut.map((l) => (
+              <CutRow
+                key={l.key}
+                line={l}
+                open={open.has(l.key)}
+                onToggle={() => toggle(l.key)}
+                tone="out"
+              />
+            ))}
+          </ul>
+        </>
+      )}
+
+      {counted.length > 0 && (
+        <>
+          <p className="mt-4 text-[13px] font-medium text-muted">
+            Counted here — other views leave these out
+          </p>
+          <ul className="mt-1 space-y-1">
+            {counted.map((l) => (
+              <CutRow
+                key={l.key}
+                line={l}
+                open={open.has(l.key)}
+                onToggle={() => toggle(l.key)}
+                tone="in"
+              />
+            ))}
+          </ul>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// One reason, expandable to the categories behind it. Same interaction as the
+// mistakes list and the line-by-line breakdown, so nothing here is a new thing
+// to learn.
+function CutRow({
+  line,
+  open,
+  onToggle,
+  tone,
+}: {
+  line: CutLine;
+  open: boolean;
+  onToggle: () => void;
+  tone: "in" | "out";
+}) {
+  return (
+    <li className="rounded-xl" style={{ background: "var(--tint)" }}>
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <ChevronDown
+            size={15}
+            className="shrink-0 text-muted transition-transform"
+            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+          />
+          <span className="min-w-0">
+            <span className="block truncate text-[14px] font-medium">{line.label}</span>
+            <span className="block text-[11px] leading-snug text-muted">{line.blurb}</span>
+          </span>
+        </span>
+        <span
+          className="shrink-0 text-[14px] font-medium"
+          style={{ color: tone === "in" ? "var(--text)" : "var(--muted)" }}
+        >
+          {money(Math.abs(line.bucket.total))}
+        </span>
+      </button>
+
+      {open && (
+        <ul className="space-y-1 px-3 pb-3">
+          {line.bucket.items.map((item) => (
+            <li
+              key={item.label}
+              className="flex items-baseline justify-between gap-3 rounded-lg bg-card px-2.5 py-2"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[13px]">{item.label}</p>
+                <p className="text-[11px] text-muted">
+                  {item.count === 1 ? "1 entry" : `${item.count} entries`}
+                </p>
+              </div>
+              <span className="shrink-0 text-[13px] font-medium">
+                {money(Math.abs(item.amount))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 // Money in, money out, what's left. The three numbers everything else explains.
 function Headline({
   rollup,
@@ -459,6 +594,15 @@ function Headline({
   // Only show year-end projection for current year, not for months or all-time
   const projection =
     typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;
+  // All-time spans however many real months have happened since Nov 2024 —
+  // monthlyNetProfit is built to that exact length (see chronologicalMonths
+  // in businessFinances.ts) — so annualizing is just scaling the total up to
+  // a 12-month pace, the same idea as the year-end projection above but for
+  // a span that isn't a single year to begin with.
+  const avgAnnualProfit =
+    year === "all-time" && rollup.monthlyNetProfit.length > 0
+      ? (profit / rollup.monthlyNetProfit.length) * 12
+      : null;
 
   return (
     <Card>
@@ -475,6 +619,11 @@ function Headline({
       {projection && (
         <p className="mt-1 text-[13px] text-muted">
           Trending toward {money(projection)} by year end
+        </p>
+      )}
+      {avgAnnualProfit !== null && (
+        <p className="mt-1 text-[13px] text-muted">
+          Averages to {money(avgAnnualProfit)} a year
         </p>
       )}
       {/* The same sentence as the picked button up in the selector, repeated

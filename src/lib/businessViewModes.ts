@@ -12,7 +12,7 @@
 // explainable in a line each. Whatever a mode leaves out, the books still hold:
 // this is display math, and Money App never changes what it stores.
 
-import type { Rollup } from "@/lib/businessFinances";
+import type { CutBucket, Rollup } from "@/lib/businessFinances";
 
 export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "clean";
 
@@ -165,4 +165,69 @@ export function headlineFor(rollup: Rollup, mode: ViewMode): Headline {
     moneyOut: rollup.cogs + rollup.expenses + (rollup.financeCharges ?? 0),
     profit: rollup.netProfit,
   };
+}
+
+/** One reason this cut differs from the others, ready to render. */
+export type CutLine = { key: string; label: string; blurb: string; bucket: CutBucket };
+
+const BUCKETS: Array<{
+  key: keyof NonNullable<Rollup["cutDetail"]>;
+  label: string;
+  blurb: string;
+  /** Which switch decides whether this cut leaves it out. */
+  droppedBy: "operational" | "slim";
+}> = [
+  {
+    key: "grants",
+    label: "Grant money",
+    blurb: "Money the gym was given, not money it earned.",
+    droppedBy: "operational",
+  },
+  {
+    key: "interest",
+    label: "Loan interest",
+    blurb: "The cost of the borrowing, not the cost of running the gym.",
+    droppedBy: "operational",
+  },
+  {
+    key: "nonOperational",
+    label: "Depreciation & tax payments",
+    blurb: "Paper costs and tax bills, not day-to-day running costs.",
+    droppedBy: "operational",
+  },
+  {
+    key: "removedFromPl",
+    label: "One-off spending",
+    blurb: "Things Chris marked as not carrying over to a new owner.",
+    droppedBy: "slim",
+  },
+];
+
+/**
+ * What this cut left out, and what it counted that another cut wouldn't.
+ *
+ * The four buckets are the same every time — only which SIDE they land on
+ * changes with the cut. That's the honest shape of it: nothing is being hidden
+ * from Jamie, the same four things are just being counted or not, and both
+ * lists get shown so either question is answered without switching modes.
+ *
+ * Empty buckets drop out. A year with no grant money shouldn't grow a "Grant
+ * money — $0" row on every screen.
+ */
+export function cutLines(
+  rollup: Rollup,
+  mode: ViewMode,
+): { leftOut: CutLine[]; counted: CutLine[] } {
+  const detail = rollup.cutDetail;
+  const leftOut: CutLine[] = [];
+  const counted: CutLine[] = [];
+  if (!detail) return { leftOut, counted };
+
+  for (const b of BUCKETS) {
+    const bucket = detail[b.key];
+    if (!bucket || bucket.items.length === 0) continue;
+    const line: CutLine = { key: b.key, label: b.label, blurb: b.blurb, bucket };
+    (mode[b.droppedBy] ? leftOut : counted).push(line);
+  }
+  return { leftOut, counted };
 }

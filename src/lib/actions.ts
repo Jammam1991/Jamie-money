@@ -10,6 +10,7 @@ import {
   getBillPayments,
   getComingSoonPages,
   recordLogin,
+  HOME_BUYING_KEY,
   HOUSEHOLD_INCOME_KEY,
   INVESTMENT_SPLIT_KEY,
   SETTLEMENT_TOTAL_KEY,
@@ -37,6 +38,7 @@ import {
   type RevealResult,
 } from "./passwords";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
+import type { HomeBuyingInputs } from "./homeBuying";
 import type { BillDocument, BillPayment, CashKind } from "./data";
 import { anyFeedConfigured, searchJobFeeds } from "./jobFeeds";
 import { readJobLink } from "./jobLink";
@@ -283,6 +285,51 @@ export async function setHouseholdIncome(
           );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/big-picture");
+  return { ok: true };
+}
+
+// ── Home Buying ───────────────────────────────────────────────────────────────
+// Jamie's own scratch pad, so it only needs a login — same as the cash log. The
+// numbers here are his guesses about his own work and the house he wants; there
+// is nothing to protect and every reason for him to keep tuning them.
+export async function setHomeBuying(
+  input: HomeBuyingInputs,
+): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const num = (v: number, max: number) =>
+    !Number.isFinite(v) || v < 0 ? 0 : Math.min(v, max);
+  const clean: HomeBuyingInputs = {
+    yearlyMassage: Math.round(num(input.yearlyMassage, 10_000_000)),
+    taxPct: num(input.taxPct, 100),
+    place: String(input.place ?? "").trim().slice(0, 100),
+    downPct: num(input.downPct, 95),
+    ratePct: num(input.ratePct, 30),
+    years: Math.round(num(input.years, 50)) || 30,
+    cardPayments: Math.round(num(input.cardPayments, 1_000_000)),
+    carPayment: Math.round(num(input.carPayment, 1_000_000)),
+    otherPayments: Math.round(num(input.otherPayments, 1_000_000)),
+    dtiPct: num(input.dtiPct, 100),
+    propertyTaxPct:
+      input.propertyTaxPct === null || !Number.isFinite(input.propertyTaxPct)
+        ? null
+        : num(input.propertyTaxPct, 20),
+    insurancePct: num(input.insurancePct, 20),
+    pmiPct: num(input.pmiPct, 10),
+    hoaMonthly: Math.round(num(input.hoaMonthly, 100_000)),
+  };
+
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: HOME_BUYING_KEY, value: JSON.stringify(clean) },
+      { onConflict: "key" },
+    );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/home-buying");
   return { ok: true };
 }
 
