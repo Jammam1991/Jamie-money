@@ -36,6 +36,7 @@ import {
   vaultConfigured,
   type RevealResult,
 } from "./passwords";
+import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
 import type { BillDocument, BillPayment, CashKind } from "./data";
 import { anyFeedConfigured, searchJobFeeds } from "./jobFeeds";
 import { readJobLink } from "./jobLink";
@@ -282,6 +283,43 @@ export async function setHouseholdIncome(
           );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/big-picture");
+  return { ok: true };
+}
+
+// ── Married vs Divorce ────────────────────────────────────────────────────────
+// The three benefits that can't be read from anywhere — the car discount, the
+// life cover, and the health premium Comerica pays most of. The joint tax
+// saving isn't here on purpose: that one comes live from the Tax Center feed,
+// so typing it would only let it drift from the real numbers.
+export async function setMarriageBenefits(
+  input: MarriageBenefits,
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const clean = (v: number | null) =>
+    v === null || !Number.isFinite(v) || v < 0 ? null : Math.round(v);
+  // A share can't be more than the whole premium — but blank still means blank,
+  // not 100%.
+  const pct = clean(input.healthEmployerPct);
+  const benefits: MarriageBenefits = {
+    carSavingYearly: clean(input.carSavingYearly),
+    lifeCoverLow: clean(input.lifeCoverLow),
+    lifeCoverHigh: clean(input.lifeCoverHigh),
+    healthPremiumMonthly: clean(input.healthPremiumMonthly),
+    healthEmployerPct: pct === null ? null : Math.min(pct, 100),
+  };
+
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: MARRIAGE_BENEFITS_KEY, value: JSON.stringify(benefits) },
+      { onConflict: "key" },
+    );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/married-vs-divorce");
   return { ok: true };
 }
 
