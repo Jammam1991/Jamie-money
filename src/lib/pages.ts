@@ -10,6 +10,7 @@ export type PageKey =
   | "owes"
   | "compare"
   | "job-vs-business"
+  | "career"
   | "credit-report"
   | "business-finances"
   | "tax-center"
@@ -62,6 +63,14 @@ export const PAGES: AppPage[] = [
     label: "Job vs Business",
     where: "menu",
     blurb: "The full write-up: pros, cons, job leads, journal.",
+  },
+  {
+    key: "career",
+    href: "/career",
+    label: "Career",
+    where: "menu",
+    blurb:
+      "Weighing up career paths, the jobs applied for and the resumes sent, and who's worth knowing.",
   },
   {
     key: "credit-report",
