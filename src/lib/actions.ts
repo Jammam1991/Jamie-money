@@ -37,6 +37,7 @@ import {
   vaultConfigured,
   type RevealResult,
 } from "./passwords";
+import { MENU_ORDER_KEY } from "./store";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
 import type { HomeBuyingInputs } from "./homeBuying";
 import type { BillDocument, BillPayment, CashKind } from "./data";
@@ -1609,4 +1610,40 @@ export async function previewJobLink(
   return result.ok
     ? { ok: true, preview: result.preview }
     : { ok: false, error: result.error };
+}
+
+// ── The order of the slide-out menu ──────────────────────────────────────────
+// Chris drags the rows; this saves the result. Admin-only, like everything else
+// that shapes what Jamie sees.
+//
+// An empty list deletes the setting and puts the menu back to the order it has
+// in the code, which is what the "Reset" button sends.
+export async function setMenuOrder(hrefs: string[]): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  // Strings only, each once. A duplicate would render one row twice and push
+  // another off the end of the menu.
+  const seen = new Set<string>();
+  const clean = (Array.isArray(hrefs) ? hrefs : [])
+    .filter((h): h is string => typeof h === "string" && h.startsWith("/"))
+    .filter((h) => (seen.has(h) ? false : (seen.add(h), true)));
+
+  const { error } =
+    clean.length === 0
+      ? await c.from("settings").delete().eq("key", MENU_ORDER_KEY)
+      : await c
+          .from("settings")
+          .upsert(
+            { key: MENU_ORDER_KEY, value: JSON.stringify(clean) },
+            { onConflict: "key" },
+          );
+  if (error) return { ok: false, error: error.message };
+
+  // The menu is in the layout, so every page renders it — the whole tree has to
+  // be revalidated or the old order stays put on screens already visited.
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
