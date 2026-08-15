@@ -3,13 +3,14 @@ import ComingSoon from "@/components/ComingSoon";
 import BusinessFinancesClient from "@/components/BusinessFinancesClient";
 import { pageGate } from "@/lib/visibility";
 import { businessFinancesReady, getBusinessFinances } from "@/lib/businessFinances";
+import { modeById, readViewMode } from "@/lib/businessViewModes";
 
 export const dynamic = "force-dynamic";
 
 export default async function BusinessFinancesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string; operational?: string }>;
+  searchParams: Promise<{ year?: string; month?: string; view?: string; operational?: string }>;
 }) {
   const { comingSoon } = await pageGate("business-finances");
   if (comingSoon) return <ComingSoon title="Business Finances" />;
@@ -22,11 +23,19 @@ export default async function BusinessFinancesPage({
   const isAllTime = yearStr === "all-time";
   const year = isAllTime ? undefined : (Number.isFinite(parseInt(yearStr, 10)) ? parseInt(yearStr, 10) : undefined);
   const month = Number.isFinite(parseInt(monthStr, 10)) ? parseInt(monthStr, 10) : undefined;
-  // Defaults on (absent = "true") — same figures the page always showed
-  // before this was a visible toggle.
-  const operational = sp.operational !== "false";
+  // Which of the five cuts to ask Money App for. The mode carries the switches
+  // so the page never has to reason about `operational` and `trim` separately
+  // — and so "which numbers am I looking at?" has one answer, not two.
+  const modeId = readViewMode(sp);
+  const mode = modeById(modeId);
 
-  const { data, error } = await getBusinessFinances(year, month, isAllTime, operational);
+  const { data, error } = await getBusinessFinances(
+    year,
+    month,
+    isAllTime,
+    mode.operational,
+    mode.slim,
+  );
 
   if (!data) {
     return (
@@ -51,7 +60,7 @@ export default async function BusinessFinancesPage({
   return (
     <div>
       <PageTitle>Business Finances</PageTitle>
-      <BusinessFinancesClient data={data} />
+      <BusinessFinancesClient data={data} modeId={modeId} />
     </div>
   );
 }
