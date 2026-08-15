@@ -255,8 +255,8 @@ export default function DebtClient({
       key: "due-to-chris",
       emoji: "💰",
       color: ROSE,
-      label: "Personal debt used for business",
-      note: "borrowed and lent to the gym (Due to Chris)",
+      label: "Personal debt for business",
+      note: "borrowed and lent to the gym",
       balance: dueToChrisTotal,
       monthly: 0, // no structured monthly payment
       debts: [] as Debt[], // uses custom rendering with items
@@ -660,10 +660,8 @@ export default function DebtClient({
                       <div className="space-y-2">
                         {(b as any).items.map((item: PersonalDebtItem, i: number) => (
                           <div key={i} className="flex items-center justify-between py-2">
-                            <span className="text-sm text-zinc-100">{item.label}</span>
-                            <span className="font-medium text-zinc-100">
-                              {money(item.amount)}
-                            </span>
+                            <span className="text-sm">{item.label}</span>
+                            <span className="font-medium">{money(item.amount)}</span>
                           </div>
                         ))}
                       </div>
