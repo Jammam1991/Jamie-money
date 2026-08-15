@@ -40,7 +40,12 @@ import PlaidConnect from "@/components/PlaidConnect";
 import MoneyAppConnect from "@/components/MoneyAppConnect";
 import DuplicateCleanup from "@/components/DuplicateCleanup";
 import DebtByYear from "@/components/DebtByYear";
-import type { DebtSnapshotRow, DebtTransaction, SettlementTerms } from "@/lib/store";
+import type {
+  DebtSnapshotRow,
+  DebtTransaction,
+  InvestmentSplitTerms,
+  SettlementTerms,
+} from "@/lib/store";
 import type { PayMonth } from "@/lib/gymPay";
 import {
   addDebt,
@@ -48,6 +53,7 @@ import {
   deleteDebt,
   deleteDebtTransaction,
   importDebts,
+  setInvestmentSplitTerms,
   setSettlementTerms,
   updateDebt,
 } from "@/lib/actions";
@@ -70,6 +76,17 @@ const AMBER = "#b45309"; // direct business debt
 const ROSE = "#d1495a"; // personal debt used for business (Due to Chris)
 const RED = "#b3261e"; // the settlement
 const GREEN = "#167a5b";
+const TEAL = "#0d7d73"; // Jamie's share of the gym investment, owed to Chris
+
+// The month before "YYYY-MM". Done on the string rather than with a Date, so
+// stepping back from January can't land in the wrong year via a timezone.
+function previousMonth(key: string): string {
+  const [year, month] = key.split("-").map(Number);
+  if (!year || !month) return key;
+  return month === 1
+    ? `${year - 1}-12`
+    : `${year}-${String(month - 1).padStart(2, "0")}`;
+}
 
 const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
@@ -140,6 +157,7 @@ export default function DebtClient({
   currentMonth,
   settlementMonthly,
   settlementTerms,
+  investmentSplitTerms,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -154,6 +172,7 @@ export default function DebtClient({
   currentMonth: string; // "YYYY-MM", the same shape transaction dates start with
   settlementMonthly: number; // monthly support from the Divorce page
   settlementTerms: SettlementTerms; // what Chris set; nulls fall back to the estimate
+  investmentSplitTerms: InvestmentSplitTerms; // what % of the gym investment is Jamie's; null falls back to 50/50
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -167,11 +186,14 @@ export default function DebtClient({
   // he saves rather than after the round trip.
   const [terms, setTerms] = useState<SettlementTerms>(settlementTerms);
   const [editingSettlement, setEditingSettlement] = useState(false);
+  // What Chris set Jamie's share of the gym investment to. Same pattern as the
+  // settlement: null means "no figure set", not "zero" — so it falls back to
+  // the 50/50 default instead of quietly telling Jamie he owes nothing.
+  const [splitTerms, setSplitTerms] = useState<InvestmentSplitTerms>(investmentSplitTerms);
+  const [editingSplit, setEditingSplit] = useState(false);
   // Which of the four buckets is open. One at a time — the point of folding
   // them away is that the page fits on a screen.
   const [openBucket, setOpenBucket] = useState<string | null>(null);
-  // Which of the two "new debt" tiles is showing the charges behind it.
-  const [openTile, setOpenTile] = useState<"month" | "year" | null>(null);
   const [openTools, setOpenTools] = useState(false);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
@@ -205,7 +227,25 @@ export default function DebtClient({
     { label: "Other personal debt", amount: 9000 },
   ];
   const dueToChrisTotal = dueToChrisItems.reduce((s, item) => s + item.amount, 0);
-  const securedTotal = total + settlement.balance + businessTotal + dueToChrisTotal;
+
+  // What Jamie owes Chris for his half of the gym investment, on top of the
+  // business loans already in his own name.
+  //
+  // Chris and Jamie split what's gone into the gym — the direct business debt
+  // plus the personal money Chris put in — by a percentage Chris sets here.
+  // Jamie's $52,423 in business loans already counts as part of his share, so
+  // only what's left after that comes out of the $153,000 Chris is personally
+  // carrying. Nothing new is being borrowed: this is that same $153,000, split
+  // by who it's really for.
+  const DEFAULT_SPLIT_PCT = 50;
+  const splitPct = splitTerms.splitPct ?? DEFAULT_SPLIT_PCT;
+  const totalInvestment = businessTotal + dueToChrisTotal;
+  const jamieInvestmentShare = totalInvestment * (splitPct / 100);
+  const jamieOwesChris = Math.max(0, jamieInvestmentShare - businessTotal);
+  const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
+
+  const securedTotal =
+    total + settlement.balance + businessTotal + dueToChrisTotal + jamieOwesChris;
   const securedMin = totalMinimum(debts) + settlement.minPayment;
   const securedInterest = monthlyInterest(debts);
 
@@ -230,6 +270,7 @@ export default function DebtClient({
       balance: totalBalance(personalUnsecuredDebts),
       monthly: totalMinimum(personalUnsecuredDebts),
       debts: personalUnsecuredDebts,
+      items: [] as PersonalDebtItem[],
     },
     {
       key: "car",
@@ -240,6 +281,7 @@ export default function DebtClient({
       balance: totalBalance(personalCarDebts),
       monthly: totalMinimum(personalCarDebts),
       debts: personalCarDebts,
+      items: [] as PersonalDebtItem[],
     },
     {
       key: "business",
@@ -250,6 +292,7 @@ export default function DebtClient({
       balance: businessTotal,
       monthly: totalMinimum(businessDebts),
       debts: businessDebts,
+      items: [] as PersonalDebtItem[],
     },
     {
       key: "due-to-chris",
@@ -261,6 +304,17 @@ export default function DebtClient({
       monthly: 0, // no structured monthly payment
       debts: [] as Debt[], // uses custom rendering with items
       items: dueToChrisItems,
+    },
+    {
+      key: "investment-split",
+      emoji: "🤝",
+      color: TEAL,
+      label: "Jamie's share of the investment",
+      note: `${splitPct}% of what's gone into the gym`,
+      balance: jamieOwesChris,
+      monthly: 0, // no structured monthly payment — this is owed to Chris, not a lender
+      debts: [] as Debt[], // uses custom rendering — see the split panel below
+      items: [] as PersonalDebtItem[],
     },
     {
       key: "divorce",
@@ -277,11 +331,18 @@ export default function DebtClient({
       balance: settlement.balance,
       monthly: settlement.minPayment,
       debts: [] as Debt[], // it has no rows — it opens its own panel instead
+      items: [] as PersonalDebtItem[],
     },
-    // Both direct and due-to-Chris rows show even at zero to be clear nothing
-    // is hiding: the names Chris expects there need to exist as debts before
-    // they can be sorted into them.
-  ].filter((row) => row.balance > 0 || row.key === "business" || row.key === "due-to-chris");
+    // Direct, due-to-Chris and investment-split rows show even at zero to be
+    // clear nothing is hiding: the names Chris expects there need to exist as
+    // debts before they can be sorted into them.
+  ].filter(
+    (row) =>
+      row.balance > 0 ||
+      row.key === "business" ||
+      row.key === "due-to-chris" ||
+      row.key === "investment-split",
+  );
 
   // New debt added this month and this year. Both come from the same list of
   // charges, so the two numbers can never disagree about what counts.
@@ -289,12 +350,28 @@ export default function DebtClient({
   // tx_date is YYYY-MM-DD, so the year and the month are read off the front of
   // the string — `new Date()` would shift a January 1st charge into the year
   // before depending on the timezone.
-  // Held as the lists rather than just the sums, because each tile opens onto
-  // the very charges its number was added up from.
-  const monthTxs = txs.filter((tx) => tx.txDate.startsWith(currentMonth));
-  const yearTxs = txs.filter((tx) => tx.txDate.startsWith(String(currentYear)));
-  const addedThisMonth = monthTxs.reduce((sum, tx) => sum + tx.amount, 0);
-  const addedThisYear = yearTxs.reduce((sum, tx) => sum + tx.amount, 0);
+  // Held as the lists rather than just the sums, because each card opens onto
+  // the very rows its number was added up from.
+  //
+  // New debt is two different things and they were never shown together. Chris
+  // lending money privately is one. Jamie drawing more out of the gym than the
+  // work earned is the other — Chris puts the difference in, so it's borrowed
+  // just the same, and it only ever appeared buried in the year-by-year card.
+  const lastMonth = previousMonth(currentMonth);
+  const periods = {
+    month: {
+      loans: txs.filter((t) => t.txDate.startsWith(currentMonth)),
+      pay: payMonths.filter((p) => p.month.startsWith(currentMonth)),
+    },
+    last: {
+      loans: txs.filter((t) => t.txDate.startsWith(lastMonth)),
+      pay: payMonths.filter((p) => p.month.startsWith(lastMonth)),
+    },
+    year: {
+      loans: txs.filter((t) => t.txDate.startsWith(String(currentYear))),
+      pay: payMonths.filter((p) => p.month.startsWith(String(currentYear))),
+    },
+  };
 
   function handleAdd(data: Omit<Debt, "id" | "monthly" | "paidPct">) {
     const tid = String(tempId.current--);
@@ -399,6 +476,17 @@ export default function DebtClient({
       // Put the old numbers back rather than leave figures on screen that aren't
       // the ones saved — this is money Jamie is being told he owes.
       if (!res.ok) setTerms(previous);
+    });
+  }
+
+  // Null clears Chris's figure and puts the split back on the 50/50 default.
+  function handleSaveSplit(next: InvestmentSplitTerms) {
+    const previous = splitTerms;
+    setSplitTerms(next);
+    setEditingSplit(false);
+    startTransition(async () => {
+      const res = await setInvestmentSplitTerms(next);
+      if (!res.ok) setSplitTerms(previous);
     });
   }
 
@@ -527,62 +615,107 @@ export default function DebtClient({
     );
   }
 
+  // Jamie's share of the investment, as the panel its bucket opens. Walked out
+  // in plain steps rather than just stated as a number — this is money he's
+  // being told he owes, and the whole point of the row is that he can see
+  // exactly where it came from without having to ask.
+  function splitPanel() {
+    if (editingSplit) {
+      return (
+        <SplitForm
+          current={splitTerms}
+          onCancel={() => setEditingSplit(false)}
+          onSave={handleSaveSplit}
+        />
+      );
+    }
+    const otherPct = 100 - splitPct;
+    return (
+      <div>
+        <div className="flex items-center justify-between font-medium">
+          <span>Split {splitPct}/{otherPct} with Chris</span>
+          {admin && (
+            <button
+              aria-label="Edit the split"
+              className="text-muted"
+              onClick={() => setEditingSplit(true)}
+            >
+              <Pencil size={15} />
+            </button>
+          )}
+        </div>
+
+        {/* The math, one plain step at a time — so the total at the bottom is
+            never just a number to take on faith. */}
+        <div className="mt-2 space-y-1.5 rounded-lg bg-card p-2.5 text-[13px]">
+          <div className="flex items-center justify-between">
+            <span className="text-muted">Direct business debt (your name)</span>
+            <span>{money(businessTotal)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted">+ Personal money Chris put in</span>
+            <span>{money(dueToChrisTotal)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-border pt-1.5 font-medium">
+            <span>= Total put into the gym</span>
+            <span>{money(totalInvestment)}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-muted">× Your share ({splitPct}%)</span>
+            <span>{money(jamieInvestmentShare)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted">− Already in your name</span>
+            <span>−{money(businessTotal)}</span>
+          </div>
+          <div
+            className="flex items-center justify-between border-t border-border pt-1.5 font-semibold"
+            style={{ color: TEAL }}
+          >
+            <span>= What you still owe Chris</span>
+            <span>{money(jamieOwesChris)}</span>
+          </div>
+        </div>
+
+        <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
+          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+          This is your {splitPct}% of what&apos;s gone into the gym, minus the{" "}
+          {money(businessTotal)} in loans already in your own name. Chris is
+          still personally carrying the other {money(chrisRemainingShare)} of
+          the {money(dueToChrisTotal)} above.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
-      {/* Everything owed, in one number — with what's been borrowed since the
-          start of the month and the start of the year right underneath. Those
-          two say whether the pile is still growing, which is the first thing
-          anyone opening this page wants to know. */}
-      <div
-        className="rounded-2xl border p-5"
-        style={{
-          background: "linear-gradient(150deg, #fff6f2 0%, #ffeae4 55%, #f6ecfb 100%)",
-          borderColor: "#f3d9d0",
-        }}
-      >
-        <div className="text-center">
-          <p className="text-[11px] font-medium uppercase tracking-[0.25em] text-muted">
-            Total debt
-          </p>
-          <p
-            className="mt-1 text-[42px] font-black leading-none tracking-tight"
-            style={{ color: RED }}
-          >
-            {money(securedTotal)}
-          </p>
-          <p className="mt-2 text-[12px] text-muted">
-            {money(securedMin)} a month to keep up · {money(securedInterest)} of
-            that is pure interest
-          </p>
-        </div>
+      {/* What this month has cost so far, leading the page. The total below is
+          the standing figure; this is the one that changes week to week, and
+          it's what says whether the pile is still growing right now.
 
-        {/* The two tiles open. Tapping one shows what the borrowing actually
-            went on, grouped by heading, and each heading opens again to the
-            charges themselves. One at a time — two panels of transactions
-            inside a summary card defeats the point of the summary. */}
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <NewDebtTile
-            label="New debt this month"
-            amount={addedThisMonth}
-            count={monthTxs.length}
-            open={openTile === "month"}
-            onToggle={() => setOpenTile(openTile === "month" ? null : "month")}
-          />
-          <NewDebtTile
-            label="New debt this year"
-            amount={addedThisYear}
-            count={yearTxs.length}
-            open={openTile === "year"}
-            onToggle={() => setOpenTile(openTile === "year" ? null : "year")}
-          />
-        </div>
+          Both halves of "new debt" sit in here: what Chris lent privately, and
+          what Jamie drew out of the gym above what the work earned. The second
+          only ever appeared buried in the year-by-year card, so a month could
+          read as quiet while thousands went out that way. */}
+      <NewDebtCard
+        big
+        label="New debt this month"
+        loans={periods.month.loans}
+        pay={periods.month.pay}
+      />
 
-        {openTile && (
-          <NewDebtDrill
-            txs={openTile === "month" ? monthTxs : yearTxs}
-            period={openTile === "month" ? "this month" : `in ${currentYear}`}
-          />
-        )}
+      <div className="grid grid-cols-2 gap-3">
+        <NewDebtCard
+          label="New debt last month"
+          loans={periods.last.loans}
+          pay={periods.last.pay}
+        />
+        <NewDebtCard
+          label={`New debt in ${currentYear} so far`}
+          loans={periods.year.loans}
+          pay={periods.year.pay}
+        />
       </div>
 
       {/* The same total split by whose it is and what's behind it. These add up
@@ -591,9 +724,23 @@ export default function DebtClient({
           to show the accounts it was added up from. */}
       <Card>
         <div className="flex items-baseline justify-between">
-          <p className="text-[13px] font-medium">Where it&apos;s owed</p>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-muted">
+              Total debt
+            </p>
+            <p
+              className="text-[30px] font-black leading-none"
+              style={{ color: RED }}
+            >
+              {money(securedTotal)}
+            </p>
+          </div>
           <p className="text-[11px] text-muted">tap a row to open it</p>
         </div>
+        <p className="mt-1.5 text-[12px] text-muted">
+          {money(securedMin)} a month to keep up · {money(securedInterest)} of
+          that is pure interest
+        </p>
 
         {/* One bar, one colour per bucket: the shape of the pile at a glance. */}
         <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-tint">
@@ -656,9 +803,11 @@ export default function DebtClient({
                   >
                     {b.key === "divorce" ? (
                       settlementPanel()
-                    ) : b.key === "due-to-chris" && (b as any).items ? (
+                    ) : b.key === "investment-split" ? (
+                      splitPanel()
+                    ) : b.key === "due-to-chris" && b.items.length > 0 ? (
                       <div className="space-y-2">
-                        {(b as any).items.map((item: PersonalDebtItem, i: number) => (
+                        {b.items.map((item, i) => (
                           <div key={i} className="flex items-center justify-between py-2">
                             <span className="text-sm">{item.label}</span>
                             <span className="font-medium">{money(item.amount)}</span>
@@ -846,80 +995,208 @@ function LoanParts({ debt, color }: { debt: Debt; color: string }) {
   );
 }
 
-// ── "New debt this month / this year" ────────────────────────────────────────
-// Red when the pile grew, green when more went back than went out. A month
-// where Jamie paid down more than he borrowed is good news, and a bare
-// "-$1,200" buried it — so it gets said in words as well as colour.
+// ── New debt over a stretch of time ──────────────────────────────────────────
+// The card behind "this month", "last month" and "this year so far". Same
+// component all three times, so the three numbers are always worked out the
+// same way and can't quietly drift apart.
 //
-// A tile with no charges behind it doesn't pretend to open.
-function NewDebtTile({
+// New debt is two different things, and until now the page only counted one:
+//
+//   1. What Chris lent privately — the charges mirrored from Money App.
+//   2. What Jamie drew out of the gym above what the work earned. Chris puts
+//      that difference in, so it's borrowed just the same. It used to appear
+//      only inside the year-by-year card, which meant a month could read as
+//      quiet while thousands went out that way.
+//
+// Red when the pile grew, green when more went back than went out. A month
+// where Jamie paid down more than he borrowed is good news and a bare
+// "-$1,200" buried it, so it gets said in words as well as colour.
+function NewDebtCard({
   label,
-  amount,
-  count,
-  open,
-  onToggle,
+  loans,
+  pay,
+  big = false,
 }: {
   label: string;
-  amount: number;
-  count: number;
-  open: boolean;
-  onToggle: () => void;
+  loans: DebtTransaction[];
+  pay: PayMonth[];
+  big?: boolean;
 }) {
-  const grew = amount > 0;
+  const [open, setOpen] = useState(false);
+  const [openPart, setOpenPart] = useState<string | null>(null);
+
+  const lent = loans.reduce((sum, t) => sum + t.amount, 0);
+  const overdrawn = pay.reduce((sum, p) => sum + p.difference, 0);
+  const total = lent + overdrawn;
+  const grew = total > 0;
   const tone = grew ? RED : GREEN;
+
+  // A half with nothing in it drops out rather than sitting there as "$0" —
+  // except when both are empty, and then the card just says nothing happened.
+  const parts = [
+    {
+      key: "loans",
+      emoji: "🤝",
+      color: VIOLET,
+      tint: "#f1ecfd",
+      label: "Chris lent you privately",
+      note: "money Chris put in directly",
+      amount: lent,
+      count: loans.length,
+    },
+    {
+      key: "pay",
+      emoji: "🏋️",
+      color: AMBER,
+      tint: "#fbf1e2",
+      label: "Took more than you earned",
+      note: "drawn from the gym above what the work was worth",
+      amount: overdrawn,
+      count: pay.length,
+    },
+  ].filter((p) => p.count > 0 && p.amount !== 0);
+
+  const nothing = parts.length === 0;
+
   return (
-    <button
-      type="button"
-      className="rounded-xl border bg-white/70 p-3 text-left disabled:cursor-default"
-      style={{ borderColor: open ? tone : "transparent" }}
-      onClick={onToggle}
-      disabled={count === 0}
-      aria-expanded={count > 0 ? open : undefined}
+    <div
+      className="rounded-2xl border"
+      style={{
+        background: big
+          ? "linear-gradient(150deg, #fff6f2 0%, #ffeae4 55%, #f6ecfb 100%)"
+          : "var(--card)",
+        borderColor: big ? "#f3d9d0" : "var(--border)",
+      }}
     >
-      <span className="block text-[11px] text-muted">{label}</span>
-      <span
-        className="mt-0.5 block text-[22px] font-black leading-tight"
-        style={{ color: tone }}
+      <button
+        type="button"
+        className="w-full p-4 text-left disabled:cursor-default"
+        onClick={() => setOpen((o) => !o)}
+        disabled={nothing}
+        aria-expanded={nothing ? undefined : open}
       >
-        {grew ? "+" : ""}
-        {money(Math.abs(amount))}
-      </span>
-      <span className="flex items-center gap-1 text-[11px] text-muted">
-        {count === 0
-          ? "nothing borrowed"
-          : `${count} charge${count === 1 ? "" : "s"} — tap to see`}
-        {count > 0 && (
-          <ChevronDown
-            size={11}
-            className="transition-transform"
-            style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-          />
-        )}
-      </span>
-    </button>
+        <span
+          className={`block text-muted ${big ? "text-[12px] font-medium uppercase tracking-[0.18em]" : "text-[11px]"}`}
+        >
+          {label}
+        </span>
+        <span
+          className={`mt-1 block font-black leading-none tracking-tight ${big ? "text-[40px]" : "text-[24px]"}`}
+          style={{ color: nothing ? "var(--muted)" : tone }}
+        >
+          {grew ? "+" : ""}
+          {money(Math.abs(total))}
+        </span>
+        <span
+          className={`mt-1.5 flex items-center gap-1 text-muted ${big ? "text-[12px]" : "text-[11px]"}`}
+        >
+          {nothing ? (
+            "nothing borrowed"
+          ) : (
+            <>
+              {grew ? "borrowed" : "paid off"} · tap for the detail
+              <ChevronDown
+                size={12}
+                className="transition-transform"
+                style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+              />
+            </>
+          )}
+        </span>
+      </button>
+
+      {open && !nothing && (
+        <div className="space-y-1.5 px-4 pb-4">
+          {parts.map((part) => {
+            const partOpen = openPart === part.key;
+            const back = part.amount < 0;
+            return (
+              <div
+                key={part.key}
+                className="overflow-hidden rounded-xl"
+                style={{ background: part.tint }}
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+                  onClick={() => setOpenPart(partOpen ? null : part.key)}
+                  aria-expanded={partOpen}
+                >
+                  <span className="text-[16px]">{part.emoji}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-medium">
+                      {part.label}
+                    </span>
+                    <span className="block text-[11px] text-muted">
+                      {part.note}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span
+                      className="block text-[14px] font-bold leading-tight"
+                      style={{ color: back ? GREEN : part.color }}
+                    >
+                      {back ? "−" : ""}
+                      {money(Math.abs(part.amount))}
+                    </span>
+                    <span className="block text-[10px] text-muted">
+                      {part.count}{" "}
+                      {part.key === "loans"
+                        ? `charge${part.count === 1 ? "" : "s"}`
+                        : `month${part.count === 1 ? "" : "s"}`}
+                    </span>
+                  </span>
+                  <ChevronDown
+                    size={13}
+                    className="shrink-0 text-muted transition-transform"
+                    style={{
+                      transform: partOpen ? "rotate(0deg)" : "rotate(-90deg)",
+                    }}
+                  />
+                </button>
+
+                {partOpen && (
+                  <div className="px-2.5 pb-2.5">
+                    {part.key === "loans" ? (
+                      <LentDetail txs={loans} />
+                    ) : (
+                      <OverdrawnDetail months={pay} />
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {parts.length === 2 && (
+            <p className="pt-1 text-[11px] text-muted">
+              Both halves are borrowed money: Chris either handed it over or
+              covered the shortfall out of the gym. Together they come to{" "}
+              {money(Math.abs(total))}.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ── Where the new debt went ──────────────────────────────────────────────────
-// The charges behind a tile, grouped by what they look like they were for, then
-// each heading opens onto the charges themselves — payee, date and the account
-// it landed on, which is what a line gets checked against on a statement.
+// ── What Chris lent, and what it went on ─────────────────────────────────────
+// Grouped by what each charge looks like it was for, then each heading opens
+// onto the charges themselves — payee, date and the account it landed on, which
+// is what a line gets checked against on a statement.
 //
-// The headings are worked out from the payee name and nothing else, so the card
-// says so rather than presenting a guess as a fact. Every real charge is still
-// listed underneath: the grouping only decides what sits next to what.
-function NewDebtDrill({ txs, period }: { txs: DebtTransaction[]; period: string }) {
+// The headings are worked out from the payee name and nothing else, so the
+// panel says so rather than presenting a guess as a fact. Every real charge is
+// still listed underneath: the grouping only decides what sits next to what.
+function LentDetail({ txs }: { txs: DebtTransaction[] }) {
   const [openKey, setOpenKey] = useState<string | null>(null);
   const groups = groupByCategory(txs);
   const total = groups.reduce((sum, g) => sum + Math.abs(g.total), 0) || 1;
 
   return (
-    <div className="mt-2 rounded-xl border border-white/60 bg-white/70 p-3">
-      <p className="text-[11px] uppercase tracking-wide text-muted">
-        What it went on, {period}
-      </p>
-
-      <div className="mt-2 space-y-1.5">
+    <div className="rounded-lg bg-card p-2.5">
+      <div className="space-y-1.5">
         {groups.map((g) => {
           const open = openKey === g.category.key;
           const paidBack = g.total < 0;
@@ -931,16 +1208,15 @@ function NewDebtDrill({ txs, period }: { txs: DebtTransaction[]; period: string 
             >
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+                className="flex w-full items-center gap-2 px-2 py-1.5 text-left"
                 onClick={() => setOpenKey(open ? null : g.category.key)}
                 aria-expanded={open}
               >
-                <span className="text-[15px]">{g.category.emoji}</span>
+                <span className="text-[14px]">{g.category.emoji}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-medium">
+                  <span className="block truncate text-[12px] font-medium">
                     {g.category.label}
                   </span>
-                  {/* How big this heading is next to the others. */}
                   <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-white/70">
                     <span
                       className="block h-full rounded-full"
@@ -953,7 +1229,7 @@ function NewDebtDrill({ txs, period }: { txs: DebtTransaction[]; period: string 
                 </span>
                 <span className="shrink-0 text-right">
                   <span
-                    className="block text-[13px] font-semibold leading-tight"
+                    className="block text-[12px] font-semibold leading-tight"
                     style={{ color: paidBack ? GREEN : g.category.color }}
                   >
                     {paidBack ? "−" : ""}
@@ -964,31 +1240,31 @@ function NewDebtDrill({ txs, period }: { txs: DebtTransaction[]; period: string 
                   </span>
                 </span>
                 <ChevronDown
-                  size={13}
+                  size={12}
                   className="shrink-0 text-muted transition-transform"
                   style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
                 />
               </button>
 
               {open && (
-                <ul className="space-y-2 px-2.5 pb-2.5 pl-9">
+                <ul className="space-y-2 px-2 pb-2 pl-8">
                   {g.items.map((t) => (
                     <li key={t.id} className="flex items-start justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="block truncate text-[13px]">
+                        <span className="block truncate text-[12px]">
                           {t.description}
                         </span>
-                        <span className="block text-[11px] text-muted">
+                        <span className="block text-[10px] text-muted">
                           {t.txDate}
                         </span>
                         {t.source && (
-                          <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+                          <span className="mt-0.5 flex items-center gap-1 text-[10px] text-muted">
                             <Landmark size={10} className="shrink-0" />
                             <span className="truncate">{t.source}</span>
                           </span>
                         )}
                       </span>
-                      <span className="shrink-0 text-right text-[13px]">
+                      <span className="shrink-0 text-right text-[12px]">
                         {t.amount < 0 ? (
                           <>
                             {money(Math.abs(t.amount))}
@@ -1009,15 +1285,54 @@ function NewDebtDrill({ txs, period }: { txs: DebtTransaction[]; period: string 
         })}
       </div>
 
-      <p className="mt-2.5 text-[11px] text-muted">
+      <p className="mt-2 text-[10px] text-muted">
         The headings are worked out from the name on each charge, so one may sit
-        under the wrong one. The charges themselves — and every total on this
-        page — are exactly as they came from Money App.
+        under the wrong one. The charges themselves are exactly as they came from
+        Money App.
       </p>
     </div>
   );
 }
 
+// ── What was drawn out of the gym above what it earned ───────────────────────
+// One row per month: what the work was worth, what was actually taken, and the
+// gap Chris covered. A month where less came out than was earned shows as such
+// rather than as a negative gap nobody can read.
+function OverdrawnDetail({ months }: { months: PayMonth[] }) {
+  const ordered = [...months].sort((a, b) => b.month.localeCompare(a.month));
+
+  return (
+    <div className="space-y-2 rounded-lg bg-card p-2.5">
+      {ordered.map((m) => {
+        const over = m.difference > 0;
+        return (
+          <div key={m.month}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[12px] font-medium">{m.label}</span>
+              <span
+                className="text-[12px] font-semibold"
+                style={{ color: over ? AMBER : GREEN }}
+              >
+                {over ? "+" : "−"}
+                {money(Math.abs(m.difference))}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted">
+              earned {money(m.earned)} · took {money(m.took)} ·{" "}
+              {over
+                ? "Chris put in the difference"
+                : "took less than the work was worth"}
+            </p>
+          </div>
+        );
+      })}
+      <p className="border-t border-border pt-2 text-[10px] text-muted">
+        Earnings come from the gym dashboard and the draws from Money App.
+        Neither is typed in by hand.
+      </p>
+    </div>
+  );
+}
 // ── Credit score ─────────────────────────────────────────────────────────────
 // The number, what it means in words, and where it sits on the 300–850 scale —
 // so a score reads as a position rather than as three digits on their own.
@@ -1189,6 +1504,64 @@ function SettlementForm({
           ? `Left empty, the row goes back to its estimate of ${money(estimate.balance)}.`
           : "Anything left empty uses the estimate for that number."}
       </p>
+      <div className="flex justify-end gap-2">
+        <button className="rounded-lg px-3 py-2 text-sm text-muted" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          className={primaryBtn + " flex items-center gap-1.5"}
+          style={{ background: "var(--good)" }}
+          onClick={submit}
+        >
+          <Check size={16} />
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SplitForm({
+  current,
+  onCancel,
+  onSave,
+}: {
+  current: InvestmentSplitTerms;
+  onCancel: () => void;
+  onSave: (terms: InvestmentSplitTerms) => void;
+}) {
+  const [pct, setPct] = useState(current.splitPct === null ? "" : String(current.splitPct));
+
+  function submit() {
+    const n = Number(pct.trim());
+    const clean = pct.trim() && Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+    onSave({ splitPct: clean });
+  }
+
+  function keys(e: React.KeyboardEvent) {
+    if (e.key === "Enter") submit();
+    if (e.key === "Escape") onCancel();
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl bg-tint p-3">
+      <p className="text-[13px] font-medium">Jamie&apos;s share of the investment</p>
+      <label className="block">
+        <span className="mb-1 block text-[11px] text-muted">Jamie&apos;s share, %</span>
+        <input
+          type="number"
+          inputMode="decimal"
+          autoFocus
+          min={0}
+          max={100}
+          className="w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[15px] outline-none"
+          placeholder="50"
+          value={pct}
+          onChange={(e) => setPct(e.target.value)}
+          onKeyDown={keys}
+        />
+      </label>
+      <p className="text-xs text-muted">Left empty, the split goes back to 50/50.</p>
       <div className="flex justify-end gap-2">
         <button className="rounded-lg px-3 py-2 text-sm text-muted" onClick={onCancel}>
           Cancel

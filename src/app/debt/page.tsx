@@ -7,6 +7,7 @@ import {
   getDebts,
   getDebtSnapshotRows,
   getDivorce,
+  getInvestmentSplitTerms,
   getSettlementTerms,
   getJamieSpending,
   getMoneyAppFico,
@@ -53,6 +54,7 @@ export default async function DebtPage() {
     payMonths,
     divorce,
     settlementTerms,
+    investmentSplitTerms,
   ] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
@@ -63,6 +65,7 @@ export default async function DebtPage() {
     getPayMonths(),
     getDivorce(),
     getSettlementTerms(),
+    getInvestmentSplitTerms(),
   ]);
 
   return (
@@ -82,6 +85,7 @@ export default async function DebtPage() {
         currentMonth={monthKey()}
         settlementMonthly={divorce.support.amount}
         settlementTerms={settlementTerms}
+        investmentSplitTerms={investmentSplitTerms}
       />
     </div>
   );
