@@ -14,7 +14,11 @@
 
 import type { CutBucket, Rollup } from "@/lib/businessFinances";
 
-export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "fed" | "clean";
+// "fed" used to be its own mode sitting next to "cpa". It never was a separate
+// question: the FED-tagged items are exactly what comes out for the tax view,
+// so the picker was offering the same cut twice under two names. They're now
+// one mode — see the `cpa` entry below, and `readViewMode` for the old links.
+export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "clean";
 
 export type ViewMode = {
   id: ViewModeId;
@@ -22,6 +26,11 @@ export type ViewMode = {
   label: string;
   /** The line under the button — what this cut leaves out, in plain words. */
   blurb: string;
+  /** Wording to use instead when Chris has FED hidden from the feed entirely.
+   *  The cut is the same; naming what he chose to hide would undo the hiding,
+   *  and with nothing FED-tagged reaching the page there'd be no difference to
+   *  point at anyway. */
+  blurbFedHidden?: string;
   /** Headline wording, so "Made a profit" isn't the answer to five different questions. */
   profitTitle: string;
   lossTitle: string;
@@ -83,30 +92,23 @@ export const VIEW_MODES: ViewMode[] = [
     taxLayout: false,
   },
   {
+    // The FED cut and the tax cut are one and the same: what Chris tags FED is
+    // what comes out for the return, so this mode drops those items AND lays
+    // the year out in tax-return lines. They used to be two buttons showing
+    // two names for one answer.
     id: "cpa",
     label: "CPA view — for taxes",
-    blurb: "The same money, sorted into the boxes on the tax return.",
+    blurb:
+      "The same money, sorted into the boxes on the tax return — leaving out everything Chris tagged FED.",
+    blurbFedHidden: "The same money, sorted into the boxes on the tax return.",
     profitTitle: "Profit the tax return starts from",
     lossTitle: "Loss the tax return starts from",
     tag: "tax view",
     operational: false,
     slim: false,
-    noFed: false,
-    noMistakes: false,
-    taxLayout: true,
-  },
-  {
-    id: "fed",
-    label: "Without the FED items",
-    blurb: "Leaves out everything Chris tagged FED.",
-    profitTitle: "Profit without the FED items",
-    lossTitle: "Loss without the FED items",
-    tag: "FED left out",
-    operational: false,
-    slim: false,
     noFed: true,
     noMistakes: false,
-    taxLayout: false,
+    taxLayout: true,
   },
   {
     id: "clean",
@@ -147,9 +149,11 @@ export function readViewMode(sp: { view?: string; operational?: string }): ViewM
   const asked = VIEW_MODES.find((m) => m.id === sp.view);
   if (asked) return asked.id;
   // `?view=slim` was this mode's name for the few hours before it was renamed
-  // to "seller", and `?operational=false` was the switch that predates the
-  // selector entirely. Both still land where they meant to.
+  // to "seller"; `?view=fed` was the FED cut back when it sat next to the tax
+  // cut instead of being it; and `?operational=false` was the switch that
+  // predates the selector entirely. All three still land where they meant to.
   if (sp.view === "slim") return "seller";
+  if (sp.view === "fed") return "cpa";
   if (sp.operational === "false") return "full";
   return DEFAULT_VIEW_MODE;
 }
