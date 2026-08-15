@@ -250,3 +250,35 @@ export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
     };
   }
 }
+
+// How many months of gym-dashboard history to pull for a Business Finances
+// "all-time" request. The gym is under two years old as of this writing —
+// this comfortably covers that with room to grow before it needs raising,
+// and getPayMonths is a single cached call either way, so asking for more
+// than one period needs costs nothing extra.
+const ALL_TIME_PAY_MONTHS = 36;
+
+/**
+ * Jamie's earned pay (the pay MODEL's figure, not what she actually drew)
+ * for one Business Finances period — a year, a single month within it, or
+ * all-time. Null whenever the gym dashboard can't answer; the caller treats
+ * that as "not available" rather than showing a false $0.
+ */
+export async function getJamieEarnedPay(
+  year?: number,
+  month?: number,
+  isAllTime?: boolean,
+): Promise<number | null> {
+  const { months, problem } = await getPayMonths(ALL_TIME_PAY_MONTHS);
+  if (problem) return null;
+
+  const inPeriod = (m: PayMonth): boolean => {
+    if (isAllTime) return true; // getPayMonths never reaches before the gym existed
+    const [y, mm] = m.month.split("-").map(Number);
+    if (!year) return false;
+    if (month) return y === year && mm === month;
+    return y === year;
+  };
+
+  return months.filter(inPeriod).reduce((sum, m) => sum + m.earned, 0);
+}

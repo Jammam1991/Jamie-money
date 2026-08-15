@@ -64,9 +64,14 @@ function shortDate(iso: string): string {
 export default function BusinessFinancesClient({
   data,
   modeId,
+  jamiePay,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
+  /** Jamie's earned pay for this period, from the gym dashboard — null when
+   *  it couldn't be reached, which just means the toggle in Headline stays
+   *  disabled rather than the page breaking. */
+  jamiePay: number | null;
 }) {
   const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
 
@@ -149,7 +154,13 @@ export default function BusinessFinancesClient({
       )}
 
       {view.show_headline && (
-        <Headline rollup={rollup} mode={mode} year={data.year} month={data.month} />
+        <Headline
+          rollup={rollup}
+          mode={mode}
+          year={data.year}
+          month={data.month}
+          jamiePay={jamiePay}
+        />
       )}
 
       {view.show_headline && (
@@ -263,6 +274,41 @@ function CutTag({ mode }: { mode: ViewMode }) {
     <span className="shrink-0 text-[12px] font-medium" style={{ color: "var(--warn)" }}>
       {mode.tag}
     </span>
+  );
+}
+
+// A small on/off pill for a subtraction that isn't one of the five cuts —
+// see the note on Headline. Disabled rather than hidden when there's nothing
+// to subtract, so the reason ("couldn't reach the gym dashboard") is a
+// tooltip away instead of the option just vanishing.
+function ToggleChip({
+  label,
+  on,
+  onClick,
+  disabled,
+  title,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium transition-colors disabled:opacity-40"
+      style={
+        on && !disabled
+          ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
+          : undefined
+      }
+    >
+      {label}
+    </button>
   );
 }
 
@@ -549,6 +595,18 @@ function CutRow({
   onToggle: () => void;
   tone: "in" | "out";
 }) {
+  // Independent of the category-level `open` above — a category expands to
+  // its items with the outer toggle, and each item expands to its own
+  // transactions with its own, same two-level shape as Line by line.
+  const [openItems, setOpenItems] = useState<Set<string>>(new Set());
+  const toggleItem = (label: string) =>
+    setOpenItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+
   return (
     <li className="rounded-xl" style={{ background: "var(--tint)" }}>
       <button
@@ -576,22 +634,60 @@ function CutRow({
 
       {open && (
         <ul className="space-y-1 px-3 pb-3">
-          {line.bucket.items.map((item) => (
-            <li
-              key={item.label}
-              className="flex items-baseline justify-between gap-3 rounded-lg bg-card px-2.5 py-2"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-[13px]">{item.label}</p>
-                <p className="text-[11px] text-muted">
-                  {item.count === 1 ? "1 entry" : `${item.count} entries`}
-                </p>
-              </div>
-              <span className="shrink-0 text-[13px] font-medium">
-                {money(Math.abs(item.amount))}
-              </span>
-            </li>
-          ))}
+          {line.bucket.items.map((item) => {
+            const txs = item.transactions ?? [];
+            const itemOpen = openItems.has(item.label);
+            return (
+              <li key={item.label} className="rounded-lg bg-card">
+                <button
+                  onClick={() => txs.length > 0 && toggleItem(item.label)}
+                  className="flex w-full items-center justify-between gap-3 px-2.5 py-2 text-left"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {txs.length > 0 && (
+                      <ChevronDown
+                        size={12}
+                        className="shrink-0 text-muted transition-transform"
+                        style={{ transform: itemOpen ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px]">{item.label}</span>
+                      <span className="block text-[11px] text-muted">
+                        {item.count === 1 ? "1 entry" : `${item.count} entries`}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[13px] font-medium">
+                    {money(Math.abs(item.amount))}
+                  </span>
+                </button>
+
+                {itemOpen && txs.length > 0 && (
+                  <ul className="space-y-1.5 px-2.5 pb-2.5">
+                    {txs.map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5"
+                        style={{ background: "var(--tint)" }}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-[12px]">{t.name ?? "—"}</p>
+                          <p className="text-[10px] text-muted">
+                            {shortDate(t.date)}
+                            {t.memo && ` · ${t.memo}`}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[12px] font-medium">
+                          {money(Math.abs(t.amount))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </li>
@@ -604,16 +700,31 @@ function Headline({
   mode,
   year,
   month,
+  jamiePay,
 }: {
   rollup: Rollup;
   mode: ViewMode;
   year: number | "all-time";
   month?: number;
+  jamiePay: number | null;
 }) {
   // What "money in", "money out" and "profit" mean depends on the cut — see
   // headlineFor. The three always tie out, so the two tiles explain the big
   // number rather than sitting near it.
-  const { moneyIn, moneyOut, profit } = headlineFor(rollup, mode);
+  const { moneyIn, moneyOut, profit: rawProfit } = headlineFor(rollup, mode);
+
+  // Neither of these is part of any of the five cuts above — a distribution
+  // isn't a P&L expense under any of them, and Jamie's pay isn't in Money
+  // App's ledger at all (it's the gym dashboard's own figure). They're a
+  // second, independent question — "what's left once Jamie's actually been
+  // paid?" — so they're plain client toggles rather than another URL mode:
+  // no cut to ask Money App for, just arithmetic on numbers already in hand.
+  const [includeJamiePay, setIncludeJamiePay] = useState(false);
+  const [includeJamieDist, setIncludeJamieDist] = useState(false);
+  const jamiePayOut = includeJamiePay ? (jamiePay ?? 0) : 0;
+  const jamieDistOut = includeJamieDist ? (rollup.jamieDistributions ?? 0) : 0;
+  const profit = rawProfit - jamiePayOut - jamieDistOut;
+
   // Only show year-end projection for current year, not for months or all-time
   const projection =
     typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;
@@ -639,6 +750,34 @@ function Headline({
       >
         {money(profit)}
       </p>
+      {(jamiePayOut !== 0 || jamieDistOut !== 0) && (
+        <p className="mt-1 text-[12px] text-muted">
+          After
+          {jamiePayOut !== 0 && ` ${money(jamiePayOut)} of Jamie's pay`}
+          {jamiePayOut !== 0 && jamieDistOut !== 0 && " and"}
+          {jamieDistOut !== 0 && ` ${money(jamieDistOut)} of distributions`}
+        </p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <ToggleChip
+          label="Include Jamie's earned pay"
+          on={includeJamiePay}
+          onClick={() => setIncludeJamiePay((v) => !v)}
+          disabled={jamiePay == null}
+          title={
+            jamiePay == null
+              ? "Couldn't reach the gym dashboard for this period."
+              : "Subtracts what the gym dashboard's pay model says Jamie earned."
+          }
+        />
+        <ToggleChip
+          label="Include Jamie's full distributions"
+          on={includeJamieDist}
+          onClick={() => setIncludeJamieDist((v) => !v)}
+          disabled={!rollup.jamieDistributions}
+          title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance."
+        />
+      </div>
       {projection && (
         <p className="mt-1 text-[13px] text-muted">
           Trending toward {money(projection)} by year end

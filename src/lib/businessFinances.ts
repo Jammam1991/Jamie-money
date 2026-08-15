@@ -52,7 +52,14 @@ export type ScheduleCLineTx = {
 };
 
 /** One named thing inside a cut's difference — a category and what it came to. */
-export type CutItem = { label: string; amount: number; count: number };
+export type CutItem = {
+  label: string;
+  amount: number;
+  count: number;
+  /** One entry per transaction behind this item, newest first. Optional —
+   *  arrived in a later Money App; an older one's items just don't expand. */
+  transactions?: ScheduleCLineTx[];
+};
 
 /** One reason two cuts of the same year disagree, itemized. */
 export type CutBucket = { total: number; items: CutItem[] };
@@ -102,6 +109,11 @@ export type Rollup = {
      *  won't name what it's hiding, so there's nothing to render. */
     fed: CutBucket;
   };
+  /** Everything drawn from Jamie's distribution tree for this period. Never
+   *  part of `expenses`/`netProfit` under any cut — a distribution isn't a
+   *  P&L expense — but a caller can subtract it to show "what's left after
+   *  Jamie's paid". Optional: arrived in a later Money App. */
+  jamieDistributions?: number;
 };
 
 /** One transaction Chris marked as a start-up mistake in Money App. */
@@ -419,6 +431,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
   const sumCogs = unique.reduce((sum, r) => sum + r.cogs, 0);
   const sumExpenses = unique.reduce((sum, r) => sum + r.expenses, 0);
   const sumFinanceCharges = unique.reduce((sum, r) => sum + (r.financeCharges ?? 0), 0);
+  const sumJamieDistributions = unique.reduce((sum, r) => sum + (r.jamieDistributions ?? 0), 0);
 
   // Same category across two years is one row in the all-time list, not two.
   const mergeBuckets = (pick: (r: Rollup) => CutBucket | undefined): CutBucket => {
@@ -433,14 +446,24 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
         if (existing) {
           existing.amount += item.amount;
           existing.count += item.count;
+          if (item.transactions) {
+            existing.transactions = [...(existing.transactions ?? []), ...item.transactions];
+          }
         } else {
-          items.set(item.label, { ...item });
+          items.set(item.label, { ...item, transactions: item.transactions ? [...item.transactions] : undefined });
         }
       }
     }
     return {
       total,
-      items: [...items.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+      items: [...items.values()]
+        .map((item) => ({
+          ...item,
+          transactions: item.transactions
+            ?.slice()
+            .sort((a, b) => b.date.localeCompare(a.date)),
+        }))
+        .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
     };
   };
 
@@ -478,6 +501,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     mistakesRemoved: unique.some((r) => r.mistakesRemoved),
     operational: unique.some((r) => r.operational),
     slimmed: unique.some((r) => r.slimmed),
+    jamieDistributions: sumJamieDistributions,
     cutDetail: {
       grants: mergeBuckets((r) => r.cutDetail?.grants),
       interest: mergeBuckets((r) => r.cutDetail?.interest),
