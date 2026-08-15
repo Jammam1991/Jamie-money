@@ -89,7 +89,11 @@ export default function BusinessFinancesClient({
   };
 
   const { view, noMistakes } = data;
-  const mode = modeById(modeId);
+  // Chris's tick-box wins over the URL: a `?view=fed` link opened after he
+  // switched FED hiding on would otherwise show a headline promising a
+  // difference the feed can no longer describe.
+  const offerFed = !data.view.hide_fed;
+  const mode = modeById(modeId === "fed" && !offerFed ? "full" : modeId);
 
   // A year with no mistakes marked still has a `noMistakes` block, just an
   // empty one — so whether the clean cut is worth offering is a question about
@@ -136,14 +140,21 @@ export default function BusinessFinancesClient({
       />
 
       {showsProfit(view) && (
-        <ViewPicker mode={mode} hrefFor={hrefFor} offerClean={hasMistakes} />
+        <ViewPicker
+          mode={mode}
+          hrefFor={hrefFor}
+          offerClean={hasMistakes}
+          offerFed={offerFed}
+        />
       )}
 
       {view.show_headline && (
         <Headline rollup={rollup} mode={mode} year={data.year} month={data.month} />
       )}
 
-      {view.show_headline && <CutDetailCard rollup={rollup} mode={mode} />}
+      {view.show_headline && (
+        <CutDetailCard rollup={rollup} mode={mode} allowFed={offerFed} />
+      )}
 
       {/* The CPA cut leads with the tax lines: the question it answers is
           "which box does this go in", so the breakdown IS the answer and the
@@ -266,12 +277,16 @@ function ViewPicker({
   mode,
   hrefFor,
   offerClean,
+  offerFed,
 }: {
   mode: ViewMode;
   hrefFor: (id: ViewModeId) => string;
   offerClean: boolean;
+  offerFed: boolean;
 }) {
-  const modes = VIEW_MODES.filter((m) => m.id !== "clean" || offerClean);
+  const modes = VIEW_MODES.filter(
+    (m) => (m.id !== "clean" || offerClean) && (m.id !== "fed" || offerFed),
+  );
 
   return (
     <Card>
@@ -451,8 +466,16 @@ function IntroCard({
 // Both lists, always. Showing only the exclusions reads as though the other
 // cuts are the honest ones; showing both makes the point that these are the
 // same four things every time, counted or not.
-function CutDetailCard({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
-  const { leftOut, counted } = cutLines(rollup, mode);
+function CutDetailCard({
+  rollup,
+  mode,
+  allowFed,
+}: {
+  rollup: Rollup;
+  mode: ViewMode;
+  allowFed: boolean;
+}) {
+  const { leftOut, counted } = cutLines(rollup, mode, { allowFed });
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (key: string) =>
     setOpen((prev) => {

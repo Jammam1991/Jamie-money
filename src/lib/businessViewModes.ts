@@ -14,7 +14,7 @@
 
 import type { CutBucket, Rollup } from "@/lib/businessFinances";
 
-export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "clean";
+export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "fed" | "clean";
 
 export type ViewMode = {
   id: ViewModeId;
@@ -33,6 +33,8 @@ export type ViewMode = {
   operational: boolean;
   /** Ask Money App to drop the transactions marked "Remove from P&L". */
   slim: boolean;
+  /** Ask Money App to drop the FED-tagged transactions. */
+  noFed: boolean;
   /** Read the `noMistakes` cut that comes down in the same response. */
   noMistakes: boolean;
   /** Lead with the Schedule C lines instead of the month-by-month strip. */
@@ -49,6 +51,7 @@ export const VIEW_MODES: ViewMode[] = [
     tag: "",
     operational: false,
     slim: false,
+    noFed: false,
     noMistakes: false,
     taxLayout: false,
   },
@@ -62,6 +65,7 @@ export const VIEW_MODES: ViewMode[] = [
     tag: "gym's own numbers",
     operational: true,
     slim: false,
+    noFed: false,
     noMistakes: false,
     taxLayout: false,
   },
@@ -74,6 +78,7 @@ export const VIEW_MODES: ViewMode[] = [
     tag: "buyer's view",
     operational: false,
     slim: true,
+    noFed: false,
     noMistakes: false,
     taxLayout: false,
   },
@@ -86,8 +91,22 @@ export const VIEW_MODES: ViewMode[] = [
     tag: "tax view",
     operational: false,
     slim: false,
+    noFed: false,
     noMistakes: false,
     taxLayout: true,
+  },
+  {
+    id: "fed",
+    label: "Without the FED items",
+    blurb: "Leaves out everything Chris tagged FED.",
+    profitTitle: "Profit without the FED items",
+    lossTitle: "Loss without the FED items",
+    tag: "FED left out",
+    operational: false,
+    slim: false,
+    noFed: true,
+    noMistakes: false,
+    taxLayout: false,
   },
   {
     id: "clean",
@@ -98,6 +117,7 @@ export const VIEW_MODES: ViewMode[] = [
     tag: "mistakes taken out",
     operational: false,
     slim: false,
+    noFed: false,
     noMistakes: true,
     taxLayout: false,
   },
@@ -175,7 +195,7 @@ const BUCKETS: Array<{
   label: string;
   blurb: string;
   /** Which switch decides whether this cut leaves it out. */
-  droppedBy: "operational" | "slim";
+  droppedBy: "operational" | "slim" | "noFed";
 }> = [
   {
     key: "grants",
@@ -201,6 +221,12 @@ const BUCKETS: Array<{
     blurb: "Things Chris marked as not carrying over to a new owner.",
     droppedBy: "slim",
   },
+  {
+    key: "fed",
+    label: "FED-tagged items",
+    blurb: "Everything carrying Chris's FED tag.",
+    droppedBy: "noFed",
+  },
 ];
 
 /**
@@ -217,6 +243,11 @@ const BUCKETS: Array<{
 export function cutLines(
   rollup: Rollup,
   mode: ViewMode,
+  // Belt and braces. Money App already refuses to itemize FED when Chris's
+  // tick-box hides it — naming what he chose to hide would undo the hiding —
+  // so this bucket should arrive empty. Dropping it here too means a Money App
+  // that ever forgets can't turn into a leak on this screen.
+  opts: { allowFed?: boolean } = {},
 ): { leftOut: CutLine[]; counted: CutLine[] } {
   const detail = rollup.cutDetail;
   const leftOut: CutLine[] = [];
@@ -224,6 +255,7 @@ export function cutLines(
   if (!detail) return { leftOut, counted };
 
   for (const b of BUCKETS) {
+    if (b.key === "fed" && opts.allowFed === false) continue;
     const bucket = detail[b.key];
     if (!bucket || bucket.items.length === 0) continue;
     const line: CutLine = { key: b.key, label: b.label, blurb: b.blurb, bucket };
