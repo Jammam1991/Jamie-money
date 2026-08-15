@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { PageTitle, Card } from "@/components/ui";
 import ComingSoon from "@/components/ComingSoon";
+import { TaxYearPicker } from "@/components/TaxYearPicker";
 import { TaxYearStory } from "@/components/TaxYearStory";
 import { TaxYearsOverview } from "@/components/TaxYearsOverview";
 import { pageGate } from "@/lib/visibility";
@@ -60,25 +60,7 @@ export default async function TaxCenterPage({
     <div>
       <PageTitle>Tax Center</PageTitle>
 
-      {sortedYears.length > 1 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          {sortedYears.map((y) => (
-            <Link
-              key={y}
-              href={`/tax-center?year=${y}`}
-              scroll={false}
-              className="rounded-lg border border-border px-3 py-1 text-[13px]"
-              style={
-                y === year
-                  ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-                  : undefined
-              }
-            >
-              {y}
-            </Link>
-          ))}
-        </div>
-      )}
+      <TaxYearPicker years={sortedYears} selected={year} />
 
       <TaxYearsOverview results={results} selected={year} />
 
