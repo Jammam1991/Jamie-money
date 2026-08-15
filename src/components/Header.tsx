@@ -25,10 +25,10 @@ import { setMenuOrder } from "@/lib/actions";
 // The slide-out menu. Every row always shows — a page parked as "Coming Soon"
 // on the Settings screen keeps its link and says so when Jamie opens it.
 //
-// This list is the menu. Chris can drag the rows into whatever order he likes
-// and that order is saved, but it's only an order: a page can never appear in
-// the menu without being here, and one taken out of here disappears from the
-// menu no matter what was saved.
+// This list is the menu. Chris and Jamie can each drag the rows into whatever
+// order suits them and their own order is saved, but it's only an order: a page
+// can never appear in the menu without being here, and one taken out of here
+// disappears from the menu no matter what was saved.
 const links = [
   // First, because it's the one that frames everything under it.
   { href: "/big-picture", label: "The Big Picture", Icon: Compass },
@@ -57,10 +57,10 @@ const links = [
 
 type MenuLink = (typeof links)[number];
 
-// The menu in Chris's saved order. Anything he hasn't placed keeps its position
-// from the list above and follows on the end, so adding a page to the code
-// never needs the saved order touched — and a stale saved order can't hide a
-// screen from Jamie.
+// The menu in this person's saved order. Anything they haven't placed keeps its
+// position from the list above and follows on the end, so adding a page to the
+// code never needs a saved order touched — and a stale saved order can't hide a
+// screen from anyone.
 function inSavedOrder(saved: string[]): MenuLink[] {
   const byHref = new Map(links.map((l) => [l.href, l]));
   const placed = saved
@@ -79,10 +79,17 @@ function moved<T>(list: T[], from: number, to: number): T[] {
 }
 
 export default function Header({
-  admin = false,
+  canReorder = false,
+  forJamie = false,
   menuOrder = [],
 }: {
-  admin?: boolean;
+  // Anyone logged in can arrange their own menu — it's how they like their own
+  // screen, not something one person sets for the other.
+  canReorder?: boolean;
+  // True when Chris is looking through "View as Jamie", where the rows he drags
+  // are Jamie's. Only changes the wording; which order gets written is settled
+  // on the server.
+  forJamie?: boolean;
   menuOrder?: string[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -204,7 +211,7 @@ export default function Header({
           <div className="flex items-center justify-between p-4 border-b border-border">
             <span className="text-lg font-medium">Menu</span>
             <div className="flex items-center gap-1">
-              {admin && (
+              {canReorder && (
                 <button
                   onClick={() => setEditing((v) => !v)}
                   className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-tint transition-colors"
@@ -232,8 +239,10 @@ export default function Header({
 
           {editing && (
             <p className="border-b border-border px-4 py-2 text-xs text-muted">
-              Drag the handles to put these in any order. Saved as you go, and
-              it&apos;s what Jamie sees too.
+              Drag the handles to put these in any order. Saved as you go.{" "}
+              {forJamie
+                ? "These are Jamie's rows — you're arranging his menu, not yours."
+                : "This is your own menu; the other person arranges theirs."}
             </p>
           )}
 
