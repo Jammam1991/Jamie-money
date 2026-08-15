@@ -4,8 +4,14 @@ import SettingsClient from "@/components/SettingsClient";
 import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
 import PasswordsAdmin from "@/components/PasswordsAdmin";
+import DeferredDebtsAdmin from "@/components/DeferredDebtsAdmin";
 import { getRole, isVaultUnlocked, VAULT_MINUTES } from "@/lib/auth";
-import { getComingSoonPages, getHouseholdIncome } from "@/lib/store";
+import {
+  getComingSoonPages,
+  getDebts,
+  getDeferredDebtIds,
+  getHouseholdIncome,
+} from "@/lib/store";
 import { getTaxDocuments } from "@/lib/taxCenter";
 import { getPasswordEntries, vaultConfigured } from "@/lib/passwords";
 
@@ -17,12 +23,15 @@ export default async function SettingsPage() {
 
   const vaultOpen = await isVaultUnlocked();
 
-  const [comingSoon, taxDocuments, householdIncome, passwords] = await Promise.all([
+  const [comingSoon, taxDocuments, householdIncome, passwords, debts, deferred] =
+    await Promise.all([
     getComingSoonPages(),
     getTaxDocuments(),
     getHouseholdIncome(),
     // Labels only, and only once the password book's own lock is open.
     vaultOpen ? getPasswordEntries() : Promise.resolve([]),
+    getDebts(),
+    getDeferredDebtIds(),
   ]);
 
   return (
@@ -31,6 +40,7 @@ export default async function SettingsPage() {
         <PageTitle>Settings</PageTitle>
         <SettingsClient initialComingSoon={comingSoon} />
       </div>
+      <DeferredDebtsAdmin debts={debts} initialDeferred={deferred} />
       <HouseholdIncomeAdmin initial={householdIncome} />
       <TaxDocumentsAdmin initialDocuments={taxDocuments} />
       <PasswordsAdmin

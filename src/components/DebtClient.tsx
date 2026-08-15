@@ -203,6 +203,7 @@ export default function DebtClient({
   settlementTerms,
   investmentSplitTerms,
   chrisCarry,
+  deferredIds,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -219,6 +220,7 @@ export default function DebtClient({
   settlementTerms: SettlementTerms; // what Chris set; nulls fall back to the estimate
   investmentSplitTerms: InvestmentSplitTerms; // what % of the gym investment is Jamie's; null falls back to 50/50
   chrisCarry: ChrisCarry; // what Chris really pays each month on the money he lent the gym
+  deferredIds: string[]; // debts Chris marked deferred in Settings — owed, but not being paid now
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -307,7 +309,41 @@ export default function DebtClient({
   // Rolex and the medical payment come off again here.
   const offsetTotal = OFFSETS.reduce((sum, o) => sum + o.amount, 0);
   const netTotal = securedTotal - offsetTotal;
-  const securedMin = totalMinimum(debts) + settlement.minPayment;
+  // Every monthly payment on this page added up — including Jamie's share of
+  // what Chris pays on the gym money, which the header used to leave out even
+  // though the row for it sits right below showing its own figure.
+  const monthlyTotal =
+    totalMinimum(debts) + settlement.minPayment + jamieMonthlyToChris;
+
+  // What isn't actually going out right now. A deferred debt is still owed and
+  // still in every balance on this page — only its payment is on hold.
+  const deferredDebts = debts.filter((d) => deferredIds.includes(d.id));
+  const deferredMonthly = totalMinimum(deferredDebts);
+  const monthlyNow = monthlyTotal - deferredMonthly;
+
+  // One line per payment, in the same order the buckets appear below. Built
+  // from the same numbers as the total, so the list always adds up to it.
+  const monthlyRows = [
+    ...debts.map((d) => ({
+      key: d.id,
+      label: d.name,
+      monthly: d.minPayment,
+      deferred: deferredIds.includes(d.id),
+    })),
+    {
+      key: "__chris_carry__",
+      label: "Your share of the gym debt Chris carries",
+      monthly: jamieMonthlyToChris,
+      deferred: false,
+    },
+    {
+      key: "__settlement__",
+      label: settlement.name,
+      monthly: settlement.minPayment,
+      deferred: false,
+    },
+  ].sort((a, b) => b.monthly - a.monthly);
+  const deferredRows = monthlyRows.filter((r) => r.deferred);
   const securedInterest = monthlyInterest(debts);
 
   // The same money cut a different way: Jamie's own unsecured debt, his car,
@@ -767,7 +803,17 @@ export default function DebtClient({
 
   return (
     <div className="space-y-3">
-      {/* What this month has cost so far, leading the page. The total below is
+      {/* What has to be found every month. First on the page because it's the
+          figure that decides whether a month works — the balances below are
+          what's owed, this is what it costs to hold them. */}
+      <MonthlyCards
+        total={monthlyTotal}
+        now={monthlyNow}
+        rows={monthlyRows}
+        deferredRows={deferredRows}
+      />
+
+      {/* What this month has cost so far. The total below is
           the standing figure; this is the one that changes week to week, and
           it's what says whether the pile is still growing right now.
 
@@ -815,12 +861,12 @@ export default function DebtClient({
           <p className="text-[11px] text-muted">tap a row to open it</p>
         </div>
         <p className="mt-1.5 text-[12px] text-muted">
-          {money(securedMin)} a month to keep up · {money(securedInterest)} of
+          {money(monthlyTotal)} a month to keep up · {money(securedInterest)} of
           that is pure interest
         </p>
         {offsetTotal > 0 && (
           <p className="mt-1 text-[12px]" style={{ color: GREEN }}>
-            {money(netTotal)} once what&apos;s coming back lands — see below
+            {money(netTotal)}{" "}once what&apos;s coming back lands — see below
           </p>
         )}
 
@@ -1185,6 +1231,174 @@ function CarryCost({
             )}
           </p>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── What goes out every month ────────────────────────────────────────────────
+// The first thing on the page, because it's the question that decides whether a
+// month works: not what's owed, but what has to be found this month.
+//
+// Two figures, kept apart on purpose. The total is every payment on this page
+// added up. The second is that total without the debts Chris has marked
+// deferred in Settings — money still owed, but not leaving the account right
+// now. Showing only one of the two would be misleading either way round: the
+// total overstates today, and the deferred figure hides what's coming.
+function MonthlyCards({
+  total,
+  now,
+  rows,
+  deferredRows,
+}: {
+  total: number;
+  now: number;
+  rows: { key: string; label: string; monthly: number; deferred: boolean }[];
+  deferredRows: { key: string; label: string; monthly: number }[];
+}) {
+  const [openTotal, setOpenTotal] = useState(false);
+  const [openNow, setOpenNow] = useState(false);
+  const held = total - now;
+  const paying = rows.filter((r) => !r.deferred && r.monthly > 0);
+
+  return (
+    <div className="space-y-3">
+      <div
+        className="rounded-2xl border p-5"
+        style={{
+          background: "linear-gradient(150deg, #fff6f2 0%, #ffeae4 55%, #f6ecfb 100%)",
+          borderColor: "#f3d9d0",
+        }}
+      >
+        <button
+          type="button"
+          className="w-full text-left"
+          onClick={() => setOpenTotal((o) => !o)}
+          aria-expanded={openTotal}
+        >
+          <span className="block text-[12px] font-medium uppercase tracking-[0.18em] text-muted">
+            Total monthly payment
+          </span>
+          <span
+            className="mt-1 block text-[40px] font-black leading-none tracking-tight"
+            style={{ color: RED }}
+          >
+            {money(total)}
+            <span className="text-[20px] font-bold">/mo</span>
+          </span>
+          <span className="mt-1.5 flex items-center gap-1 text-[12px] text-muted">
+            every payment on this page · tap for the detail
+            <ChevronDown
+              size={12}
+              className="transition-transform"
+              style={{ transform: openTotal ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </span>
+        </button>
+
+        {openTotal && (
+          <div className="mt-3 space-y-1 rounded-xl bg-white/70 p-3 text-[13px]">
+            {rows
+              .filter((r) => r.monthly > 0)
+              .map((r) => (
+                <div key={r.key} className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate text-muted">
+                    {r.label}
+                    {r.deferred && (
+                      <span
+                        className="ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
+                      >
+                        deferred
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0">{money(r.monthly)}</span>
+                </div>
+              ))}
+            <div className="flex items-baseline justify-between gap-2 border-t border-border pt-1.5 font-semibold">
+              <span>Every month</span>
+              <span>{money(total)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <button
+          type="button"
+          className="w-full text-left"
+          onClick={() => setOpenNow((o) => !o)}
+          aria-expanded={openNow}
+        >
+          <span className="block text-[11px] uppercase tracking-wide text-muted">
+            Paying now, without deferred
+          </span>
+          <span
+            className="mt-0.5 block text-[28px] font-black leading-none"
+            style={{ color: held > 0 ? GREEN : RED }}
+          >
+            {money(now)}
+            <span className="text-[16px] font-bold">/mo</span>
+          </span>
+          <span className="mt-1 flex items-center gap-1 text-[11px] text-muted">
+            {held > 0 ? (
+              <>
+                {money(held)}/mo on hold · tap for the detail
+                <ChevronDown
+                  size={11}
+                  className="transition-transform"
+                  style={{ transform: openNow ? "rotate(180deg)" : "rotate(0deg)" }}
+                />
+              </>
+            ) : (
+              "nothing marked deferred — same as the total above"
+            )}
+          </span>
+        </button>
+
+        {openNow &&
+          (held > 0 ? (
+            <div className="mt-3 space-y-1 rounded-xl bg-tint p-3 text-[13px]">
+              <p className="text-[11px] uppercase tracking-wide text-muted">
+                On hold right now
+              </p>
+              {deferredRows.map((r) => (
+                <div key={r.key} className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate text-muted">{r.label}</span>
+                  <span className="shrink-0">{money(r.monthly)}</span>
+                </div>
+              ))}
+              <div className="mt-1 space-y-1 border-t border-border pt-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted">Every payment</span>
+                  <span>{money(total)}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted">− Deferred</span>
+                  <span style={{ color: GREEN }}>−{money(held)}</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2 font-semibold">
+                  <span>= Going out now</span>
+                  <span>{money(now)}</span>
+                </div>
+              </div>
+              <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-muted">
+                <AlertCircle size={12} className="mt-0.5 shrink-0" />
+                Deferred is not forgiven. Every one of these is still owed in
+                full and still counted in the total debt — the payment is just
+                not being made right now.
+              </p>
+            </div>
+          ) : null)}
+      </div>
+
+      {/* Only Chris sees this; it's his switch to throw. */}
+      {paying.length > 0 && held === 0 && (
+        <p className="px-1 text-[11px] text-muted">
+          Nothing is marked deferred. Mark a debt in Settings and this second
+          card will show what&apos;s actually leaving each month.
+        </p>
       )}
     </div>
   );
