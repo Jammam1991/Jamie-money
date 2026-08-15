@@ -9,6 +9,8 @@ import {
   getBillDocuments,
   getBillPayments,
   getComingSoonPages,
+  getDeferredDebtIds,
+  DEFERRED_DEBTS_KEY,
   recordLogin,
   HOME_BUYING_KEY,
   HOUSEHOLD_INCOME_KEY,
@@ -159,6 +161,38 @@ export async function toggleViewAsJamie(): Promise<void> {
 // Seconds fit inside Postgres' integer column; milliseconds would overflow.
 function nextSort(): number {
   return Math.floor(Date.now() / 1000);
+}
+
+// ── Which debts have their payments deferred ─────────────────────────────────
+// A deferred debt is still owed and still counts in every balance on the page.
+// All this changes is the monthly figure: it's what isn't being paid right now,
+// so Jamie can see what actually leaves each month next to what will once these
+// start.
+//
+// Stored as one JSON list of debt ids under the `deferred_debts` setting.
+export async function setDebtDeferred(
+  id: string,
+  deferred: boolean,
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const next = new Set(await getDeferredDebtIds());
+  if (deferred) next.add(id);
+  else next.delete(id);
+
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: DEFERRED_DEBTS_KEY, value: JSON.stringify([...next]) },
+      { onConflict: "key" },
+    );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/debt");
+  revalidatePath("/settings");
+  return { ok: true };
 }
 
 // ── Which pages say "Coming Soon" to Jamie ────────────────────────────────────
