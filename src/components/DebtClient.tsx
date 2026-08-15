@@ -860,7 +860,7 @@ export default function DebtClient({
               Total monthly payment
             </p>
             <p className="text-[30px] font-black leading-none">
-              {money(securedMin)}/mo
+              {money(monthlyTotal)}/mo
             </p>
           </div>
         </div>
@@ -1280,10 +1280,7 @@ function MonthlyCards({
           <span className="block text-[12px] font-medium uppercase tracking-[0.18em] text-muted">
             Total monthly payment
           </span>
-          <span
-            className="mt-1 block text-[40px] font-black leading-none tracking-tight"
-            style={{ color: RED }}
-          >
+          <span className="mt-1 block text-[40px] font-black leading-none tracking-tight">
             {money(total)}
             <span className="text-[20px] font-bold">/mo</span>
           </span>
@@ -1337,7 +1334,7 @@ function MonthlyCards({
           </span>
           <span
             className="mt-0.5 block text-[28px] font-black leading-none"
-            style={{ color: held > 0 ? GREEN : RED }}
+            style={{ color: held > 0 ? GREEN : undefined }}
           >
             {money(now)}
             <span className="text-[16px] font-bold">/mo</span>
