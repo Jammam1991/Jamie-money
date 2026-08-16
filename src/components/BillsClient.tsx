@@ -5,6 +5,7 @@ import { Plus, Trash2, Check, ChevronDown, Pencil, Upload, FileText } from "luci
 import { Card } from "@/components/ui";
 import { money, moneyExact, WEEKS_PER_MONTH, type Bill, type BillDocument, type BillPayment } from "@/lib/data";
 import { statementsForBill, type BillStatement } from "@/lib/statements";
+import { billMonthName, coveredPaidDate } from "@/lib/billMonth";
 import {
   addBill,
   addBillPayment,
@@ -156,10 +157,9 @@ export default function BillsClient({
     });
   }
 
-  const monthName = useMemo(
-    () => new Date().toLocaleDateString("en-US", { month: "long" }),
-    []
-  );
+  // The month this page is about: next month, the one the weekly target is
+  // saving toward. See billMonth.ts.
+  const monthName = useMemo(() => billMonthName(), []);
   const prevMonthName = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth() - 1, 1).toLocaleDateString(
@@ -181,7 +181,9 @@ export default function BillsClient({
   const leftToPay = monthlyTotal - paidTotal + rolloverTotal;
   const allPaid = leftToPay <= 0;
 
-  // Calculate weeks remaining in current month
+  // How long there is left to save. The bills being covered are next month's
+  // and the first of them is due on the 1st, so the window is the rest of THIS
+  // month — the money needs to be there when the month turns over.
   const now = new Date();
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const daysRemaining = lastDay.getDate() - now.getDate() + 1;
@@ -229,16 +231,23 @@ export default function BillsClient({
     run("Bill", () => deleteBill(id));
   }
 
-  // Tap "Not yet" to pick a date, then confirm to log a real payment row for
-  // that date. Unmarking removes this month's newest payment. Open to Jamie
-  // and Chris alike — either of them might be the one who actually paid it.
+  // Tap "Not yet" to pick a date, then confirm to log a real payment row.
+  // The row is dated on the bill's due day in the month being covered — the
+  // same "date it for the month it covers" rule the rollover settle-up below
+  // uses — and the note carries the day it actually left the bank when that's
+  // a different date. Without that, a payment made in August wouldn't count
+  // toward September and the checkmark would pop back off on reload. Open to
+  // Jamie and Chris alike — either of them might be the one who paid it.
   function handleMarkPaid(bill: Bill, paidDate: string) {
     setPaidIds((p) => new Set(p).add(bill.id));
     run("Bill", async () => {
+      const covers = coveredPaidDate(bill.dueDay);
+      const paidOn = paidDate || todayIso();
       const res = await addBillPayment({
         billId: bill.id,
         amount: bill.amount,
-        paidDate: paidDate || todayIso(),
+        paidDate: covers,
+        note: paidOn === covers ? undefined : `Paid ${shortDate(paidOn)}`,
       });
       if (!res.ok) {
         setPaidIds((p) => {
@@ -352,7 +361,7 @@ export default function BillsClient({
                 />
               </div>
               <p className="mt-1.5 text-[13px] font-medium" style={{ color: cfg.color }}>
-                {paidCount} of {groupBills.length} paid this month
+                {paidCount} of {groupBills.length} covered for {monthName}
               </p>
             </>
           )}
@@ -446,9 +455,11 @@ export default function BillsClient({
       >
         {allPaid ? (
           <>
-            <p className="text-[15px] font-semibold">🎉 All {monthName} bills are paid!</p>
+            <p className="text-[15px] font-semibold">🎉 All {monthName} bills are covered!</p>
             <p className="mt-1 text-5xl font-bold">{money(0)}</p>
-            <p className="mt-1 text-[13px] opacity-90">Nothing left to pay this month.</p>
+            <p className="mt-1 text-[13px] opacity-90">
+              Nothing left to put aside for {monthName}.
+            </p>
           </>
         ) : (
           <>

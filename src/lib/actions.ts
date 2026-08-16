@@ -47,6 +47,7 @@ import {
   type RevealResult,
 } from "./passwords";
 import { menuOrderKey } from "./menuOrder";
+import { billMonthRange } from "./billMonth";
 import { MAX_NAV_TABS, PAGES, isSlot, pageByKey } from "./pages";
 import { isReachable, slotsFor } from "./navLayout";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
@@ -727,13 +728,15 @@ export async function unmarkBillPaid(billId: string): Promise<ActionResult> {
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  // Same window getPaidBillIdsForBillMonth reads, so unticking removes the
+  // payment the checkmark was actually showing.
+  const { start, end } = billMonthRange();
   const { data: row } = await c
     .from("bill_payments")
     .select("id")
     .eq("bill_id", billId)
-    .gte("paid_date", monthStart)
+    .gte("paid_date", start)
+    .lt("paid_date", end)
     .order("paid_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1)
