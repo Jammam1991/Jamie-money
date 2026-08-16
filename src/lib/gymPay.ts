@@ -264,21 +264,36 @@ const ALL_TIME_PAY_MONTHS = 36;
  * all-time. Null whenever the gym dashboard can't answer; the caller treats
  * that as "not available" rather than showing a false $0.
  */
-export async function getJamieEarnedPay(
-  year?: number,
+export async function getJamiePayMonths(): Promise<PayMonthsResult> {
+  return getPayMonths(ALL_TIME_PAY_MONTHS);
+}
+
+/**
+ * Jamie's earned pay across one Business Finances period. Pure — the fetch
+ * is `getJamiePayMonths` above, so a caller can run it alongside Money App
+ * and narrow the answer once BOTH have landed.
+ *
+ * `year` must be the year MONEY APP resolved to (`data.year`), not the raw
+ * `?year=` off the URL. They differ on the commonest load of all: no query
+ * string at all, where the URL says nothing and Money App quietly picks the
+ * current year. Filtering on the raw param there matched no month, summed
+ * to $0, and left the toggle looking broken — it subtracted nothing while
+ * still reading as switched on.
+ */
+export function earnedPayForPeriod(
+  result: PayMonthsResult,
+  year: number | "all-time",
   month?: number,
-  isAllTime?: boolean,
-): Promise<number | null> {
-  const { months, problem } = await getPayMonths(ALL_TIME_PAY_MONTHS);
-  if (problem) return null;
+): number | null {
+  if (result.problem) return null;
 
   const inPeriod = (m: PayMonth): boolean => {
-    if (isAllTime) return true; // getPayMonths never reaches before the gym existed
+    // getPayMonths never reaches back before the gym existed, so every month
+    // it returns is inside "all time" by construction.
+    if (year === "all-time") return true;
     const [y, mm] = m.month.split("-").map(Number);
-    if (!year) return false;
-    if (month) return y === year && mm === month;
-    return y === year;
+    return month ? y === year && mm === month : y === year;
   };
 
-  return months.filter(inPeriod).reduce((sum, m) => sum + m.earned, 0);
+  return result.months.filter(inPeriod).reduce((sum, m) => sum + m.earned, 0);
 }

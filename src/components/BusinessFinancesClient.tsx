@@ -876,11 +876,17 @@ function MoneyStory({
           label="Include Jamie's Pay"
           on={jamieCut === "pay"}
           onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
-          disabled={jamiePay == null}
+          // `!jamiePay`, not `== null`: a period Jamie earned nothing in has
+          // nothing to subtract either, and a button that lights up and moves
+          // no number reads as broken. Same guard the distributions toggle
+          // below already uses.
+          disabled={!jamiePay}
           title={
             jamiePay == null
               ? "Couldn't reach the gym dashboard for this period."
-              : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it."
+              : !jamiePay
+                ? "The gym dashboard has no pay recorded for this period."
+                : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it."
           }
         />
         <ToggleChip

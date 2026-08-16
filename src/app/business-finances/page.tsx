@@ -4,7 +4,7 @@ import BusinessFinancesClient from "@/components/BusinessFinancesClient";
 import { pageGate } from "@/lib/visibility";
 import { businessFinancesReady, getBusinessFinances } from "@/lib/businessFinances";
 import { modeById, readViewMode } from "@/lib/businessViewModes";
-import { getJamieEarnedPay } from "@/lib/gymPay";
+import { earnedPayForPeriod, getJamiePayMonths } from "@/lib/gymPay";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +32,11 @@ export default async function BusinessFinancesPage({
 
   // Fetched alongside Money App rather than after it — the two have nothing
   // to do with each other, so there's no reason to pay for them one at a
-  // time. jamiePay is a bonus figure (see the toggle in the client): null on
-  // any failure, never what takes this page down.
-  const [{ data, error }, jamiePay] = await Promise.all([
+  // time. The gym dashboard's answer isn't year-scoped, so it's narrowed
+  // below once Money App has said which year it actually loaded.
+  const [{ data, error }, payMonths] = await Promise.all([
     getBusinessFinances(year, month, isAllTime, mode.operational, mode.slim, mode.noFed),
-    getJamieEarnedPay(year, month, isAllTime),
+    getJamiePayMonths(),
   ]);
 
   if (!data) {
@@ -58,6 +58,12 @@ export default async function BusinessFinancesPage({
       </div>
     );
   }
+
+  // `data.year`, not the `year` parsed off the URL — with no `?year=` at all
+  // (the plain /business-finances load) that param is undefined while Money
+  // App has quietly resolved to the current year. Narrowing on the URL's
+  // silence matched no month and handed the toggle a $0 to subtract.
+  const jamiePay = earnedPayForPeriod(payMonths, data.year, data.month);
 
   return (
     <div>
