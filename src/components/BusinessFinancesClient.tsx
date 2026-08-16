@@ -264,10 +264,11 @@ function CutTag({ mode }: { mode: ViewMode }) {
   );
 }
 
-// A small on/off pill for a subtraction that isn't one of the five cuts —
-// see the note on MoneyStory. Disabled rather than hidden when there's nothing
-// to subtract, so the reason ("couldn't reach the gym dashboard") is a
-// tooltip away instead of the option just vanishing.
+// A full-width on/off card for a subtraction that isn't one of the five cuts
+// — see the note on MoneyStory. Disabled rather than hidden when there's
+// nothing to subtract, so the reason ("couldn't reach the gym dashboard") is
+// a tooltip away instead of the option just vanishing. Sized and bordered to
+// match the ViewPicker cards above — same weight of thing, same shape.
 function ToggleChip({
   label,
   on,
@@ -287,11 +288,11 @@ function ToggleChip({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium transition-colors disabled:opacity-40"
+      className="block w-full rounded-xl border-2 px-4 py-3 text-left text-[15px] font-semibold transition-colors disabled:opacity-40"
       style={
         on && !disabled
-          ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-          : undefined
+          ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
+          : { borderColor: "var(--muted)" }
       }
     >
       {label}
@@ -381,11 +382,14 @@ function ViewPicker({
               href={hrefFor(m.id)}
               scroll={false}
               aria-current={active ? "true" : undefined}
-              className="block rounded-xl border px-3 py-2.5 transition-colors"
+              // The default --border is close enough to white that the
+              // unselected cards were nearly invisible — --muted reads as an
+              // actual line instead of a hint of one.
+              className="block rounded-xl border-2 px-3 py-2.5 transition-colors"
               style={
                 active
                   ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
-                  : { borderColor: "var(--border)" }
+                  : { borderColor: "var(--muted)" }
               }
             >
               <p className="text-[14px] font-semibold">{m.label}</p>
@@ -813,9 +817,29 @@ function MoneyStory({
             `${mode.operational ? "Doesn't count" : "Counts"} ${money(rollup.otherIncome)} of grant money`}
         </FlowRow>
         {takenOff.map((r) => (
-          <FlowRow key={r.label} label={r.label} amount={-r.amount} tone="out">
-            {r.note}
-          </FlowRow>
+          <div key={r.label}>
+            <FlowRow label={r.label} amount={-r.amount} tone="out">
+              {r.note}
+            </FlowRow>
+            {/* Gross before interest — income minus what it costs to run the
+                gym, stopping short of the finance-cost and Jamie rows below.
+                Only worth a line when something actually follows it; on its
+                own it would just repeat "Left over". */}
+            {r.label === "What it costs to run the gym" &&
+              takenOff.some((x) => x.label !== "What it costs to run the gym") && (
+                <div
+                  className="mt-1 mb-1 flex items-baseline justify-between gap-3 border-t pt-2"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <span className="text-[13px] font-medium text-muted">
+                    Operating profit, before interest
+                  </span>
+                  <span className="text-[14px] font-medium text-muted">
+                    {money(moneyIn - moneyOut)}
+                  </span>
+                </div>
+              )}
+          </div>
         ))}
         <div
           className="mt-1 flex items-baseline justify-between gap-3 border-t pt-2.5"
@@ -847,9 +871,9 @@ function MoneyStory({
       {/* The two "what if Jamie's pay came out of this too?" questions. Below
           the sum, not above it: they change the answer, so the plain answer
           has to be readable first. */}
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 space-y-2">
         <ToggleChip
-          label="Take out Jamie's pay"
+          label="Include Jamie's Pay"
           on={jamieCut === "pay"}
           onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
           disabled={jamiePay == null}
@@ -860,7 +884,7 @@ function MoneyStory({
           }
         />
         <ToggleChip
-          label="Take out everything Jamie drew"
+          label="Include all Jamie's Distributions"
           on={jamieCut === "dist"}
           onClick={() => setJamieCut((v) => (v === "dist" ? "none" : "dist"))}
           disabled={!rollup.jamieDistributions}
