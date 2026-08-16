@@ -33,6 +33,7 @@ export type CurrentLease = {
   permittedUse: string;
   requiredHours: string;
   rentSchedule: RentYear[];
+  camMonthly: number;
   camDescription: string;
   securityDeposit: number;
   paymentMethod: string;
@@ -57,8 +58,9 @@ export const CURRENT_LEASE: CurrentLease = {
     { year: 2, label: "Year 2", monthly: 5358.51 },
     { year: 3, label: "Year 3", monthly: 5519.27 },
   ],
+  camMonthly: 2300,
   camDescription:
-    "Tenant's pro-rata share of shopping center operating costs (CAM), estimated annually and divided by 12, paid monthly alongside base rent, reconciled after year-end against actual costs.",
+    "Tenant's pro-rata share of shopping center operating costs (CAM) — billed on top of base rent as a monthly estimate, reconciled after year-end against actual costs. The estimate is set by the landlord and changes; this is the current figure from the gym dashboard's lease board.",
   securityDeposit: 33212,
   paymentMethod: "ACH, due before the 1st of each month",
   lateFee:
