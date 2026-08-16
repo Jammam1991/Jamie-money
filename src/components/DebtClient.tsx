@@ -20,12 +20,12 @@ import {
 import { Card, Bar } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
 import {
+  applyLumpSum,
   carLoanParts,
   duration,
   financeCharge,
   isCarLoan,
   isUnsecured,
-  monthlyInterest,
   monthlyPayment,
   monthsToClear,
   newDebtMonthlyCost,
@@ -33,6 +33,7 @@ import {
   TAYCAN_PRICE,
   totalBalance,
   totalMinimum,
+  type LumpSum,
 } from "@/lib/payoff";
 import { groupByCategory } from "@/lib/debtCategories";
 import { CARRY_CATEGORIES, type ChrisCarry } from "@/lib/chrisCarry";
@@ -358,7 +359,15 @@ export default function DebtClient({
   const offsetTotal = OFFSETS.reduce((sum, o) => sum + o.amount, 0);
   const netTotal = carryingTotal - offsetTotal;
 
-  const securedInterest = monthlyInterest(debts);
+  // What the monthly becomes once that money lands. The lump sum goes at the
+  // highest-interest debts first — the same order the payoff calculator uses —
+  // and only a debt cleared outright stops costing anything each month.
+  //
+  // Jamie's own debts only. Selling his watch doesn't pay off the gym's loans,
+  // and the settlement and the gym share have no balance here to clear.
+  const lump = applyLumpSum(personalDebts, offsetTotal);
+  const monthlyAfter = Math.max(0, monthlyTotal - lump.monthlyFreed);
+
 
   // The same money cut a different way: Jamie's own unsecured debt, his car,
   // the gym's debt, and the settlement — kept apart rather than lumped into
@@ -865,23 +874,6 @@ export default function DebtClient({
             </p>
           </div>
         </div>
-        <p className="mt-1.5 text-[12px] text-muted">
-          What you&apos;re carrying now · {money(securedInterest)} of the
-          payment is pure interest
-        </p>
-        {/* Says out loud what the headline leaves out, so a number that got
-            smaller can't read as debt quietly going away. */}
-        {settlement.balance > 0 && (
-          <p className="mt-1 text-[12px] text-muted">
-            The {money(settlement.balance)} divorce settlement is deferred and
-            sits in its own card below.
-          </p>
-        )}
-        {offsetTotal > 0 && (
-          <p className="mt-1 text-[12px]" style={{ color: GREEN }}>
-            {money(netTotal)}{" "}once what&apos;s coming back lands — see below
-          </p>
-        )}
 
         {/* One bar, one colour per bucket: the shape of the pile at a glance. */}
         <div className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-tint">
@@ -979,6 +971,21 @@ export default function DebtClient({
           ))}
       </Card>
 
+      {/* The same two figures as they'd read once the money coming in lands.
+          Directly under today's, in green, so the pair reads as "now" and
+          "after" without a word of explanation needed. */}
+      <AfterChangesCard
+        balanceNow={carryingTotal}
+        balanceAfter={netTotal}
+        monthlyNow={monthlyTotal}
+        monthlyAfter={monthlyAfter}
+        offsets={OFFSETS}
+        lump={lump}
+        deposit={SECURITY_DEPOSIT}
+        depositShare={SECURITY_DEPOSIT * (splitPct / 100)}
+        splitPct={splitPct}
+      />
+
       {/* ── The settlement, on its own ───────────────────────────────────────
           Out of the headline because it's deferred, and in a card of its own
           rather than deleted because it's still money owed. Kept visually
@@ -1070,16 +1077,6 @@ export default function DebtClient({
         </Card>
       )}
 
-      {/* What comes back off the pile. Its own card rather than netted into the
-          total above, because none of this money has moved yet. */}
-      <OffsetsCard
-        gross={carryingTotal}
-        net={netTotal}
-        offsets={OFFSETS}
-        deposit={SECURITY_DEPOSIT}
-        depositShare={SECURITY_DEPOSIT * (splitPct / 100)}
-        splitPct={splitPct}
-      />
 
       {/* Credit score, last pulled from Money App */}
       {fico && <FicoCard score={fico.score} date={fico.date} />}
@@ -1341,28 +1338,40 @@ function CarryCost({
   );
 }
 
-// ── What comes back off the pile ─────────────────────────────────────────────
-// Assets that could be sold, and money owed to Jamie that hasn't landed. Shown
-// beside the total rather than folded into it: none of this has happened yet,
-// and a smaller headline that quietly assumes a watch sells and a payment
-// arrives is not what Jamie owes today.
+// ── What it looks like after the changes ─────────────────────────────────────
+// The balance and the monthly as they'd read once the money coming in lands —
+// the watch sold, the medical payment arrived. Sits directly under today's
+// figures, in green, so the pair reads as "now" and "after" at a glance.
 //
-// The security deposit is listed too, but greyed and marked as already counted.
-// It came off what went into the gym, so it has already shrunk Jamie's share by
-// half of itself further up the page. Listing it here without saying that would
-// subtract it twice; leaving it out entirely would leave "where did the deposit
-// go?" unanswered.
-function OffsetsCard({
-  gross,
-  net,
+// Kept out of the headline on purpose. None of this has happened yet, and a
+// smaller total that quietly assumes a watch sells is not what Jamie owes
+// today. This card is the whole explanation, which is why it opens.
+//
+// The monthly is the conservative figure. The money goes at the
+// highest-interest debts first and only a debt cleared outright stops costing
+// anything — paying half a card off doesn't halve its minimum.
+//
+// The security deposit is listed but greyed and marked as already counted: it
+// came off what went into the gym, so it has already shrunk Jamie's share
+// further up the page. Listing it plainly would subtract it twice; leaving it
+// out would leave "where did the deposit go?" unanswered.
+function AfterChangesCard({
+  balanceNow,
+  balanceAfter,
+  monthlyNow,
+  monthlyAfter,
   offsets,
+  lump,
   deposit,
   depositShare,
   splitPct,
 }: {
-  gross: number;
-  net: number;
+  balanceNow: number;
+  balanceAfter: number;
+  monthlyNow: number;
+  monthlyAfter: number;
   offsets: Offset[];
+  lump: LumpSum;
   deposit: number;
   depositShare: number;
   splitPct: number;
@@ -1370,34 +1379,56 @@ function OffsetsCard({
   const [open, setOpen] = useState(false);
   const total = offsets.reduce((sum, o) => sum + o.amount, 0);
   if (total <= 0) return null;
+  const monthlySaved = monthlyNow - monthlyAfter;
 
   return (
     <Card>
       <button
-        className="flex w-full items-center justify-between gap-3"
+        className="w-full text-left"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className="min-w-0 text-left">
-          <span className="block text-[11px] uppercase tracking-wide text-muted">
-            What comes off it
-          </span>
-          <span
-            className="block text-[26px] font-black leading-none"
-            style={{ color: GREEN }}
-          >
-            −{money(total)}
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <span className="text-right">
-            <span className="block text-[11px] text-muted">would leave</span>
-            <span className="block text-[16px] font-bold">{money(net)}</span>
+        <span className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] uppercase tracking-wide" style={{ color: GREEN }}>
+            After the changes
           </span>
           <ChevronDown
-            size={16}
-            className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
+            size={15}
+            className="shrink-0 transition-transform"
+            style={{
+              color: GREEN,
+              transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            }}
           />
+        </span>
+        <span className="grid grid-cols-2 gap-6">
+          <span className="block">
+            <span
+              className="block text-[30px] font-black leading-none"
+              style={{ color: GREEN }}
+            >
+              {money(balanceAfter)}
+            </span>
+            <span className="mt-1 block text-[11px] text-muted">
+              balance · was {money(balanceNow)}
+            </span>
+          </span>
+          <span className="block">
+            <span
+              className="block text-[30px] font-black leading-none"
+              style={{ color: GREEN }}
+            >
+              {money(monthlyAfter)}/mo
+            </span>
+            <span className="mt-1 block text-[11px] text-muted">
+              {monthlySaved > 0
+                ? `monthly · ${money(monthlySaved)} less`
+                : "monthly · unchanged"}
+            </span>
+          </span>
+        </span>
+        <span className="mt-2 block text-[12px] text-muted">
+          once the watch sells and the payment lands · tap for the detail
         </span>
       </button>
 
@@ -1444,24 +1475,67 @@ function OffsetsCard({
 
           <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
             <div className="flex items-center justify-between">
-              <span className="text-muted">Owed today</span>
-              <span>{money(gross)}</span>
+              <span className="text-muted">Balance today</span>
+              <span>{money(balanceNow)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted">− Assets and money coming</span>
               <span style={{ color: GREEN }}>−{money(total)}</span>
             </div>
             <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
-              <span>= If all of it lands</span>
-              <span>{money(net)}</span>
+              <span>= Balance after</span>
+              <span style={{ color: GREEN }}>{money(balanceAfter)}</span>
+            </div>
+          </div>
+
+          {/* What the monthly does, and why. A balance falling doesn't move the
+              payment on its own — a debt has to be gone. */}
+          <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
+            <p className="text-[11px] uppercase tracking-wide text-muted">
+              What the payment does
+            </p>
+            {lump.cleared.length > 0 ? (
+              <>
+                <p className="text-[12px] text-muted">
+                  Put at your highest-interest debts first, {money(total)} clears
+                  these outright:
+                </p>
+                {lump.cleared.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-muted">
+                      {d.name} · {d.apr}%
+                    </span>
+                    <span className="shrink-0" style={{ color: GREEN }}>
+                      −{money(d.minPayment)}/mo
+                    </span>
+                  </div>
+                ))}
+              </>
+            ) : (
+              <p className="text-[12px] text-muted">
+                It isn&apos;t enough to clear any one debt outright, so no payment
+                stops yet.
+              </p>
+            )}
+            {lump.partial && (
+              <p className="text-[12px] text-muted">
+                The remaining {money(lump.partial.paid)} comes off{" "}
+                {lump.partial.debt.name} without clearing it, so its{" "}
+                {money(lump.partial.debt.minPayment)}/mo carries on.
+              </p>
+            )}
+            <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+              <span>= Monthly after</span>
+              <span style={{ color: GREEN }}>{money(monthlyAfter)}/mo</span>
             </div>
           </div>
 
           <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
             <AlertCircle size={13} className="mt-0.5 shrink-0" />
             None of this has happened yet — the watch has to sell and the payment
-            has to arrive. So the headline above stays at what&apos;s owed today,
-            and this is what it would become.
+            has to arrive. Only a debt paid off completely stops costing
+            anything each month, so the saving above is the careful figure, not
+            the best case.
           </p>
         </>
       )}

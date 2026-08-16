@@ -266,6 +266,50 @@ export function carLoanParts(debt: Debt): LoanPart[] | null {
   ];
 }
 
+// ── What a lump sum actually buys you ────────────────────────────────────────
+// Money arriving in one go — a watch sold, a payment landing — put against the
+// debts highest interest first, which is the same order the payoff calculator
+// uses and the cheapest way out.
+//
+// Only a debt cleared outright stops costing anything each month. Paying half a
+// card off doesn't halve its minimum, so a part-paid debt keeps its payment
+// here. That makes the monthly saving the conservative figure rather than the
+// flattering one, which is the right way round for money nobody has yet.
+export type LumpSum = {
+  cleared: Debt[]; // paid off outright — these stop costing anything monthly
+  partial: { debt: Debt; paid: number } | null; // part-paid, keeps its payment
+  leftover: number; // more money than debt, if that ever happens
+  monthlyFreed: number; // payments that stop
+};
+
+export function applyLumpSum(debts: Debt[], amount: number): LumpSum {
+  const order = [...debts]
+    .filter((d) => d.balance > 0)
+    .sort((a, b) => b.apr - a.apr);
+
+  const cleared: Debt[] = [];
+  let partial: { debt: Debt; paid: number } | null = null;
+  let left = Math.max(0, amount);
+
+  for (const debt of order) {
+    if (left <= 0) break;
+    if (left >= debt.balance) {
+      left -= debt.balance;
+      cleared.push(debt);
+    } else {
+      partial = { debt, paid: left };
+      left = 0;
+    }
+  }
+
+  return {
+    cleared,
+    partial,
+    leftover: left,
+    monthlyFreed: cleared.reduce((sum, d) => sum + d.minPayment, 0),
+  };
+}
+
 // Turn a number of months into "2 yrs 3 mo".
 export function duration(months: number): string {
   if (!Number.isFinite(months) || months >= MAX_MONTHS) return "never";
