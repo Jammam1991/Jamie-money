@@ -332,13 +332,6 @@ export default function DebtByYear({
         </span>
       </button>
 
-      {!open && (
-        <p className="mt-2 text-xs text-muted">
-          Open it to see every year, the months inside them, and each
-          transaction behind the totals.
-        </p>
-      )}
-
       {open && (
         <>
       {addedThisYear > 0 && (
