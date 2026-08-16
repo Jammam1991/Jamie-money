@@ -377,7 +377,9 @@ export default function DebtClient({
       emoji: "💳",
       color: VIOLET,
       label: "Spending Debt",
-      note: "cards and loans in Jamie's name",
+      // No sub-line: the name says it. An empty note drops the row's second
+      // line rather than leaving a blank one.
+      note: "",
       balance: totalBalance(personalUnsecuredDebts),
       monthly: totalMinimum(personalUnsecuredDebts),
       debts: personalUnsecuredDebts,
@@ -399,7 +401,7 @@ export default function DebtClient({
       emoji: "🏋️",
       color: AMBER,
       label: "Business Debt",
-      note: "the gym's loans and cards",
+      note: "",
       balance: businessTotal,
       monthly: totalMinimum(businessDebts),
       debts: businessDebts,
@@ -830,11 +832,13 @@ export default function DebtClient({
           label={`${monthName(lastMonth)}'s New Debt`}
           loans={periods.last.loans}
           pay={periods.last.pay}
+          debts={debts}
         />
         <NewDebtCard
           label={`New debt in ${currentYear} so far`}
           loans={periods.year.loans}
           pay={periods.year.pay}
+          debts={debts}
         />
       </div>
 
@@ -914,9 +918,11 @@ export default function DebtClient({
                     <span className="block text-[15px] font-medium">
                       {b.label}
                     </span>
-                    <span className="block text-[11px] text-muted">
-                      {b.note}
-                    </span>
+                    {b.note && (
+                      <span className="block text-[11px] text-muted">
+                        {b.note}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block text-[16px] font-bold leading-tight">
@@ -1001,9 +1007,6 @@ export default function DebtClient({
                   <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
                     Deferred
                   </span>
-                </span>
-                <span className="mt-0.5 block text-[11px] text-muted">
-                  not yours to pay right now — kept out of the totals above
                 </span>
               </span>
               <ChevronDown
@@ -1198,7 +1201,6 @@ function LoanParts({ debt, color }: { debt: Debt; color: string }) {
               <span className="block text-[14px] font-medium">
                 {p.emoji} {p.label}
               </span>
-              <span className="block text-[11px] text-muted">{p.note}</span>
             </span>
             <span className="shrink-0 text-right">
               <span className="block text-[14px] font-semibold leading-tight">
@@ -1542,6 +1544,9 @@ function NewDebtCard({
 
   const nothing = parts.length === 0;
 
+  // Only the lead card has the width to put the two figures in a row.
+  const sideBySide = monthlyCost !== null && big;
+
   return (
     <div
       className="rounded-2xl border"
@@ -1565,18 +1570,16 @@ function NewDebtCard({
           {label}
         </span>
 
-        {/* The amount borrowed and what it costs from here on, side by side.
-            One is what happened this month; the other is what it keeps
-            costing — and the second is the one that never got said.
+        {/* The amount borrowed and what it costs from here on. One is what
+            happened over the period; the other is what it keeps costing — and
+            the second is the one that never got said.
 
-            Two columns rather than a row of two blocks, so the captions sit
-            under their own figure and can wrap without drifting into the
-            other one on a narrow phone. */}
+            Side by side only on the lead card, which has the full width for
+            it. The two small cards are half a phone wide already, so splitting
+            them again leaves about 75px a column and neither figure fits. */}
         <span
           className={
-            monthlyCost !== null
-              ? "mt-1 grid grid-cols-2 items-start gap-3"
-              : "mt-1 block"
+            sideBySide ? "mt-1 grid grid-cols-2 items-start gap-3" : "mt-1 block"
           }
         >
           <span className="block min-w-0">
@@ -1585,7 +1588,7 @@ function NewDebtCard({
                 // Sharing the row with the /mo figure halves the room, and
                 // "+$35,893" at 40px does not fit half a phone. It keeps the
                 // full size whenever it has the width to itself.
-                big ? (monthlyCost !== null ? "text-[30px]" : "text-[40px]") : "text-[24px]"
+                big ? (sideBySide ? "text-[30px]" : "text-[40px]") : "text-[24px]"
               }`}
               style={{ color: nothing ? "var(--muted)" : tone }}
             >
@@ -1599,7 +1602,7 @@ function NewDebtCard({
             </span>
           </span>
 
-          {monthlyCost !== null && (
+          {sideBySide && (
             <span className="block min-w-0">
               <span className="block text-[22px] font-black leading-none tracking-tight">
                 {grew ? "+" : "−"}
@@ -1612,6 +1615,20 @@ function NewDebtCard({
             </span>
           )}
         </span>
+
+        {/* On the small cards the same figure runs on one wrapping line —
+            the number carries the weight, the words stay quiet. */}
+        {monthlyCost !== null && !sideBySide && (
+          <span className="mt-1.5 block text-[11px]">
+            <span className="text-[13px] font-bold">
+              {grew ? "+" : "−"}
+              {money(monthlyCost)}/mo
+            </span>{" "}
+            <span className="text-muted">
+              {grew ? "added to the payment" : "off the payment"}
+            </span>
+          </span>
+        )}
 
         {/* The way in, on its own line so it never competes with the figures
             above it for room. */}
@@ -1940,8 +1957,7 @@ function FicoCard({ score, date }: { score: number; date: string }) {
           <span>300</span>
           <span>850</span>
         </div>
-        <p className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
-          <span>From Money App, updated {date}.</span>
+        <p className="mt-1 flex items-center justify-end gap-2 text-xs text-muted">
           <span className="flex shrink-0 items-center gap-0.5" style={{ color }}>
             See the full report
             <ChevronRight size={13} />
