@@ -10,7 +10,6 @@ import {
   getInvestmentSplitTerms,
   getSettlementTerms,
   getJamieSpending,
-  getDeferredDebtIds,
   getMoneyAppFico,
   hasPlaidItems,
 } from "@/lib/store";
@@ -58,7 +57,6 @@ export default async function DebtPage() {
     settlementTerms,
     investmentSplitTerms,
     chrisCarry,
-    deferredIds,
   ] = await Promise.all([
     getDebts(),
     hasPlaidItems(),
@@ -71,7 +69,6 @@ export default async function DebtPage() {
     getSettlementTerms(),
     getInvestmentSplitTerms(),
     getChrisCarry(),
-    getDeferredDebtIds(),
   ]);
 
   return (
@@ -93,7 +90,6 @@ export default async function DebtPage() {
         settlementTerms={settlementTerms}
         investmentSplitTerms={investmentSplitTerms}
         chrisCarry={chrisCarry}
-        deferredIds={deferredIds}
       />
     </div>
   );

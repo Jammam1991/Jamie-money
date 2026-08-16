@@ -4,16 +4,9 @@ import SettingsClient from "@/components/SettingsClient";
 import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
 import PasswordsAdmin from "@/components/PasswordsAdmin";
-import DeferredDebtsAdmin from "@/components/DeferredDebtsAdmin";
 import { getRole, isVaultUnlocked, VAULT_MINUTES } from "@/lib/auth";
-import {
-  getComingSoonPages,
-  getDebts,
-  getDeferredDebtIds,
-  getHouseholdIncome,
-} from "@/lib/store";
+import { getComingSoonPages, getHouseholdIncome } from "@/lib/store";
 import { getTaxDocuments } from "@/lib/taxCenter";
-import { getExtraPayments } from "@/lib/monthlyExtras";
 import { getPasswordEntries, vaultConfigured } from "@/lib/passwords";
 
 export const dynamic = "force-dynamic";
@@ -24,24 +17,14 @@ export default async function SettingsPage() {
 
   const vaultOpen = await isVaultUnlocked();
 
-  const [
-    comingSoon,
-    taxDocuments,
-    householdIncome,
-    passwords,
-    debts,
-    deferred,
-    extras,
-  ] = await Promise.all([
-    getComingSoonPages(),
-    getTaxDocuments(),
-    getHouseholdIncome(),
-    // Labels only, and only once the password book's own lock is open.
-    vaultOpen ? getPasswordEntries() : Promise.resolve([]),
-    getDebts(),
-    getDeferredDebtIds(),
-    getExtraPayments(),
-  ]);
+  const [comingSoon, taxDocuments, householdIncome, passwords] =
+    await Promise.all([
+      getComingSoonPages(),
+      getTaxDocuments(),
+      getHouseholdIncome(),
+      // Labels only, and only once the password book's own lock is open.
+      vaultOpen ? getPasswordEntries() : Promise.resolve([]),
+    ]);
 
   return (
     <div className="space-y-8">
@@ -49,11 +32,11 @@ export default async function SettingsPage() {
         <PageTitle>Settings</PageTitle>
         <SettingsClient initialComingSoon={comingSoon} />
       </div>
-      <DeferredDebtsAdmin
-        debts={debts}
-        extras={extras}
-        initialDeferred={deferred}
-      />
+      {/* The deferred-debts switches are hidden for now. The Debt page no
+          longer shows a "paying now, without deferred" figure, so a toggle
+          here would change nothing on screen. The component, the actions and
+          the stored ids are all still in place — put this back and it works
+          again the moment that card returns. */}
       <HouseholdIncomeAdmin initial={householdIncome} />
       <TaxDocumentsAdmin initialDocuments={taxDocuments} />
       <PasswordsAdmin
