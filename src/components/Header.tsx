@@ -1,91 +1,67 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   Menu,
   X,
-  Scale,
-  CreditCard,
-  FileText,
-  BookOpen,
-  Building2,
-  Landmark,
-  Dumbbell,
-  KeyRound,
-  Compass,
-  Briefcase,
-  HeartHandshake,
-  Home,
-  Car,
   GripVertical,
   Check,
   RotateCcw,
   History as HistoryIcon,
   ChevronDown,
+  type LucideIcon,
 } from "lucide-react";
 import { setMenuOrder } from "@/lib/actions";
+import { pageByKey, type PageKey } from "@/lib/pages";
 
-// The rows tucked behind "History" — settlement mechanics and what-ifs, kept
-// out of the top-level menu since they're looked at far less often than the
-// day-to-day pages.
-const historyLinks = [
-  { href: "/big-picture", label: "The Big Picture", Icon: Compass },
-  { href: "/story", label: "The Debt Story", Icon: BookOpen },
-  { href: "/divorce", label: "Divorce", Icon: Scale },
-  { href: "/married-vs-divorce", label: "Married vs Divorce", Icon: HeartHandshake },
-];
+type MenuChild = { href: string; label: string; Icon: LucideIcon };
+type MenuLink = MenuChild & { isGroup?: boolean; children?: MenuChild[] };
 
-// The slide-out menu. Every row always shows — a page parked as "Coming Soon"
-// on the Settings screen keeps its link and says so when Jamie opens it.
+// The slide-out menu. Which rows are on it is decided on the server: Chris
+// arranges them on the Settings screen, and anything he's taken off Jamie's
+// screen never reaches this list. A page parked as "Coming Soon" keeps its row
+// and says so when Jamie opens it.
 //
-// This list is the menu. Chris and Jamie can each drag the rows into whatever
-// order suits them and their own order is saved, but it's only an order: a page
-// can never appear in the menu without being here, and one taken out of here
-// disappears from the menu no matter what was saved.
+// Chris and Jamie can each drag the rows into whatever order suits them and
+// their own order is saved, but it's only an order: a page can never appear in
+// the menu without being handed down here, and one moved out of the menu
+// disappears from it no matter what order was saved.
 //
-// "History" is one row in that same order — its href never routes anywhere,
-// it just expands in place — so dragging it around works exactly like any
-// other row while its four children stay fixed underneath it.
-const links = [
-  { href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
-  // Sits right under it — that page asks "job or gym?", this one is what to do
-  // about it once the answer is a job.
-  { href: "/career", label: "Career", Icon: Briefcase },
-  { href: "/debt", label: "Debt", Icon: CreditCard },
-  { href: "/credit-report", label: "Credit Report", Icon: FileText },
-  // Sits right under those two — it's the same card and car payments read
-  // forwards, into the house they still allow room for.
-  { href: "/home-buying", label: "Home Buying", Icon: Home },
-  // Sits right under the car payment line in Home Buying — this is what that
-  // payment is actually for.
-  { href: "/cars", label: "Cars", Icon: Car },
-  { href: "/business-finances", label: "Business Finances", Icon: Building2 },
-  { href: "/tax-center", label: "Tax Center", Icon: Landmark },
-  { href: "/gym-story", label: "Gym Story", Icon: Dumbbell },
-  { href: "/gym-lease", label: "Gym Lease", Icon: KeyRound },
-  {
-    href: "#history",
-    label: "History",
-    Icon: HistoryIcon,
-    isGroup: true as const,
-    children: historyLinks,
-  },
-];
-
-type MenuLink = (typeof links)[number];
+// "History" is one row in that same order — its href never routes anywhere, it
+// just expands in place — so dragging it around works exactly like any other
+// row while its children stay fixed underneath it. It only exists at all while
+// something is filed under it.
+function buildLinks(menu: PageKey[], history: PageKey[]): MenuLink[] {
+  const row = (key: PageKey): MenuChild | null => {
+    const page = pageByKey(key);
+    return page ? { href: page.href, label: page.label, Icon: page.Icon } : null;
+  };
+  const rows: MenuLink[] = menu.map(row).filter((r): r is MenuChild => r !== null);
+  const children = history.map(row).filter((r): r is MenuChild => r !== null);
+  if (children.length > 0) {
+    rows.push({
+      href: "#history",
+      label: "History",
+      Icon: HistoryIcon,
+      isGroup: true,
+      children,
+    });
+  }
+  return rows;
+}
 
 // The menu in this person's saved order. Anything they haven't placed keeps its
-// position from the list above and follows on the end, so adding a page to the
-// code never needs a saved order touched — and a stale saved order can't hide a
+// position from the list above and follows on the end, so a page added to the
+// menu never needs a saved order touched — and a stale saved order can't hide a
 // screen from anyone.
-function inSavedOrder(saved: string[]): MenuLink[] {
-  const byHref = new Map(links.map((l) => [l.href, l]));
+function inSavedOrder(saved: string[], base: MenuLink[]): MenuLink[] {
+  const byHref = new Map(base.map((l) => [l.href, l]));
   const placed = saved
     .map((href) => byHref.get(href))
     .filter((l): l is MenuLink => l !== undefined);
   const seen = new Set(placed.map((l) => l.href));
-  return [...placed, ...links.filter((l) => !seen.has(l.href))];
+  return [...placed, ...base.filter((l) => !seen.has(l.href))];
 }
 
 // Move one item to a new index, everything else closing up behind it.
@@ -100,6 +76,8 @@ export default function Header({
   canReorder = false,
   forJamie = false,
   menuOrder = [],
+  menu = [],
+  history = [],
 }: {
   // Anyone logged in can arrange their own menu — it's how they like their own
   // screen, not something one person sets for the other.
@@ -109,11 +87,17 @@ export default function Header({
   // on the server.
   forJamie?: boolean;
   menuOrder?: string[];
+  // The rows this person gets, top level and tucked under History.
+  menu?: PageKey[];
+  history?: PageKey[];
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [items, setItems] = useState<MenuLink[]>(() => inSavedOrder(menuOrder));
+  const baseLinks = useMemo(() => buildLinks(menu, history), [menu, history]);
+  const [items, setItems] = useState<MenuLink[]>(() =>
+    inSavedOrder(menuOrder, baseLinks)
+  );
   const [dragging, setDragging] = useState<number | null>(null);
   const [, startTransition] = useTransition();
   // The row elements, so a drag can ask where the finger actually is rather
@@ -121,17 +105,18 @@ export default function Header({
   const rowRefs = useRef<(HTMLElement | null)[]>([]);
 
   // A save elsewhere (or on another device) revalidates the layout and sends a
-  // new order down. Take it, unless a drag is in flight — pulling the rows out
-  // from under a finger mid-drag is worse than being a moment stale.
+  // new order — or a different set of rows, if Chris just moved a page — down.
+  // Take it, unless a drag is in flight: pulling the rows out from under a
+  // finger mid-drag is worse than being a moment stale.
   //
   // Adjusted during render rather than in an effect. React supports setting
   // state here to react to a changed prop, and it re-renders before painting,
   // so the menu never flashes the old order on its way to the new one.
-  const orderKey = menuOrder.join("|");
-  const [lastOrderKey, setLastOrderKey] = useState(orderKey);
-  if (orderKey !== lastOrderKey && dragging === null) {
-    setLastOrderKey(orderKey);
-    setItems(inSavedOrder(menuOrder));
+  const rowsKey = `${menuOrder.join("|")}~${menu.join(",")}~${history.join(",")}`;
+  const [lastRowsKey, setLastRowsKey] = useState(rowsKey);
+  if (rowsKey !== lastRowsKey && dragging === null) {
+    setLastRowsKey(rowsKey);
+    setItems(inSavedOrder(menuOrder, baseLinks));
   }
 
   function save(next: MenuLink[]) {
@@ -139,7 +124,7 @@ export default function Header({
       const res = await setMenuOrder(next.map((l) => l.href));
       // Put the old order back rather than leave rows sitting somewhere they
       // weren't saved — otherwise the menu lies until the next page load.
-      if (!res.ok) setItems(inSavedOrder(menuOrder));
+      if (!res.ok) setItems(inSavedOrder(menuOrder, baseLinks));
     });
   }
 
@@ -197,7 +182,7 @@ export default function Header({
   }
 
   function reset() {
-    setItems(links);
+    setItems(baseLinks);
     startTransition(async () => {
       await setMenuOrder([]);
     });
@@ -241,7 +226,7 @@ export default function Header({
           <div className="flex items-center justify-between p-4 border-b border-border">
             <span className="text-lg font-medium">Menu</span>
             <div className="flex items-center gap-1">
-              {canReorder && (
+              {canReorder && items.length > 1 && (
                 <button
                   onClick={() => setEditing((v) => !v)}
                   className="rounded-lg px-2 py-1 text-xs text-muted hover:bg-tint transition-colors"
@@ -277,6 +262,11 @@ export default function Header({
           )}
 
           <nav className="p-4 space-y-2">
+            {items.length === 0 && (
+              <p className="px-1 py-2 text-[13px] text-muted">
+                Nothing in the menu right now.
+              </p>
+            )}
             {items.map(({ href, label, Icon, isGroup, children }, i) => {
               const isDragging = dragging === i;
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isLoggedIn } from "@/lib/auth";
+import { jamiePageState } from "@/lib/visibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,27 @@ export async function GET(request: Request) {
   // Same gate as every page here. The story is not public.
   if (!(await isLoggedIn())) {
     return NextResponse.redirect(new URL("/login", here));
+  }
+
+  // And the same Settings switches as every page here. This one is a handover
+  // rather than a screen, so it can't use ComingSoon — it says the same thing
+  // in plain HTML instead, and a story taken off Jamie's app sends him home.
+  const jamie = await jamiePageState();
+  if (jamie.removed.includes("story")) {
+    return NextResponse.redirect(new URL("/", here));
+  }
+  if (jamie.comingSoon.includes("story")) {
+    return new NextResponse(
+      `<!doctype html><meta charset="utf-8">` +
+        `<meta name="viewport" content="width=device-width,initial-scale=1">` +
+        `<title>The Debt Story</title>` +
+        `<div style="font:16px/1.5 system-ui,-apple-system,sans-serif;max-width:34rem;margin:15vh auto;padding:0 1.5rem;text-align:center;color:#111">` +
+        `<h1 style="font-size:1.125rem;margin:0 0 .5rem">Coming Soon</h1>` +
+        `<p style="margin:0 0 1.5rem;color:#666">This one isn't ready yet. Check back a little later.</p>` +
+        `<p style="margin:0"><a href="/" style="color:#666;font-size:.875rem">Back to My Cash</a></p>` +
+        `</div>`,
+      { headers: { "content-type": "text/html; charset=utf-8" } },
+    );
   }
 
   const baseUrl = process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;

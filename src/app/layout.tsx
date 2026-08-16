@@ -7,8 +7,15 @@ import Header from "@/components/Header";
 import AdminBar from "@/components/AdminBar";
 import UpdateNotice from "@/components/UpdateNotice";
 import { getRole, isViewingAsJamie } from "@/lib/auth";
-import { getCashLog, getComingSoonPages, getOwesCharges } from "@/lib/store";
+import {
+  getCashLog,
+  getComingSoonPages,
+  getOwesCharges,
+  getPageSlots,
+  getRemovedPages,
+} from "@/lib/store";
 import { getMenuOrder } from "@/lib/menuOrder";
+import { buildLayout } from "@/lib/navLayout";
 import { computePastDue, monthStart } from "@/lib/pastDue";
 
 const geistSans = Geist({
@@ -53,6 +60,16 @@ export default async function RootLayout({
   // logged in — including Chris in "View as Jamie", who gets Jamie's.
   const menuOrder = await getMenuOrder();
 
+  // Where each link sits. One layout for both of them — Chris arranges the bar
+  // and the menu on the Settings screen and then sees what he arranged.
+  const placements = await getPageSlots();
+
+  // Pages Chris has taken off Jamie's screen. Chris himself keeps every link,
+  // so this is empty for him unless he's looking through "View as Jamie". A
+  // logged-out visitor gets Jamie's version too — the login screen shouldn't
+  // advertise a page that isn't his.
+  const removed = admin ? [] : await getRemovedPages();
+
   // The "Past Due" tab only exists when something is actually late. Chris keeps
   // it always so he can log new charges — and if he's parked the page as
   // "Coming Soon" for Jamie, the tab stays so Jamie sees that message.
@@ -68,6 +85,8 @@ export default async function RootLayout({
     showPastDue = pastDue.amount > 0;
   }
 
+  const nav = buildLayout({ placements, hidden: removed, showPastDue });
+
   return (
     <html lang="en" className={`${geistSans.variable} antialiased`}>
       <body>
@@ -79,7 +98,7 @@ export default async function RootLayout({
         {/* On a desktop the tabs move up here, where a mouse expects them.
             Below `md` this is hidden and the fixed bottom bar takes over —
             a thumb reaches the bottom of a phone, not the top. */}
-        <TopNav showPastDue={showPastDue} />
+        <TopNav tabs={nav.nav} />
         {/* `app-shell` carries the bottom padding: it has to clear the fixed
             nav and the home indicator on a phone, and neither exists on a
             desktop. It lives in CSS rather than an inline style because an
@@ -91,11 +110,13 @@ export default async function RootLayout({
             canReorder={role !== null}
             forJamie={viewingAsJamie}
             menuOrder={menuOrder}
+            menu={nav.menu}
+            history={nav.history}
           />
           <UpdateNotice />
           {children}
         </main>
-        <BottomNav showPastDue={showPastDue} />
+        <BottomNav tabs={nav.nav} />
       </body>
     </html>
   );
