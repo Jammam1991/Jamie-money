@@ -59,16 +59,18 @@ function money(n: number): string {
 }
 
 // ── Accounts filed under one owner that someone else actually owes ───────────
-// The Beacon HELOC is booked to the rental because the property is what
-// secures it, but the balance is Chris and Jamie's own borrowing. Without
-// saying so the rental's total reads as if the property ran it up.
+// The Beacon HELOC is in Chris's name and secured by the rental, so that's the
+// card it sits under — but the balance is Chris and Jamie's own borrowing, not
+// something either the property or Chris alone ran up. The band it counts
+// toward is decided in householdPicture's `realScope`; this only says so on the
+// line itself.
 //
 // Matched on the name rather than the account id: an id changes if the account
 // is re-linked in Money App, the name doesn't. If Chris ever fills in the
 // account's Notes field over there, that becomes the better source and this
 // list can go.
 const ACCOUNT_NOTES: { match: RegExp; note: string }[] = [
-  { match: /beacon/i, note: "Chris/Jamie Debt" },
+  { match: /beacon|b[ei]rkshire/i, note: "Chris/Jamie Debt" },
 ];
 
 function accountNote(name: string): string | null {
@@ -231,7 +233,9 @@ function Scene1Owed({ picture, index }: { picture: HouseholdPicture; index: numb
   const total = picture.totalDebt || 1;
   // The rental keeps its own band. Its mortgage sits against something that
   // earns rent, so folding it into "personal" overstated what the two of them
-  // actually owe.
+  // actually owe. Only what the property itself ran up is in it — the HELOC
+  // the property merely secures is counted as personal (householdPicture's
+  // `realScope`).
   const bands = [
     { key: "gym", color: AMBER, label: "🏋️ The gym's debt", amount: picture.businessDebt },
     { key: "personal", color: VIOLET, label: "🏠 Our personal debt", amount: picture.personalDebt },
