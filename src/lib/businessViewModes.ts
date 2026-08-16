@@ -128,12 +128,12 @@ export const VIEW_MODES: ViewMode[] = [
 /**
  * What the page opens on.
  *
- * Deliberately NOT "full": this is the figure Jamie has been reading since the
- * page shipped, and it's the one Chris picked to line up with the Operating
- * Profit tile on his own dashboard. Changing the default would silently move
- * the headline number for someone who never touched the selector.
+ * Changed to "full" so the Schedule C lines match MoneyApp's Chart of Accounts.
+ * The full picture includes all transactions (chargebacks, returns, grants, etc.)
+ * that Money App tracks. The "operating" and "seller" views can still be selected
+ * to see filtered cuts.
  */
-export const DEFAULT_VIEW_MODE: ViewModeId = "operating";
+export const DEFAULT_VIEW_MODE: ViewModeId = "full";
 
 export const modeById = (id: ViewModeId): ViewMode =>
   VIEW_MODES.find((m) => m.id === id) ?? VIEW_MODES[1];
