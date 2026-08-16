@@ -392,7 +392,14 @@ function IntroCard({
 
   let dateRangeText = "";
   if (isAllTime) {
-    dateRangeText = `From 11/27/24 through ${data.throughDate ? shortDate(data.throughDate) : "today"}`;
+    // The start comes from the years Money App actually handed over, never a
+    // fixed 11/27/24. Those are the tax years ticked on this app's Shared
+    // access row, and while 2024 wasn't ticked this line claimed two months of
+    // coverage the page didn't have — the gym's first two, at that.
+    const from = data.range?.start;
+    dateRangeText = `From ${from ? shortDate(from) : "the start"} through ${
+      data.throughDate ? shortDate(data.throughDate) : "today"
+    }`;
   } else if (data.month) {
     dateRangeText = `${MONTHS[data.month - 1]} ${data.year}`;
   } else if (data.throughDate) {
@@ -719,10 +726,14 @@ function Headline({
   // second, independent question — "what's left once Jamie's actually been
   // paid?" — so they're plain client toggles rather than another URL mode:
   // no cut to ask Money App for, just arithmetic on numbers already in hand.
-  const [includeJamiePay, setIncludeJamiePay] = useState(false);
-  const [includeJamieDist, setIncludeJamieDist] = useState(false);
-  const jamiePayOut = includeJamiePay ? (jamiePay ?? 0) : 0;
-  const jamieDistOut = includeJamieDist ? (rollup.jamieDistributions ?? 0) : 0;
+  //
+  // ONE value, not two booleans: the earned-pay figure is already inside the
+  // distribution total, so subtracting both took the same money out twice and
+  // overstated the loss. They behave like radio buttons — pick one, or neither,
+  // never both; clicking the picked one clears back to neither.
+  const [jamieCut, setJamieCut] = useState<"none" | "pay" | "dist">("none");
+  const jamiePayOut = jamieCut === "pay" ? (jamiePay ?? 0) : 0;
+  const jamieDistOut = jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
   const profit = rawProfit - jamiePayOut - jamieDistOut;
 
   // Only show year-end projection for current year, not for months or all-time
@@ -750,32 +761,35 @@ function Headline({
       >
         {money(profit)}
       </p>
-      {(jamiePayOut !== 0 || jamieDistOut !== 0) && (
+      {/* Only ever one of the two, so no "X and Y" case to spell out. */}
+      {jamiePayOut !== 0 && (
         <p className="mt-1 text-[12px] text-muted">
-          After
-          {jamiePayOut !== 0 && ` ${money(jamiePayOut)} of Jamie's pay`}
-          {jamiePayOut !== 0 && jamieDistOut !== 0 && " and"}
-          {jamieDistOut !== 0 && ` ${money(jamieDistOut)} of distributions`}
+          After {money(jamiePayOut)} of Jamie&apos;s pay
+        </p>
+      )}
+      {jamieDistOut !== 0 && (
+        <p className="mt-1 text-[12px] text-muted">
+          After {money(jamieDistOut)} of distributions
         </p>
       )}
       <div className="mt-2 flex flex-wrap gap-2">
         <ToggleChip
           label="Include Jamie's earned pay"
-          on={includeJamiePay}
-          onClick={() => setIncludeJamiePay((v) => !v)}
+          on={jamieCut === "pay"}
+          onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
           disabled={jamiePay == null}
           title={
             jamiePay == null
               ? "Couldn't reach the gym dashboard for this period."
-              : "Subtracts what the gym dashboard's pay model says Jamie earned."
+              : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it."
           }
         />
         <ToggleChip
           label="Include Jamie's full distributions"
-          on={includeJamieDist}
-          onClick={() => setIncludeJamieDist((v) => !v)}
+          on={jamieCut === "dist"}
+          onClick={() => setJamieCut((v) => (v === "dist" ? "none" : "dist"))}
           disabled={!rollup.jamieDistributions}
-          title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance."
+          title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance. Already includes the earned pay, so it replaces that cut."
         />
       </div>
       {projection && (
