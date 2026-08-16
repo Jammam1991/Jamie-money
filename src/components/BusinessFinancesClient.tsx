@@ -28,7 +28,12 @@ import {
 // can send, the back button steps between them, and a reload doesn't quietly
 // drop Jamie back on a different set of numbers than he left on.
 //
-// Year tabs are now expandable dropdowns showing months. All start collapsed.
+// LAYOUT: the sum comes first and everything else is shut. Jamie is not an
+// accountant, and the page used to open on a five-way question about which
+// accounting cut to apply — the answer was three scrolls below the choice. Now
+// the top card is the whole arithmetic in one column, and the pickers, the
+// category breakdown and the "what's left out" list sit under it behind a
+// chevron, each labelled with what it's currently set to.
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -69,30 +74,10 @@ export default function BusinessFinancesClient({
   data: BusinessFinances;
   modeId: ViewModeId;
   /** Jamie's earned pay for this period, from the gym dashboard — null when
-   *  it couldn't be reached, which just means the toggle in Headline stays
+   *  it couldn't be reached, which just means the toggle in MoneyStory stays
    *  disabled rather than the page breaking. */
   jamiePay: number | null;
 }) {
-  const [expandedYears, setExpandedYears] = useState<Set<number>>(new Set());
-
-  // The chevron toggles open/closed without changing what's loaded — lets
-  // Jamie peek at a year's months without leaving the page he's on.
-  const toggleYear = (year: number) => {
-    setExpandedYears((prev) => {
-      const next = new Set(prev);
-      if (next.has(year)) next.delete(year);
-      else next.add(year);
-      return next;
-    });
-  };
-
-  // Clicking the year itself always opens its months (never collapses) —
-  // it's paired with a Link that navigates to that year's annual view, so
-  // the two happen together on one click.
-  const expandYear = (year: number) => {
-    setExpandedYears((prev) => (prev.has(year) ? prev : new Set(prev).add(year)));
-  };
-
   const { view, noMistakes } = data;
   // Whether FED can be NAMED on this screen. The tax view drops those items
   // either way — when Chris's tick-box is on they never reach the feed at all,
@@ -136,15 +121,23 @@ export default function BusinessFinancesClient({
 
   const linesSection = view.show_schedule_c ? <Lines rollup={rollup} mode={mode} /> : null;
 
+  // The answer, then the two ways to change it, then the detail behind it.
+  // Nothing above the sum, because nothing else is what Jamie came for.
   return (
     <div className="space-y-4">
-      <IntroCard
-        data={data}
-        modeId={modeId}
-        expandedYears={expandedYears}
-        onToggleYear={toggleYear}
-        onSelectYear={expandYear}
-      />
+      {view.show_headline && (
+        <MoneyStory
+          rollup={rollup}
+          mode={mode}
+          year={data.year}
+          month={data.month}
+          range={data.range}
+          throughDate={data.throughDate}
+          jamiePay={jamiePay}
+        />
+      )}
+
+      <TimePicker data={data} modeId={modeId} />
 
       {showsProfit(view) && (
         <ViewPicker
@@ -153,20 +146,6 @@ export default function BusinessFinancesClient({
           offerClean={hasMistakes}
           offerFed={offerFed}
         />
-      )}
-
-      {view.show_headline && (
-        <Headline
-          rollup={rollup}
-          mode={mode}
-          year={data.year}
-          month={data.month}
-          jamiePay={jamiePay}
-        />
-      )}
-
-      {view.show_headline && (
-        <CutDetailCard rollup={rollup} mode={mode} allowFed={offerFed} />
       )}
 
       {/* The CPA cut leads with the tax lines: the question it answers is
@@ -191,6 +170,12 @@ export default function BusinessFinancesClient({
       )}
 
       {!mode.taxLayout && linesSection}
+
+      {/* Last, and shut: this explains why the sum at the top isn't the same as
+          some other cut of it. Worth having, never the first thing to read. */}
+      {view.show_headline && (
+        <CutDetailCard rollup={rollup} mode={mode} allowFed={offerFed} />
+      )}
 
       {view.show_flagged && data.flagged.length > 0 && (
         <Card>
@@ -280,7 +265,7 @@ function CutTag({ mode }: { mode: ViewMode }) {
 }
 
 // A small on/off pill for a subtraction that isn't one of the five cuts —
-// see the note on Headline. Disabled rather than hidden when there's nothing
+// see the note on MoneyStory. Disabled rather than hidden when there's nothing
 // to subtract, so the reason ("couldn't reach the gym dashboard") is a
 // tooltip away instead of the option just vanishing.
 function ToggleChip({
@@ -314,11 +299,59 @@ function ToggleChip({
   );
 }
 
-// The question at the top of the page: five ways to read the same year.
+// A section that's shut until you want it.
+//
+// Everything on this page except the sum itself now lives behind one of these.
+// The page used to lay all of it out at once — a five-option accounting
+// question, forty date buttons, two expandable breakdowns — above and around
+// the one number Jamie came for. Shut by default, each one still says in its
+// header what it's currently set to, so nothing is hidden, only folded.
+function Disclosure({
+  title,
+  summary,
+  tag,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  /** What it's set to right now, so the closed state still answers the question. */
+  summary?: React.ReactNode;
+  tag?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block text-[15px] font-semibold">{title}</span>
+          {summary && <span className="block text-[13px] text-muted">{summary}</span>}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {tag}
+          <ChevronDown
+            size={18}
+            className="text-muted transition-transform"
+            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+          />
+        </span>
+      </button>
+      {open && <div className="mt-3">{children}</div>}
+    </Card>
+  );
+}
+
+// Five ways to read the same books — shut unless asked for.
 //
 // Links, not buttons — four of the five change what Money App is asked for
 // (see the note at the top of this file). Stacked full-width rather than a row
-// of chips because each one needs its sentence: "Slim view" means nothing on
+// of chips because each one needs its sentence: "Seller view" means nothing on
 // its own, and a mode nobody can tell apart from its neighbour is the problem
 // this card exists to fix.
 function ViewPicker({
@@ -335,9 +368,8 @@ function ViewPicker({
   const modes = VIEW_MODES.filter((m) => m.id !== "clean" || offerClean);
 
   return (
-    <Card>
-      <SectionTitle>How do you want to see the numbers?</SectionTitle>
-      <p className="mt-1 text-[13px] text-muted">
+    <Disclosure title="Count it a different way" summary={mode.label}>
+      <p className="text-[13px] text-muted">
         Same books every time. Each one just leaves something different out.
       </p>
       <div className="mt-3 space-y-2">
@@ -367,148 +399,109 @@ function ViewPicker({
           );
         })}
       </div>
-    </Card>
+    </Disclosure>
   );
 }
 
-// The year (expandable to months), how current the books are, and — when more
-// than one year is allowed — the other years to jump to. Year tabs are now
-// collapsible dropdowns showing 12 months. "All Time" is a special non-expandable tab.
-function IntroCard({
+/** A pill in the date picker. One shape for all-time, years and months. */
+function PickerPill({
+  href,
+  label,
+  active,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      aria-current={active ? "true" : undefined}
+      className="rounded-lg border border-border px-3 py-1.5 text-[13px]"
+      style={
+        active ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" } : undefined
+      }
+    >
+      {label}
+    </Link>
+  );
+}
+
+// Which stretch of time to look at — shut unless asked for.
+//
+// One row of years, and the twelve months only for the year you're actually on.
+// It used to render a chevron per year that expanded its own twelve months
+// independently, so all-time plus three years could put forty date buttons on
+// screen above the number they were meant to filter. Tapping a year now goes to
+// that year AND is what reveals its months, which is one idea instead of two.
+function TimePicker({
   data,
   modeId,
-  expandedYears,
-  onToggleYear,
-  onSelectYear,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
-  expandedYears: Set<number>;
-  onToggleYear: (year: number) => void;
-  onSelectYear: (year: number) => void;
 }) {
   const isAllTime = data.year === "all-time";
-  const headerText = isAllTime ? "The gym's money, all time" : `The gym's money, ${data.year}`;
-
-  let dateRangeText = "";
-  if (isAllTime) {
-    // The start comes from the years Money App actually handed over, never a
-    // fixed 11/27/24. Those are the tax years ticked on this app's Shared
-    // access row, and while 2024 wasn't ticked this line claimed two months of
-    // coverage the page didn't have — the gym's first two, at that.
-    const from = data.range?.start;
-    dateRangeText = `From ${from ? shortDate(from) : "the start"} through ${
-      data.throughDate ? shortDate(data.throughDate) : "today"
-    }`;
-  } else if (data.month) {
-    dateRangeText = `${MONTHS[data.month - 1]} ${data.year}`;
-  } else if (data.throughDate) {
-    dateRangeText = `Counted up to ${shortDate(data.throughDate)}`;
-  }
-
   // Carries the chosen cut across a year/month/all-time click, so picking a
   // different month doesn't silently drop Jamie back on the default view.
   const withView = (href: string) => `${href}&view=${modeId}`;
 
+  const summary = isAllTime
+    ? "All time"
+    : data.month
+      ? `${MONTHS[data.month - 1]} ${data.year}`
+      : String(data.year);
+
+  if (data.years.length === 0) return null;
+
   return (
-    <Card>
-      <p className="text-[15px] font-medium">{headerText}</p>
-      <p className="mt-1 text-[13px] text-muted">
-        Straight from Chris&apos;s accounting app. He picks what shows up here.
-        {dateRangeText && ` ${dateRangeText}.`}
-      </p>
+    <Disclosure title="Look at a different time" summary={summary}>
+      <div className="flex flex-wrap gap-2">
+        <PickerPill
+          href={withView("/business-finances?year=all-time")}
+          label="All time"
+          active={isAllTime}
+        />
+        {data.years.map((y) => (
+          <PickerPill
+            key={y}
+            href={withView(`/business-finances?year=${y}`)}
+            label={String(y)}
+            active={y === data.year && !data.month}
+          />
+        ))}
+      </div>
 
-      {data.years.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {/* All Time tab - never expandable */}
-          <Link
-            href={withView("/business-finances?year=all-time")}
-            scroll={false}
-            className="inline-block rounded-lg border border-border px-3 py-1 text-[13px]"
-            style={
-              isAllTime
-                ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-                : undefined
-            }
-          >
-            All Time
-          </Link>
-
-          {/* Year tabs - expandable to show months */}
-          <div className="space-y-2">
-            {data.years.map((y) => {
-              const isExpanded = expandedYears.has(y);
-              const isCurrentYear = y === data.year && !isAllTime;
-              const isCurrentMonth = isCurrentYear && data.month;
-
-              return (
-                <div key={y}>
-                  {/* Chevron: toggles the months open/closed without navigating. */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onToggleYear(y)}
-                      aria-label={isExpanded ? "Collapse months" : "Expand months"}
-                      className="rounded-lg p-1.5 transition-colors hover:bg-tint"
-                    >
-                      <ChevronDown
-                        size={14}
-                        className="transition-transform"
-                        style={{ transform: isExpanded ? "rotate(0deg)" : "rotate(-90deg)" }}
-                      />
-                    </button>
-                    {/* Year: navigates to that year's annual view and opens its months. */}
-                    <Link
-                      href={withView(`/business-finances?year=${y}`)}
-                      scroll={false}
-                      onClick={() => onSelectYear(y)}
-                      className="rounded-lg border border-border px-3 py-1 text-[13px]"
-                      style={
-                        isCurrentYear && !isCurrentMonth
-                          ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-                          : undefined
-                      }
-                    >
-                      {y}
-                    </Link>
-                  </div>
-
-                  {/* Month dropdown - shown when expanded */}
-                  {isExpanded && (
-                    <div className="ml-6 mt-2 flex flex-wrap gap-2">
-                      {MONTHS.map((month, idx) => {
-                        const monthNum = idx + 1;
-                        const isSelectedMonth = isCurrentMonth && data.month === monthNum;
-
-                        return (
-                          <Link
-                            key={idx}
-                            href={withView(`/business-finances?year=${y}&month=${monthNum}`)}
-                            scroll={false}
-                            className="rounded-lg border border-border px-2 py-1 text-[12px]"
-                            style={
-                              isSelectedMonth
-                                ? {
-                                    background: "var(--good)",
-                                    color: "#fff",
-                                    borderColor: "var(--good)",
-                                  }
-                                : undefined
-                            }
-                          >
-                            {month}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+      {/* Months, only for the year already open. Nothing to show under
+          all-time, and showing three years' worth at once was the old problem. */}
+      {!isAllTime && (
+        <>
+          <p className="mt-3 text-[13px] text-muted">Or one month of {data.year}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {MONTHS.map((month, idx) => (
+              <Link
+                key={month}
+                href={withView(`/business-finances?year=${data.year}&month=${idx + 1}`)}
+                scroll={false}
+                className="rounded-lg border border-border px-2.5 py-1 text-[12px]"
+                style={
+                  data.month === idx + 1
+                    ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
+                    : undefined
+                }
+              >
+                {month}
+              </Link>
+            ))}
           </div>
-        </div>
+        </>
       )}
 
-    </Card>
+      <p className="mt-3 text-[12px] text-muted">
+        Straight from Chris&apos;s accounting app. He picks what shows up here.
+      </p>
+    </Disclosure>
   );
 }
 
@@ -543,9 +536,15 @@ function CutDetailCard({
   if (leftOut.length === 0 && counted.length === 0) return null;
 
   return (
-    <Card>
-      <SectionTitle>What this view leaves in and out</SectionTitle>
-      <p className="mt-1 text-[13px] text-muted">
+    <Disclosure
+      title="What these numbers leave in and out"
+      summary={
+        leftOut.length > 0
+          ? `${leftOut.map((l) => l.label.toLowerCase()).join(", ")} left out`
+          : "Nothing left out"
+      }
+    >
+      <p className="text-[13px] text-muted">
         Tap any line to see exactly what&apos;s in it.
       </p>
 
@@ -584,7 +583,7 @@ function CutDetailCard({
           </ul>
         </>
       )}
-    </Card>
+    </Disclosure>
   );
 }
 
@@ -701,18 +700,31 @@ function CutRow({
   );
 }
 
-// Money in, money out, what's left. The three numbers everything else explains.
-function Headline({
+// Money in, money out, what's left — as ONE column you read top to bottom.
+//
+// This card is the whole page in miniature, and it comes first for that reason.
+// The page used to open on a five-option question about which accounting cut to
+// use, then show the answer as a big number, then two tiles beside each other,
+// then a separate ladder underneath — four shapes for one sum. Jamie had to
+// assemble the arithmetic himself from pieces that didn't line up. Now the sum
+// IS the layout: in, out, what came off, what's left, one row each, one column,
+// same order every time. Everything else on the page moved below it or behind a
+// tap, because none of it is the answer.
+function MoneyStory({
   rollup,
   mode,
   year,
   month,
+  range,
+  throughDate,
   jamiePay,
 }: {
   rollup: Rollup;
   mode: ViewMode;
   year: number | "all-time";
   month?: number;
+  range?: { start: string; end: string };
+  throughDate: string | null;
   jamiePay: number | null;
 }) {
   // What "money in", "money out" and "profit" mean depends on the cut — see
@@ -736,21 +748,34 @@ function Headline({
   const jamieDistOut = jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
   const profit = rawProfit - jamiePayOut - jamieDistOut;
 
-  // Everything that comes off between the two tiles and the big number, in the
-  // order it's subtracted. Built as a list so the ladder always ends on
-  // `profit` — money in − money out − every step below = the headline, whatever
-  // the chips above are set to.
-  const steps = [
-    { what: "loan interest comes off", amount: interest },
-    { what: "Jamie's pay", amount: jamiePayOut },
-    { what: "Jamie's distributions", amount: jamieDistOut },
-  ].filter((s) => s.amount !== 0);
+  // Everything that comes OFF, in the order it's subtracted. A list rather than
+  // fixed rows so the column always ends on `profit`: money in, minus every row
+  // below it, is the big number — whatever the Jamie chips are set to, and
+  // whichever cut is on.
+  const takenOff = [
+    {
+      label: "What it costs to run the gym",
+      note: null as string | null,
+      amount: moneyOut,
+    },
+    {
+      label: "Loan interest",
+      // The one number the two apps used to disagree about. Chris's P&L keeps
+      // interest out of its expenses tile and subtracts it further down, so
+      // folding it into "running the gym" made the same books read $18,273
+      // apart. Its own row, and they match.
+      note: "The cost of the borrowing, not of running the gym",
+      amount: interest,
+    },
+    { label: "Jamie's pay", note: null, amount: jamiePayOut },
+    { label: "Jamie's distributions", note: null, amount: jamieDistOut },
+  ].filter((r) => r.amount !== 0);
 
   // Only show year-end projection for current year, not for months or all-time
   const projection =
     typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;
-  // All-time spans however many real months have happened since Nov 2024 —
-  // monthlyNetProfit is built to that exact length (see chronologicalMonths
+  // All-time spans however many real months have happened since the gym opened
+  // — monthlyNetProfit is built to that exact length (see chronologicalMonths
   // in businessFinances.ts) — so annualizing is just scaling the total up to
   // a 12-month pace, the same idea as the year-end projection above but for
   // a span that isn't a single year to begin with.
@@ -759,24 +784,72 @@ function Headline({
       ? (profit / rollup.monthlyNetProfit.length) * 12
       : null;
 
+  const madeMoney = profit >= 0;
+
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <SectionTitle>{profit >= 0 ? mode.profitTitle : mode.lossTitle}</SectionTitle>
+        <p className="text-[14px] text-muted">{madeMoney ? mode.profitTitle : mode.lossTitle}</p>
         <CutTag mode={mode} />
       </div>
       <p
-        className="mt-1 text-4xl font-bold"
-        style={{ color: profit >= 0 ? "var(--good)" : "var(--neg)" }}
+        className="mt-0.5 text-[40px] font-bold leading-tight"
+        style={{ color: madeMoney ? "var(--good)" : "var(--neg)" }}
       >
-        {money(profit)}
+        {money(Math.abs(profit))}
       </p>
-      {/* What each chip took off used to be captioned here; it's now a row in
-          the ladder below, next to the interest step, so every deduction
-          between the two tiles and this number is named in one place. */}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <p className="text-[13px] text-muted">
+        <TimeSpan year={year} month={month} range={range} throughDate={throughDate} />
+      </p>
+
+      {/* The sum, as one column. Every row is "and then this", read downward. */}
+      <div className="mt-4">
+        <FlowRow label="Money that came in" amount={moneyIn} tone="in">
+          {/* Grant money is the single biggest reason this figure disagrees
+              with one on Chris's own screens: the gym's-own-money cut leaves it
+              out entirely and every other cut folds it in. Saying the amount
+              HERE answers that without anyone having to ask. */}
+          {rollup.otherIncome !== 0 &&
+            `${mode.operational ? "Doesn't count" : "Counts"} ${money(rollup.otherIncome)} of grant money`}
+        </FlowRow>
+        {takenOff.map((r) => (
+          <FlowRow key={r.label} label={r.label} amount={-r.amount} tone="out">
+            {r.note}
+          </FlowRow>
+        ))}
+        <div
+          className="mt-1 flex items-baseline justify-between gap-3 border-t pt-2.5"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <span className="text-[15px] font-semibold">
+            {madeMoney ? "Left over" : "Short by"}
+          </span>
+          <span
+            className="text-[17px] font-bold"
+            style={{ color: madeMoney ? "var(--good)" : "var(--neg)" }}
+          >
+            {money(Math.abs(profit))}
+          </span>
+        </div>
+      </div>
+
+      {(projection || avgAnnualProfit !== null) && (
+        <p className="mt-3 text-[13px] text-muted">
+          {projection
+            ? `Heading for about ${money(projection)} by the end of the year.`
+            : `That's about ${money(avgAnnualProfit!)} a year.`}
+        </p>
+      )}
+      <p className="mt-1 text-[12px] text-muted">
+        Jamie&apos;s PT cash that hasn&apos;t been written down yet isn&apos;t in here.
+      </p>
+
+      {/* The two "what if Jamie's pay came out of this too?" questions. Below
+          the sum, not above it: they change the answer, so the plain answer
+          has to be readable first. */}
+      <div className="mt-3 flex flex-wrap gap-2">
         <ToggleChip
-          label="Include Jamie's earned pay"
+          label="Take out Jamie's pay"
           on={jamieCut === "pay"}
           onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
           disabled={jamiePay == null}
@@ -787,89 +860,83 @@ function Headline({
           }
         />
         <ToggleChip
-          label="Include Jamie's full distributions"
+          label="Take out everything Jamie drew"
           on={jamieCut === "dist"}
           onClick={() => setJamieCut((v) => (v === "dist" ? "none" : "dist"))}
           disabled={!rollup.jamieDistributions}
           title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance. Already includes the earned pay, so it replaces that cut."
         />
       </div>
-      {projection && (
-        <p className="mt-1 text-[13px] text-muted">
-          Trending toward {money(projection)} by year end
-        </p>
-      )}
-      {avgAnnualProfit !== null && (
-        <p className="mt-1 text-[13px] text-muted">
-          Averages to {money(avgAnnualProfit)} a year
-        </p>
-      )}
-      {/* The same sentence as the picked button up in the selector, repeated
-          under the number itself — this is the one place a figure gets quoted
-          out of context, so what it leaves out travels with it. */}
-      <p className="mt-1 text-[13px] text-muted">{mode.blurb}</p>
-      <p className="mt-1 text-[12px] text-muted">
-        Doesn&apos;t include Jamie&apos;s PT cash that hasn&apos;t been recorded yet.
-      </p>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <Tint>
-          <p className="text-[12px] text-muted">Money in</p>
-          <p className="mt-0.5 text-[18px] font-semibold">{money(moneyIn)}</p>
-          {/* Grant money is the single biggest reason this tile disagrees with
-              a figure on Chris's own screens: the operating cut leaves it out
-              entirely, every other cut folds it in, and his Reports page keeps
-              it out of "Revenue" and adds it back lower down. Saying the
-              amount HERE answers that without anyone having to ask. */}
-          {rollup.otherIncome !== 0 && (
-            <p className="mt-1 text-[11px] leading-snug text-muted">
-              {mode.operational ? "Leaves out " : "Includes "}
-              {money(rollup.otherIncome)} of grant money
-            </p>
-          )}
-        </Tint>
-        <Tint>
-          <p className="text-[12px] text-muted">Money out</p>
-          <p className="mt-0.5 text-[18px] font-semibold">{money(moneyOut)}</p>
-          {/* Same idea on the other side. Interest is NOT in this figure — it
-              gets its own step below, so this tile is the cost of running the
-              gym and matches the TOTAL EXPENSES tile on Chris's own P&L. */}
-          {(rollup.financeCharges ?? 0) !== 0 && (
-            <p className="mt-1 text-[11px] leading-snug text-muted">
-              {mode.operational
-                ? `Leaves out ${money(rollup.financeCharges ?? 0)} of loan interest`
-                : "Running the gym — interest is the line below"}
-            </p>
-          )}
-        </Tint>
-      </div>
-      {/* The steps between the two tiles and the big number. Interest is
-          spelled out rather than folded into money out: it's the whole reason
-          this page and Chris's P&L used to disagree about what the gym spent,
-          and a number you can see beats a subtraction you have to do. The
-          ladder always ends on the headline figure, so whatever the Jamie
-          chips above are doing, these rows still add up to it. */}
-      {steps.length > 0 && (
-        <div
-          className="mt-3 space-y-1 border-t pt-3 text-[13px]"
-          style={{ borderColor: "var(--border)" }}
-        >
-          {steps.map(({ what, amount }, i) => (
-            <div key={what} className="flex items-baseline justify-between gap-3">
-              {/* "Then" only on the first one, whichever it turns out to be —
-                  the interest step isn't always there. */}
-              <span className="text-muted">{`${i === 0 ? "Then" : "And"} ${what}`}</span>
-              <span className="font-medium" style={{ color: "var(--neg)" }}>
-                {money(-amount)}
-              </span>
-            </div>
-          ))}
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="text-muted">Which leaves</span>
-            <span className="font-semibold">{money(profit)}</span>
-          </div>
-        </div>
-      )}
     </Card>
+  );
+}
+
+// One line of the sum. Money in reads plain; everything after it is a
+// subtraction and reads with the minus, so the column adds up on sight.
+function FlowRow({
+  label,
+  amount,
+  tone,
+  children,
+}: {
+  label: string;
+  amount: number;
+  tone: "in" | "out";
+  /** Optional one-line "and here's what that means" under the label. */
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-1.5">
+      <span className="min-w-0">
+        <span className="block text-[14px]">{label}</span>
+        {children && (
+          <span className="block text-[11px] leading-snug text-muted">{children}</span>
+        )}
+      </span>
+      <span
+        className="shrink-0 text-[15px] font-semibold tabular-nums"
+        style={tone === "out" ? { color: "var(--neg)" } : undefined}
+      >
+        {money(amount)}
+      </span>
+    </div>
+  );
+}
+
+// "11/27/24 to 8/14/26 · 22 months", or "March 2026", or "2025". The one line
+// that says WHICH stretch of time the number above it covers — previously the
+// job of a separate card two scrolls away from the figure it described.
+function TimeSpan({
+  year,
+  month,
+  range,
+  throughDate,
+}: {
+  year: number | "all-time";
+  month?: number;
+  range?: { start: string; end: string };
+  throughDate: string | null;
+}) {
+  if (month && typeof year === "number") return <>{`${MONTHS[month - 1]} ${year}`}</>;
+  if (year !== "all-time") {
+    return <>{throughDate ? `${year}, up to ${shortDate(throughDate)}` : String(year)}</>;
+  }
+  const from = range?.start;
+  const to = throughDate;
+  // Counted off the real dates rather than a fixed start, so a year Chris
+  // hasn't shared shortens this line instead of being quietly claimed.
+  const months =
+    from && to
+      ? (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 +
+        (Number(to.slice(5, 7)) - Number(from.slice(5, 7))) +
+        1
+      : null;
+  if (!from || !to) return <>Everything Chris has shared</>;
+  return (
+    <>
+      {shortDate(from)} to {shortDate(to)}
+      {months ? ` · ${months} months` : ""}
+    </>
   );
 }
 
@@ -1140,17 +1207,19 @@ function Lines({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
   if (income.length === 0 && spending.length === 0) return null;
 
   return (
-    <Card>
-      <div className="flex items-baseline justify-between gap-3">
-        <SectionTitle>{mode.taxLayout ? "Line by line, as the tax return sees it" : "Line by line"}</SectionTitle>
-        <CutTag mode={mode} />
-      </div>
-
+    <Disclosure
+      title={mode.taxLayout ? "Line by line, as the tax return sees it" : "Where every dollar went"}
+      summary={`${income.length + spending.length} categories — tap to open`}
+      tag={<CutTag mode={mode} />}
+      // The tax cut is the one place this list IS the answer to the question
+      // being asked ("which box does this go in"), so it opens on its own.
+      defaultOpen={mode.taxLayout}
+    >
       {/* Only said in the CPA cut, where it's the whole point: these headings
           are the boxes on Schedule C, and a grant is taxable income even
           though the operating view carves it out. */}
       {mode.taxLayout && (
-        <p className="mt-1 text-[13px] text-muted">
+        <p className="text-[13px] text-muted">
           These headings are the boxes on the tax form. Grant money counts as
           income here, even though it&apos;s left out of the gym&apos;s own numbers.
         </p>
@@ -1158,7 +1227,7 @@ function Lines({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
 
       {income.length > 0 && (
         <>
-          <p className="mt-3 text-[13px] font-medium text-muted">Money coming in</p>
+          <p className="text-[13px] font-medium text-muted">Money coming in</p>
           <ul className="mt-1 space-y-1">
             {income.map((l) => (
               <LineRow key={l.code} line={l} open={open.has(l.code)} onToggle={() => toggle(l.code)} good />
@@ -1186,7 +1255,7 @@ function Lines({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
           than the big numbers.
         </p>
       )}
-    </Card>
+    </Disclosure>
   );
 }
 
