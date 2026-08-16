@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { PauseCircle } from "lucide-react";
 import { Card } from "@/components/ui";
 import { money, type Debt } from "@/lib/data";
+import type { ExtraPayment } from "@/lib/monthlyExtras";
 import { setDebtDeferred } from "@/lib/actions";
 
 // ── Which debts aren't being paid right now ──────────────────────────────────
@@ -17,9 +18,14 @@ import { setDebtDeferred } from "@/lib/actions";
 // thing to put in front of anyone.
 export default function DeferredDebtsAdmin({
   debts,
+  extras,
   initialDeferred,
 }: {
   debts: Debt[];
+  // The two monthly payments with no row in the debts table — the divorce
+  // settlement and Jamie's share of the gym debt. Both are money that leaves
+  // every month, so both belong on this list.
+  extras: ExtraPayment[];
   initialDeferred: string[];
 }) {
   const [deferred, setDeferred] = useState<string[]>(initialDeferred);
@@ -42,9 +48,18 @@ export default function DeferredDebtsAdmin({
   };
 
   // Biggest payment first — that's the one worth knowing is on hold.
-  const rows = [...debts].sort((a, b) => b.minPayment - a.minPayment);
-  const paused = rows.filter((d) => deferred.includes(d.id));
-  const pausedMonthly = paused.reduce((sum, d) => sum + d.minPayment, 0);
+  const rows = [
+    ...debts.map((d) => ({
+      id: d.id,
+      name: d.name,
+      balance: d.balance,
+      monthly: d.minPayment,
+      worked: false,
+    })),
+    ...extras.map((e) => ({ ...e, worked: true })),
+  ].sort((a, b) => b.monthly - a.monthly);
+  const paused = rows.filter((r) => deferred.includes(r.id));
+  const pausedMonthly = paused.reduce((sum, r) => sum + r.monthly, 0);
 
   return (
     <div>
@@ -86,7 +101,11 @@ export default function DeferredDebtsAdmin({
                     )}
                   </div>
                   <p className="mt-0.5 text-[13px] text-muted">
-                    {money(d.balance)} owed · {money(d.minPayment)}/mo
+                    {money(d.balance)} owed · {money(d.monthly)}/mo
+                    {/* Not a row in the debts table — worked out from the
+                        settlement terms or the gym split. Worth saying, or it
+                        looks like a debt that's gone missing from the list. */}
+                    {d.worked && " · worked out, not a debt row"}
                   </p>
                 </div>
                 <button
