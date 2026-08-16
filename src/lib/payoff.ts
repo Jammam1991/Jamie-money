@@ -117,6 +117,31 @@ export function totalBalance(debts: Debt[]): number {
   return debts.reduce((sum, d) => sum + d.balance, 0);
 }
 
+// ── What new borrowing adds to the monthly bill ──────────────────────────────
+// New debt doesn't arrive with a payment attached. Chris hands money over, or
+// covers a shortfall at the gym, and no lender sets a minimum on it that day.
+// So what it costs to carry has to be worked out — and the only honest way is
+// to use the rate Jamie's own accounts already charge him.
+//
+// That rate is the blended one off his real unsecured debts: every minimum
+// added up, divided by every balance. Borrowing another $2,474 then costs the
+// same fraction each month that the rest of his cards cost him. It's an
+// estimate, and the card that shows it says so; what it isn't is a number
+// invented out of nothing.
+//
+// Null when there's nothing to work the rate out from, so the caller can stay
+// quiet rather than show a confident $0.
+export function newDebtMonthlyCost(
+  newDebt: number,
+  debts: Debt[],
+): number | null {
+  const cards = debts.filter(isUnsecured);
+  const balance = totalBalance(cards);
+  const minimum = totalMinimum(cards);
+  if (balance <= 0 || minimum <= 0) return null;
+  return newDebt * (minimum / balance);
+}
+
 // Pay `monthlyBudget` in total across all debts each month and see what happens.
 export function simulate(debts: Debt[], monthlyBudget: number): SimResult {
   const rows = debts.map((d) => ({

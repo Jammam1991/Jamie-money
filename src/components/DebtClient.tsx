@@ -28,6 +28,7 @@ import {
   monthlyInterest,
   monthlyPayment,
   monthsToClear,
+  newDebtMonthlyCost,
   simulate,
   TAYCAN_PRICE,
   totalBalance,
@@ -36,12 +37,7 @@ import {
 import { groupByCategory } from "@/lib/debtCategories";
 import { CARRY_CATEGORIES, type ChrisCarry } from "@/lib/chrisCarry";
 import { SECURITY_DEPOSIT } from "@/lib/offsets";
-import {
-  CARRY_ROW_ID,
-  DEFAULT_SPLIT_PCT,
-  gymShareFigures,
-  SETTLEMENT_ROW_ID,
-} from "@/lib/monthlyExtras";
+import { DEFAULT_SPLIT_PCT, gymShareFigures } from "@/lib/monthlyExtras";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
@@ -209,7 +205,6 @@ export default function DebtClient({
   settlementTerms,
   investmentSplitTerms,
   chrisCarry,
-  deferredIds,
 }: {
   initialDebts: Debt[];
   admin: boolean;
@@ -226,7 +221,6 @@ export default function DebtClient({
   settlementTerms: SettlementTerms; // what Chris set; nulls fall back to the estimate
   investmentSplitTerms: InvestmentSplitTerms; // what % of the gym investment is Jamie's; null falls back to 50/50
   chrisCarry: ChrisCarry; // what Chris really pays each month on the money he lent the gym
-  deferredIds: string[]; // debts Chris marked deferred in Settings — owed, but not being paid now
 }) {
   const [debts, setDebts] = useState<Debt[]>(initialDebts);
   // The transactions live up here so the headline and the year card always
@@ -326,44 +320,6 @@ export default function DebtClient({
   const monthlyTotal =
     totalMinimum(debts) + settlement.minPayment + jamieMonthlyToChris;
 
-  // One line per payment, biggest first. Built from the same numbers as the
-  // total, so the list always adds up to it.
-  //
-  // The settlement and the gym share are in here alongside the real debts and
-  // can be deferred like any of them. They have no row in the debts table —
-  // they're worked out — but they're money that leaves every month just the
-  // same, and they're the two most likely to be on hold: the settlement isn't
-  // even agreed yet.
-  const monthlyRows = [
-    ...debts.map((d) => ({
-      key: d.id,
-      label: d.name,
-      monthly: d.minPayment,
-      deferred: deferredIds.includes(d.id),
-    })),
-    {
-      key: CARRY_ROW_ID,
-      label: "Your share of the gym debt Chris carries",
-      monthly: jamieMonthlyToChris,
-      deferred: deferredIds.includes(CARRY_ROW_ID),
-    },
-    {
-      key: SETTLEMENT_ROW_ID,
-      label: settlement.name,
-      monthly: settlement.minPayment,
-      deferred: deferredIds.includes(SETTLEMENT_ROW_ID),
-    },
-  ].sort((a, b) => b.monthly - a.monthly);
-
-  // What isn't actually going out right now. A deferred payment is still owed
-  // and still in every balance on this page — only the payment is on hold.
-  //
-  // Summed off `monthlyRows` rather than from the debts list, so a deferred
-  // settlement or gym share is counted too and the subtraction always matches
-  // the rows shown.
-  const deferredRows = monthlyRows.filter((r) => r.deferred);
-  const deferredMonthly = deferredRows.reduce((sum, r) => sum + r.monthly, 0);
-  const monthlyNow = monthlyTotal - deferredMonthly;
   const securedInterest = monthlyInterest(debts);
 
   // The same money cut a different way: Jamie's own unsecured debt, his car,
@@ -823,29 +779,25 @@ export default function DebtClient({
 
   return (
     <div className="space-y-3">
-      {/* What has to be found every month. First on the page because it's the
-          figure that decides whether a month works — the balances below are
-          what's owed, this is what it costs to hold them. */}
-      <MonthlyCards
-        total={monthlyTotal}
-        now={monthlyNow}
-        rows={monthlyRows}
-        deferredRows={deferredRows}
-      />
-
-      {/* What this month has cost so far. The total below is
-          the standing figure; this is the one that changes week to week, and
-          it's what says whether the pile is still growing right now.
+      {/* What this month has cost so far, leading the page. The total further
+          down is the standing figure; this is the one that changes week to
+          week, and it's what says whether the pile is still growing right now.
 
           Both halves of "new debt" sit in here: what Chris lent privately, and
           what Jamie drew out of the gym above what the work earned. The second
           only ever appeared buried in the year-by-year card, so a month could
-          read as quiet while thousands went out that way. */}
+          read as quiet while thousands went out that way.
+
+          The monthly figure beside it is the point of the card: borrowing is
+          not a one-off cost. Every dollar added here turns into a payment that
+          comes back every month afterwards, and that's the half a plain
+          "+$2,474" never said. */}
       <NewDebtCard
         big
         label="New debt this month"
         loans={periods.month.loans}
         pay={periods.month.pay}
+        debts={debts}
       />
 
       <div className="grid grid-cols-2 gap-3">
@@ -1257,171 +1209,6 @@ function CarryCost({
   );
 }
 
-// ── What goes out every month ────────────────────────────────────────────────
-// The first thing on the page, because it's the question that decides whether a
-// month works: not what's owed, but what has to be found this month.
-//
-// Two figures, kept apart on purpose. The total is every payment on this page
-// added up. The second is that total without the debts Chris has marked
-// deferred in Settings — money still owed, but not leaving the account right
-// now. Showing only one of the two would be misleading either way round: the
-// total overstates today, and the deferred figure hides what's coming.
-function MonthlyCards({
-  total,
-  now,
-  rows,
-  deferredRows,
-}: {
-  total: number;
-  now: number;
-  rows: { key: string; label: string; monthly: number; deferred: boolean }[];
-  deferredRows: { key: string; label: string; monthly: number }[];
-}) {
-  const [openTotal, setOpenTotal] = useState(false);
-  const [openNow, setOpenNow] = useState(false);
-  const held = total - now;
-  const paying = rows.filter((r) => !r.deferred && r.monthly > 0);
-
-  return (
-    <div className="space-y-3">
-      <div
-        className="rounded-2xl border p-5"
-        style={{
-          background: "linear-gradient(150deg, #fff6f2 0%, #ffeae4 55%, #f6ecfb 100%)",
-          borderColor: "#f3d9d0",
-        }}
-      >
-        <button
-          type="button"
-          className="w-full text-left"
-          onClick={() => setOpenTotal((o) => !o)}
-          aria-expanded={openTotal}
-        >
-          <span className="block text-[12px] font-medium uppercase tracking-[0.18em] text-muted">
-            Total monthly payment
-          </span>
-          <span className="mt-1 block text-[40px] font-black leading-none tracking-tight">
-            {money(total)}
-            <span className="text-[20px] font-bold">/mo</span>
-          </span>
-          <span className="mt-1.5 flex items-center gap-1 text-[12px] text-muted">
-            every payment on this page · tap for the detail
-            <ChevronDown
-              size={12}
-              className="transition-transform"
-              style={{ transform: openTotal ? "rotate(180deg)" : "rotate(0deg)" }}
-            />
-          </span>
-        </button>
-
-        {openTotal && (
-          <div className="mt-3 space-y-1 rounded-xl bg-white/70 p-3 text-[13px]">
-            {rows
-              .filter((r) => r.monthly > 0)
-              .map((r) => (
-                <div key={r.key} className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate text-muted">
-                    {r.label}
-                    {r.deferred && (
-                      <span
-                        className="ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                        style={{ background: "var(--warn-bg)", color: "var(--warn)" }}
-                      >
-                        deferred
-                      </span>
-                    )}
-                  </span>
-                  <span className="shrink-0">{money(r.monthly)}</span>
-                </div>
-              ))}
-            <div className="flex items-baseline justify-between gap-2 border-t border-border pt-1.5 font-semibold">
-              <span>Every month</span>
-              <span>{money(total)}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-2xl border border-border bg-card p-4">
-        <button
-          type="button"
-          className="w-full text-left"
-          onClick={() => setOpenNow((o) => !o)}
-          aria-expanded={openNow}
-        >
-          <span className="block text-[11px] uppercase tracking-wide text-muted">
-            Paying now, without deferred
-          </span>
-          <span
-            className="mt-0.5 block text-[28px] font-black leading-none"
-            style={{ color: held > 0 ? GREEN : undefined }}
-          >
-            {money(now)}
-            <span className="text-[16px] font-bold">/mo</span>
-          </span>
-          <span className="mt-1 flex items-center gap-1 text-[11px] text-muted">
-            {held > 0 ? (
-              <>
-                {money(held)}/mo on hold · tap for the detail
-                <ChevronDown
-                  size={11}
-                  className="transition-transform"
-                  style={{ transform: openNow ? "rotate(180deg)" : "rotate(0deg)" }}
-                />
-              </>
-            ) : (
-              "nothing marked deferred — same as the total above"
-            )}
-          </span>
-        </button>
-
-        {openNow &&
-          (held > 0 ? (
-            <div className="mt-3 space-y-1 rounded-xl bg-tint p-3 text-[13px]">
-              <p className="text-[11px] uppercase tracking-wide text-muted">
-                On hold right now
-              </p>
-              {deferredRows.map((r) => (
-                <div key={r.key} className="flex items-baseline justify-between gap-2">
-                  <span className="min-w-0 truncate text-muted">{r.label}</span>
-                  <span className="shrink-0">{money(r.monthly)}</span>
-                </div>
-              ))}
-              <div className="mt-1 space-y-1 border-t border-border pt-1.5">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-muted">Every payment</span>
-                  <span>{money(total)}</span>
-                </div>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-muted">− Deferred</span>
-                  <span style={{ color: GREEN }}>−{money(held)}</span>
-                </div>
-                <div className="flex items-baseline justify-between gap-2 font-semibold">
-                  <span>= Going out now</span>
-                  <span>{money(now)}</span>
-                </div>
-              </div>
-              <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-muted">
-                <AlertCircle size={12} className="mt-0.5 shrink-0" />
-                Deferred is not forgiven. Every one of these is still owed in
-                full and still counted in the total debt — the payment is just
-                not being made right now.
-              </p>
-            </div>
-          ) : null)}
-      </div>
-
-      {/* Only Chris sees this; it's his switch to throw. */}
-      {paying.length > 0 && held === 0 && (
-        <p className="px-1 text-[11px] text-muted">
-          Nothing is marked deferred. Mark a debt in Settings and this second
-          card will show what&apos;s actually leaving each month.
-        </p>
-      )}
-    </div>
-  );
-}
-
 // ── What comes back off the pile ─────────────────────────────────────────────
 // Assets that could be sold, and money owed to Jamie that hasn't landed. Shown
 // beside the total rather than folded into it: none of this has happened yet,
@@ -1571,11 +1358,16 @@ function NewDebtCard({
   loans,
   pay,
   big = false,
+  debts,
 }: {
   label: string;
   loans: DebtTransaction[];
   pay: PayMonth[];
   big?: boolean;
+  // Only the lead card passes these, and only to work out what the new
+  // borrowing costs each month from here on. Left off, the card is exactly
+  // what it was.
+  debts?: Debt[];
 }) {
   const [open, setOpen] = useState(false);
   const [openPart, setOpenPart] = useState<string | null>(null);
@@ -1585,6 +1377,13 @@ function NewDebtCard({
   const total = lent + overdrawn;
   const grew = total > 0;
   const tone = grew ? "#18181b" : GREEN;
+
+  // What this month's borrowing adds to the bill every month from now on.
+  // Worked out at the same rate Jamie's own cards already charge him — see
+  // newDebtMonthlyCost. Null when there's nothing to work that rate out from,
+  // and the figure is left off rather than guessed at.
+  const monthlyCost =
+    debts && total !== 0 ? newDebtMonthlyCost(Math.abs(total), debts) : null;
 
   // A half with nothing in it drops out rather than sitting there as "$0" —
   // except when both are empty, and then the card just says nothing happened.
@@ -1635,29 +1434,69 @@ function NewDebtCard({
         >
           {label}
         </span>
+
+        {/* The amount borrowed and what it costs from here on, side by side.
+            One is what happened this month; the other is what it keeps
+            costing — and the second is the one that never got said.
+
+            Two columns rather than a row of two blocks, so the captions sit
+            under their own figure and can wrap without drifting into the
+            other one on a narrow phone. */}
         <span
-          className={`mt-1 block font-black leading-none tracking-tight ${big ? "text-[40px]" : "text-[24px]"}`}
-          style={{ color: nothing ? "var(--muted)" : tone }}
+          className={
+            monthlyCost !== null
+              ? "mt-1 grid grid-cols-2 items-start gap-3"
+              : "mt-1 block"
+          }
         >
-          {grew ? "+" : ""}
-          {money(Math.abs(total))}
-        </span>
-        <span
-          className={`mt-1.5 flex items-center gap-1 text-muted ${big ? "text-[12px]" : "text-[11px]"}`}
-        >
-          {nothing ? (
-            "nothing borrowed"
-          ) : (
-            <>
-              {grew ? "borrowed" : "paid off"} · tap for the detail
-              <ChevronDown
-                size={12}
-                className="transition-transform"
-                style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-              />
-            </>
+          <span className="block min-w-0">
+            <span
+              className={`block font-black leading-none tracking-tight ${
+                // Sharing the row with the /mo figure halves the room, and
+                // "+$35,893" at 40px does not fit half a phone. It keeps the
+                // full size whenever it has the width to itself.
+                big ? (monthlyCost !== null ? "text-[30px]" : "text-[40px]") : "text-[24px]"
+              }`}
+              style={{ color: nothing ? "var(--muted)" : tone }}
+            >
+              {grew ? "+" : ""}
+              {money(Math.abs(total))}
+            </span>
+            <span
+              className={`mt-1.5 block text-muted ${big ? "text-[12px]" : "text-[11px]"}`}
+            >
+              {nothing ? "nothing borrowed" : grew ? "borrowed" : "paid off"}
+            </span>
+          </span>
+
+          {monthlyCost !== null && (
+            <span className="block min-w-0">
+              <span className="block text-[22px] font-black leading-none tracking-tight">
+                {grew ? "+" : "−"}
+                {money(monthlyCost)}
+                <span className="text-[13px] font-bold">/mo</span>
+              </span>
+              <span className="mt-1.5 block text-[12px] text-muted">
+                {grew ? "added to" : "off"} the monthly payment
+              </span>
+            </span>
           )}
         </span>
+
+        {/* The way in, on its own line so it never competes with the figures
+            above it for room. */}
+        {!nothing && (
+          <span
+            className={`mt-2 flex items-center gap-1 text-muted ${big ? "text-[12px]" : "text-[11px]"}`}
+          >
+            tap for the detail
+            <ChevronDown
+              size={12}
+              className="transition-transform"
+              style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+            />
+          </span>
+        )}
       </button>
 
       {open && !nothing && (
@@ -1728,6 +1567,18 @@ function NewDebtCard({
               Both halves are borrowed money: Chris either handed it over or
               covered the shortfall out of the gym. Together they come to{" "}
               {money(Math.abs(total))}.
+            </p>
+          )}
+
+          {/* Where the /mo figure came from. It isn't billed by anyone yet, so
+              the card has to say how it was worked out rather than let it read
+              as a number off a statement. */}
+          {monthlyCost !== null && (
+            <p className="flex items-start gap-1.5 pt-1 text-[11px] text-muted">
+              <AlertCircle size={12} className="mt-0.5 shrink-0" />
+              The {money(monthlyCost)}/mo is an estimate. Nobody has set a
+              payment on this money yet, so it&apos;s costed at the same rate
+              Jamie&apos;s own cards already charge him.
             </p>
           )}
         </div>
