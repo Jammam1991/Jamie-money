@@ -819,7 +819,7 @@ export default function DebtClient({
           "+$2,474" never said. */}
       <NewDebtCard
         big
-        label="New debt this month"
+        label={`${monthName(currentMonth)} New Debt`}
         loans={periods.month.loans}
         pay={periods.month.pay}
         debts={debts}
@@ -827,7 +827,7 @@ export default function DebtClient({
 
       <div className="grid grid-cols-2 gap-3">
         <NewDebtCard
-          label="New debt last month"
+          label={`${monthName(lastMonth)}'s New Debt`}
           loans={periods.last.loans}
           pay={periods.last.pay}
         />
@@ -907,11 +907,14 @@ export default function DebtClient({
                   aria-expanded={open}
                 >
                   <span className="text-[18px]">{b.emoji}</span>
+                  {/* Wrapping rather than truncating: "Business Debt — owed to
+                      Chris" is the whole point of that row, and cutting it to
+                      "Business Debt — ow…" on a phone loses which one it is. */}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-medium">
+                    <span className="block text-[15px] font-medium">
                       {b.label}
                     </span>
-                    <span className="block truncate text-[11px] text-muted">
+                    <span className="block text-[11px] text-muted">
                       {b.note}
                     </span>
                   </span>
@@ -970,10 +973,104 @@ export default function DebtClient({
           ))}
       </Card>
 
+      {/* ── The settlement, on its own ───────────────────────────────────────
+          Out of the headline because it's deferred, and in a card of its own
+          rather than deleted because it's still money owed. Kept visually
+          apart from the rows above: those are bills arriving this month, this
+          one isn't, and the whole point of moving it was to stop the two
+          reading as the same kind of thing. */}
+      {settlement.balance > 0 && (
+        <Card>
+          {/* Title and badge on their own line, figures underneath. Side by
+              side, the long title and "$900/mo when it starts" fight for the
+              same 375px and both wrap raggedly. */}
+          <button
+            className="w-full text-left"
+            onClick={() =>
+              setOpenBucket(openBucket === "divorce" ? null : "divorce")
+            }
+            aria-expanded={openBucket === "divorce"}
+          >
+            <span className="flex items-start gap-2.5">
+              <span className="text-[18px]">📄</span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                  <span className="text-[15px] font-medium">
+                    Divorce Settlement Debt
+                  </span>
+                  <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                    Deferred
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-[11px] text-muted">
+                  not yours to pay right now — kept out of the totals above
+                </span>
+              </span>
+              <ChevronDown
+                size={15}
+                className="mt-1 shrink-0 text-muted transition-transform"
+                style={{
+                  transform:
+                    openBucket === "divorce" ? "rotate(0deg)" : "rotate(-90deg)",
+                }}
+              />
+            </span>
+
+            <span className="mt-2.5 grid grid-cols-2 gap-3 border-t border-border pt-2.5">
+              <span className="block">
+                <span className="block text-[20px] font-black leading-none">
+                  {money(settlement.balance)}
+                </span>
+                <span className="mt-1 block text-[11px] text-muted">
+                  owed in total
+                </span>
+              </span>
+              <span className="block">
+                <span className="block text-[20px] font-black leading-none">
+                  {money(settlement.minPayment)}
+                  <span className="text-[13px] font-bold">/mo</span>
+                </span>
+                <span className="mt-1 block text-[11px] text-muted">
+                  when it starts
+                </span>
+              </span>
+            </span>
+          </button>
+
+          {openBucket === "divorce" && (
+            <div className="mt-3 border-t border-border pt-3">
+              {settlementPanel()}
+
+              {/* What the two cards come to together, so the money taken out
+                  of the headline is still added back somewhere on the page. */}
+              <div className="mt-3 space-y-1 border-t border-border pt-2.5 text-[13px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">Carrying now</span>
+                  <span>{money(carryingTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted">+ Deferred settlement</span>
+                  <span>{money(settlement.balance)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+                  <span>= Owed in total</span>
+                  <span>{money(owedIncludingSettlement)}</span>
+                </div>
+                <p className="pt-1 text-[11px] text-muted">
+                  With the settlement it would be{" "}
+                  {money(monthlyIncludingSettlement)} a month rather than{" "}
+                  {money(monthlyTotal)}.
+                </p>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* What comes back off the pile. Its own card rather than netted into the
           total above, because none of this money has moved yet. */}
       <OffsetsCard
-        gross={securedTotal}
+        gross={carryingTotal}
         net={netTotal}
         offsets={OFFSETS}
         deposit={SECURITY_DEPOSIT}
