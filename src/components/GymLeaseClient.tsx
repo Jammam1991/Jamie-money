@@ -40,10 +40,14 @@ export default function GymLeaseClient({
   opportunities: LeaseOpportunity[];
   problem: string | null;
 }) {
-  const ourOptions = opportunities.filter(
+  // The current lease has its own row in the gym dashboard's lease board, but
+  // it's shown above as the static Current Lease Summary — listing it again
+  // here would double it up as if it were a candidate to move into.
+  const candidates = opportunities.filter((o) => !o.is_current);
+  const ourOptions = candidates.filter(
     (o) => o.status === "shortlist" || o.status === "negotiating",
   );
-  const marketComps = opportunities.filter(
+  const marketComps = candidates.filter(
     (o) => o.status === "new" || o.status === "touring",
   );
 
@@ -114,13 +118,14 @@ function CurrentLeaseCard({ lease }: { lease: CurrentLease }) {
           <p className="mt-1 text-[13px] text-muted">
             {lease.address}, {lease.city}
           </p>
-          <div className="mt-2 flex items-baseline gap-4">
-            <span className="text-xl font-semibold">{money(currentRent)}/mo</span>
-            <span className="text-[12px] text-muted">
-              {lease.endDate}
-              {daysLeft >= 0 ? ` · ${daysLeft.toLocaleString("en-US")} days left` : " · expired"}
-            </span>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="text-xl font-semibold">{money(currentRent)}/mo rent</span>
+            <span className="text-[13px] text-muted">+ {money(lease.camMonthly)}/mo CAM</span>
           </div>
+          <p className="mt-1 text-[12px] text-muted">
+            {lease.endDate}
+            {daysLeft >= 0 ? ` · ${daysLeft.toLocaleString("en-US")} days left` : " · expired"}
+          </p>
         </div>
         <ChevronDown
           size={18}
@@ -163,7 +168,15 @@ function CurrentLeaseCard({ lease }: { lease: CurrentLease }) {
                 </div>
               ))}
             </div>
-            <p className="mt-1.5 text-[12px] text-muted">Plus {lease.camDescription}</p>
+          </div>
+
+          <div>
+            <p className="text-[12px] font-medium text-muted">CAM (operating costs)</p>
+            <div className="mt-1.5 flex items-baseline justify-between text-[13px]">
+              <span>Current estimate</span>
+              <span className="font-medium">{money(lease.camMonthly)}/mo</span>
+            </div>
+            <p className="mt-1.5 text-[12px] text-muted">{lease.camDescription}</p>
           </div>
 
           <div>
@@ -201,6 +214,7 @@ function Facts({ rows }: { rows: [string, string][] }) {
 function RenewOption({ lease }: { lease: CurrentLease }) {
   const year = currentLeaseYear();
   const currentRent = lease.rentSchedule.find((r) => r.year === year)?.monthly ?? null;
+  const total = currentRent != null ? currentRent + lease.camMonthly : null;
 
   return (
     <Card>
@@ -215,7 +229,12 @@ function RenewOption({ lease }: { lease: CurrentLease }) {
           No offer on file
         </span>
       </div>
-      <p className="mt-2 text-xl font-semibold">{money(currentRent)}/mo</p>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-xl font-semibold">{money(total)}/mo</span>
+        <span className="text-[12px] text-muted">
+          {money(currentRent)} rent + {money(lease.camMonthly)} CAM
+        </span>
+      </div>
       <Tint className="mt-3">
         <p className="text-[12px] text-muted">Pros</p>
         <p className="mt-0.5 text-[13px]">
