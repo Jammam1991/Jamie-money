@@ -813,6 +813,173 @@ export default function DebtClient({
     );
   }
 
+  // Debt Growth Chart Scene — Shows historical balance trend from snapshots
+  function debtGrowthScene() {
+    if (snapshots.length < 2) return null;
+
+    // Group snapshots by month, getting the latest snapshot per month
+    const monthMap = new Map<string, DebtSnapshotRow>();
+    for (const snap of snapshots) {
+      const month = snap.date.substring(0, 7); // YYYY-MM
+      const existing = monthMap.get(month);
+      if (!existing || snap.date > existing.date) {
+        monthMap.set(month, snap);
+      }
+    }
+
+    const monthlyData = Array.from(monthMap.values())
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-24); // Last 24 months
+
+    if (monthlyData.length < 2) return null;
+
+    // Calculate totals per month (all snapshots rolled up)
+    const balancesByMonth: { month: string; balance: number; label: string }[] = [];
+    for (const snap of monthlyData) {
+      const month = snap.date.substring(0, 7);
+      const idx = balancesByMonth.findIndex((m) => m.month === month);
+      if (idx >= 0) {
+        balancesByMonth[idx].balance += snap.balance;
+      } else {
+        const date = new Date(snap.date);
+        const label = date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+        balancesByMonth.push({ month, balance: snap.balance, label });
+      }
+    }
+
+    const maxBalance = Math.max(...balancesByMonth.map((m) => m.balance));
+    const minBalance = Math.min(...balancesByMonth.map((m) => m.balance));
+    const range = maxBalance - minBalance || maxBalance || 1;
+    const chartHeight = 120;
+    const chartWidth = 100;
+
+    // Simplified chart: just bars for each month
+    return (
+      <Card>
+        <p className="text-[13px] font-medium">Debt balance over the last two years</p>
+        <div className="mt-3 flex h-32 items-end justify-between gap-1 rounded-lg bg-tint p-3">
+          {balancesByMonth.map((m, i) => {
+            const normalized = (m.balance - minBalance) / range;
+            const height = Math.max(4, normalized * chartHeight);
+            return (
+              <div
+                key={m.month}
+                className="flex flex-1 flex-col items-center gap-1"
+                title={`${m.label}: ${money(m.balance)}`}
+              >
+                <div
+                  style={{
+                    height: `${height}px`,
+                    background: m.balance > total * 1.05 ? ROSE : GREEN,
+                  }}
+                  className="w-full rounded-t-sm"
+                />
+                {i % 3 === 0 && (
+                  <span className="text-[9px] text-muted">{m.label}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11px] text-muted">
+          Updated {snapshots[0]?.date || "recently"}
+        </p>
+      </Card>
+    );
+  }
+
+  // Interest Burden Scene — Shows which debts cost the most per month
+  function interestBurdenScene() {
+    const debtsByInterest = personalDebts
+      .map((d) => ({ debt: d, monthly: financeCharge(d) }))
+      .filter((d) => d.monthly > 0)
+      .sort((a, b) => b.monthly - a.monthly);
+
+    if (debtsByInterest.length === 0) return null;
+
+    const maxInterest = debtsByInterest[0]?.monthly || 1;
+
+    return (
+      <Card>
+        <p className="text-[13px] font-medium">Which debts cost the most each month?</p>
+        <div className="mt-3 space-y-2.5">
+          {debtsByInterest.map((item) => {
+            const pct = (item.monthly / maxInterest) * 100;
+            const typeEmoji = item.debt.debtType === "auto_loan" ? "🚗" : "💳";
+            return (
+              <div key={item.debt.id}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px]">
+                    {typeEmoji} {item.debt.name}
+                  </span>
+                  <span className="text-[13px] font-medium">{money(item.monthly)}/mo</span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-tint">
+                  <div
+                    style={{
+                      width: `${pct}%`,
+                      background: item.debt.debtType === "auto_loan" ? SKY : VIOLET,
+                    }}
+                    className="h-full"
+                  />
+                </div>
+                <p className="mt-0.5 text-[11px] text-muted">
+                  {item.debt.apr}% APR · {money(item.debt.balance)} balance
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-[11px] text-muted">
+          This is pure interest — paying these minimums doesn't reduce the balances.
+        </p>
+      </Card>
+    );
+  }
+
+  // Detailed Accounts Scene — All individual debts listed with edit/delete controls
+  function detailedAccountsScene() {
+    return (
+      <Card>
+        <p className="text-[13px] font-medium mb-3">All your accounts</p>
+        <div className="space-y-3">
+          {personalDebts.length > 0 ? (
+            personalDebts.map(row)
+          ) : (
+            <p className="text-xs text-muted">No personal debts yet.</p>
+          )}
+        </div>
+        {admin && !adding && (
+          <button
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
+            onClick={() => setAdding(true)}
+          >
+            <Plus size={16} />
+            Add a debt
+          </button>
+        )}
+        {admin && adding && (
+          <div className="mt-3">
+            <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  // Payoff Calculator Scene
+  function payoffCalculatorScene() {
+    if (personalDebts.length === 0) return null;
+    return (
+      <PayoffCalculator
+        debts={personalDebts}
+        minTotal={minTotal}
+        extra={extra}
+        setExtra={setExtra}
+      />
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* What this month has cost so far, leading the page. The total further
@@ -971,9 +1138,22 @@ export default function DebtClient({
           ))}
       </Card>
 
-      {/* The same two figures as they'd read once the money coming in lands.
-          Directly under today's, in green, so the pair reads as "now" and
-          "after" without a word of explanation needed. */}
+      {/* Scene 2: Debt Growth Chart — Historical balance trend */}
+      {debtGrowthScene()}
+
+      {/* Scene 3: Interest Burden — Which debts cost the most per month */}
+      {interestBurdenScene()}
+
+      {/* Scene 5: Payoff Calculator — What-if scenarios */}
+      {payoffCalculatorScene()}
+
+      {/* Scene 6: Detailed Accounts — All individual debts */}
+      {detailedAccountsScene()}
+
+      {/* Additional context: What comes off the pile. The same two figures as
+          they'd read once the money coming in lands. Directly under today's, in
+          green, so the pair reads as "now" and "after" without a word of
+          explanation needed. */}
       <AfterChangesCard
         balanceNow={carryingTotal}
         balanceAfter={netTotal}
@@ -1096,17 +1276,6 @@ export default function DebtClient({
         onAdd={handleAddTransaction}
         onDelete={handleDeleteTransaction}
       />
-
-      {/* Payoff what-if calculator. Jamie's own debts only — paying extra at
-          the gym's loans isn't a plan he can act on. */}
-      {personalDebts.length > 0 && (
-        <PayoffCalculator
-          debts={personalDebts}
-          minTotal={minTotal}
-          extra={extra}
-          setExtra={setExtra}
-        />
-      )}
 
       {/* Pull debts straight from the bank or Money App (primary), with
           paste-a-report as backup. Admin plumbing, so it sits folded at the
