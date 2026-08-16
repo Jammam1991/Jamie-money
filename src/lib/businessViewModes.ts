@@ -164,7 +164,15 @@ export function readViewMode(sp: { view?: string; operational?: string }): ViewM
   return DEFAULT_VIEW_MODE;
 }
 
-export type Headline = { moneyIn: number; moneyOut: number; profit: number };
+export type Headline = {
+  moneyIn: number;
+  /** The cost of RUNNING the gym — loan interest is not in here. */
+  moneyOut: number;
+  /** Loan interest, as its own step between money out and profit. Zero under
+   *  the operating cut, which drops it rather than counting it. */
+  interest: number;
+  profit: number;
+};
 
 /**
  * Money in, money out and what's left — read the way this mode means them.
@@ -172,18 +180,27 @@ export type Headline = { moneyIn: number; moneyOut: number; profit: number };
  * Two shapes, not five. "Operating profit only" is the odd one out: it reads
  * the roll-up's own `operatingProfit`, which has grant income and loan
  * interest carved off BOTH sides. Every other mode is showing the whole
- * picture, so grant money counts as money in and loan interest counts as
- * money out, and the bottom line is `netProfit`.
+ * picture, so grant money counts as money in and interest still comes off the
+ * bottom line — but as its OWN step, not folded into money out.
  *
- * Both shapes are arithmetic on figures Money App already computed, so
- * `moneyIn - moneyOut` always equals `profit` exactly — no rounding drift
- * between the big number and the two tiles under it.
+ * That split is why `moneyOut` stops at running costs. Chris's P&L (Budget)
+ * screen does the same thing: its TOTAL EXPENSES tile leaves interest out and
+ * subtracts it lower down as Business Fees, so folding it in here made the two
+ * apps disagree on "money out" by every dollar of interest the gym has paid —
+ * $18,273 over the BoxingRX era — while both were right. Now the tile matches
+ * his, and the interest is a line you can see rather than a difference you have
+ * to work out.
+ *
+ * Every shape is arithmetic on figures Money App already computed, so
+ * `moneyIn - moneyOut - interest` always equals `profit` exactly — no rounding
+ * drift between the big number and the tiles under it.
  */
 export function headlineFor(rollup: Rollup, mode: ViewMode): Headline {
   if (mode.operational) {
     return {
       moneyIn: rollup.income,
       moneyOut: rollup.cogs + rollup.expenses,
+      interest: 0,
       profit: rollup.operatingProfit,
     };
   }
@@ -192,7 +209,8 @@ export function headlineFor(rollup: Rollup, mode: ViewMode): Headline {
   // zero costs a line of interest rather than the whole page.
   return {
     moneyIn: rollup.income + rollup.otherIncome,
-    moneyOut: rollup.cogs + rollup.expenses + (rollup.financeCharges ?? 0),
+    moneyOut: rollup.cogs + rollup.expenses,
+    interest: rollup.financeCharges ?? 0,
     profit: rollup.netProfit,
   };
 }

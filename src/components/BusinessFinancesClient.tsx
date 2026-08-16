@@ -718,7 +718,7 @@ function Headline({
   // What "money in", "money out" and "profit" mean depends on the cut — see
   // headlineFor. The three always tie out, so the two tiles explain the big
   // number rather than sitting near it.
-  const { moneyIn, moneyOut, profit: rawProfit } = headlineFor(rollup, mode);
+  const { moneyIn, moneyOut, interest, profit: rawProfit } = headlineFor(rollup, mode);
 
   // Neither of these is part of any of the five cuts above — a distribution
   // isn't a P&L expense under any of them, and Jamie's pay isn't in Money
@@ -735,6 +735,16 @@ function Headline({
   const jamiePayOut = jamieCut === "pay" ? (jamiePay ?? 0) : 0;
   const jamieDistOut = jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
   const profit = rawProfit - jamiePayOut - jamieDistOut;
+
+  // Everything that comes off between the two tiles and the big number, in the
+  // order it's subtracted. Built as a list so the ladder always ends on
+  // `profit` — money in − money out − every step below = the headline, whatever
+  // the chips above are set to.
+  const steps = [
+    { what: "loan interest comes off", amount: interest },
+    { what: "Jamie's pay", amount: jamiePayOut },
+    { what: "Jamie's distributions", amount: jamieDistOut },
+  ].filter((s) => s.amount !== 0);
 
   // Only show year-end projection for current year, not for months or all-time
   const projection =
@@ -761,17 +771,9 @@ function Headline({
       >
         {money(profit)}
       </p>
-      {/* Only ever one of the two, so no "X and Y" case to spell out. */}
-      {jamiePayOut !== 0 && (
-        <p className="mt-1 text-[12px] text-muted">
-          After {money(jamiePayOut)} of Jamie&apos;s pay
-        </p>
-      )}
-      {jamieDistOut !== 0 && (
-        <p className="mt-1 text-[12px] text-muted">
-          After {money(jamieDistOut)} of distributions
-        </p>
-      )}
+      {/* What each chip took off used to be captioned here; it's now a row in
+          the ladder below, next to the interest step, so every deduction
+          between the two tiles and this number is named in one place. */}
       <div className="mt-2 flex flex-wrap gap-2">
         <ToggleChip
           label="Include Jamie's earned pay"
@@ -828,16 +830,45 @@ function Headline({
         <Tint>
           <p className="text-[12px] text-muted">Money out</p>
           <p className="mt-0.5 text-[18px] font-semibold">{money(moneyOut)}</p>
-          {/* Same idea on the other side — interest is what separates the
-              full picture from the gym's own numbers. */}
+          {/* Same idea on the other side. Interest is NOT in this figure — it
+              gets its own step below, so this tile is the cost of running the
+              gym and matches the TOTAL EXPENSES tile on Chris's own P&L. */}
           {(rollup.financeCharges ?? 0) !== 0 && (
             <p className="mt-1 text-[11px] leading-snug text-muted">
-              {mode.operational ? "Leaves out " : "Includes "}
-              {money(rollup.financeCharges ?? 0)} of loan interest
+              {mode.operational
+                ? `Leaves out ${money(rollup.financeCharges ?? 0)} of loan interest`
+                : "Running the gym — interest is the line below"}
             </p>
           )}
         </Tint>
       </div>
+      {/* The steps between the two tiles and the big number. Interest is
+          spelled out rather than folded into money out: it's the whole reason
+          this page and Chris's P&L used to disagree about what the gym spent,
+          and a number you can see beats a subtraction you have to do. The
+          ladder always ends on the headline figure, so whatever the Jamie
+          chips above are doing, these rows still add up to it. */}
+      {steps.length > 0 && (
+        <div
+          className="mt-3 space-y-1 border-t pt-3 text-[13px]"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {steps.map(({ what, amount }, i) => (
+            <div key={what} className="flex items-baseline justify-between gap-3">
+              {/* "Then" only on the first one, whichever it turns out to be —
+                  the interest step isn't always there. */}
+              <span className="text-muted">{`${i === 0 ? "Then" : "And"} ${what}`}</span>
+              <span className="font-medium" style={{ color: "var(--neg)" }}>
+                {money(-amount)}
+              </span>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-muted">Which leaves</span>
+            <span className="font-semibold">{money(profit)}</span>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
