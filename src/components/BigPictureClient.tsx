@@ -18,6 +18,8 @@ import {
   type Scope,
   type Slice,
 } from "@/lib/householdPicture";
+import type { Debt } from "@/lib/data";
+import type { DebtSnapshotRow } from "@/lib/store";
 
 // ── The Big Picture ─────────────────────────────────────────────────────────
 // Seven scenes, in the order the money actually moves. Each one is a picture
@@ -76,9 +78,13 @@ function accountNote(name: string): string | null {
 export default function BigPictureClient({
   picture,
   admin,
+  debts,
+  debtSnapshots,
 }: {
   picture: HouseholdPicture;
   admin: boolean;
+  debts: Debt[];
+  debtSnapshots: DebtSnapshotRow[];
 }) {
   return (
     <div className="space-y-4">
@@ -104,6 +110,12 @@ export default function BigPictureClient({
         ];
         return scenes.map((render, i) => render(i));
       })()}
+
+      {/* New Debt Management Sections */}
+      <BusinessDebtsSection debts={debts} index={10} />
+      <DebtGrowthChartSection debtSnapshots={debtSnapshots} index={11} />
+      <CarsSection debts={debts} index={12} />
+      <LoansInterestSection debts={debts} index={13} />
 
       <p className="px-2 text-center text-[11px] text-muted">
         Every number here is read live from the Money App, the gym dashboard and
@@ -134,18 +146,10 @@ function Hero({ picture }: { picture: HouseholdPicture }) {
       style={{ background: "linear-gradient(135deg, #0d0d0d 0%, #221c1c 100%)" }}
     >
       <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-white/50">
-        The Big Picture
+        Big Picture Debt Management
       </p>
       <p className="mt-3 text-[13px] text-white/60">Everything we owe right now</p>
-      <p
-        className="mt-1 text-[42px] leading-none font-black tracking-tight"
-        style={{
-          background: "linear-gradient(135deg, #ff8a80 0%, #d64545 100%)",
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-          backgroundClip: "text",
-        }}
-      >
+      <p className="mt-1 text-[42px] leading-none font-black tracking-tight text-white">
         {money(picture.totalDebt)}
       </p>
       {/* One card per owner rather than a personal/business split — the first
@@ -1165,5 +1169,271 @@ function Drill({ label, children }: { label: string; children: React.ReactNode }
       </button>
       {open && <div className="mt-2 px-1">{children}</div>}
     </>
+  );
+}
+
+// ── New Debt Management Sections ────────────────────────────────────────────────
+
+function BusinessDebtsSection({ debts, index }: { debts: Debt[]; index: number }) {
+  const businessDebts = debts.filter((d) => d.scope === "business");
+  if (businessDebts.length === 0) return null;
+
+  const total = businessDebts.reduce((sum, d) => sum + d.balance, 0);
+
+  return (
+    <Scene index={index} emoji="🏋️" title="Business Debts" accent={AMBER}>
+      <div className="mt-3 rounded-xl bg-tint p-3 text-center">
+        <p className="text-[12px] text-muted">Total gym debt</p>
+        <p className="text-[30px] font-black leading-tight text-white">
+          {money(total)}
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {businessDebts.map((debt) => (
+          <div
+            key={debt.id}
+            className="flex items-center justify-between gap-3 rounded-lg bg-white/5 p-3"
+          >
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-white">{debt.name}</p>
+              <p className="mt-0.5 text-[11px] text-white/50">
+                {debt.apr > 0 ? `${debt.apr}% APR` : "No APR"}
+                {debt.minPayment > 0 && ` • ${money(debt.minPayment)}/mo`}
+              </p>
+            </div>
+            <p className="shrink-0 text-[15px] font-semibold text-white">
+              {money(debt.balance)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </Scene>
+  );
+}
+
+function DebtGrowthChartSection({
+  debtSnapshots,
+  index,
+}: {
+  debtSnapshots: DebtSnapshotRow[];
+  index: number;
+}) {
+  if (debtSnapshots.length === 0) return null;
+
+  // Group snapshots by month and sum the balances
+  const monthlyData = new Map<string, number>();
+  debtSnapshots.forEach((snap) => {
+    const monthKey = snap.date.substring(0, 7); // YYYY-MM
+    const current = monthlyData.get(monthKey) || 0;
+    monthlyData.set(monthKey, current + snap.balance);
+  });
+
+  const sortedData = Array.from(monthlyData.entries())
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .slice(-60); // Last 60 months (~5 years)
+
+  if (sortedData.length < 2) return null;
+
+  const maxBalance = Math.max(...sortedData.map(([, balance]) => balance));
+  const minBalance = Math.min(...sortedData.map(([, balance]) => balance));
+  const range = maxBalance - minBalance || maxBalance;
+
+  return (
+    <Scene index={index} emoji="📈" title="Debt Growth Over Time" accent={SKY}>
+      <div className="mt-4 rounded-xl bg-tint p-4">
+        <svg viewBox="0 0 600 200" className="w-full">
+          {/* Grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
+            <line
+              key={`grid-${pct}`}
+              x1="40"
+              y1={200 - 150 * pct}
+              x2="600"
+              y2={200 - 150 * pct}
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="1"
+            />
+          ))}
+
+          {/* Y-axis labels */}
+          {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
+            <text
+              key={`label-${pct}`}
+              x="35"
+              y={205 - 150 * pct}
+              textAnchor="end"
+              fontSize="10"
+              fill="rgba(255,255,255,0.5)"
+            >
+              {money((minBalance + range * pct) / 1000)} k
+            </text>
+          ))}
+
+          {/* Line chart */}
+          <polyline
+            points={sortedData
+              .map((_, i) => {
+                const [, balance] = sortedData[i];
+                const x = 40 + (i / (sortedData.length - 1)) * 560;
+                const y = 200 - 150 * ((balance - minBalance) / (range || 1));
+                return `${x},${y}`;
+              })
+              .join(" ")}
+            fill="none"
+            stroke={SKY}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Dots at each point */}
+          {sortedData.map((_, i) => {
+            const [, balance] = sortedData[i];
+            const x = 40 + (i / (sortedData.length - 1)) * 560;
+            const y = 200 - 150 * ((balance - minBalance) / (range || 1));
+            return (
+              <circle
+                key={`dot-${i}`}
+                cx={x}
+                cy={y}
+                r="3"
+                fill={SKY}
+                opacity="0.8"
+              />
+            );
+          })}
+
+          {/* Axis labels */}
+          <text
+            x="320"
+            y="25"
+            textAnchor="middle"
+            fontSize="12"
+            fill="rgba(255,255,255,0.7)"
+          >
+            {sortedData[0]?.[0]} to {sortedData[sortedData.length - 1]?.[0]}
+          </text>
+        </svg>
+      </div>
+
+      <p className="mt-3 text-center text-[12px] text-muted">
+        Total household debt over the past {Math.round(sortedData.length / 12)} years
+      </p>
+    </Scene>
+  );
+}
+
+function CarsSection({ debts, index }: { debts: Debt[]; index: number }) {
+  const carDebt = debts.filter(
+    (d) => d.debtType === "auto_loan" || /car|vehicle|taycan|auto/i.test(d.name),
+  );
+  if (carDebt.length === 0) return null;
+
+  const total = carDebt.reduce((sum, d) => sum + d.balance, 0);
+
+  return (
+    <Scene index={index} emoji="🚗" title="Vehicle Loans" accent={VIOLET}>
+      <div className="mt-3 rounded-xl bg-tint p-3 text-center">
+        <p className="text-[12px] text-muted">Total vehicle debt</p>
+        <p className="text-[30px] font-black leading-tight text-white">
+          {money(total)}
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {carDebt.map((debt) => (
+          <div
+            key={debt.id}
+            className="rounded-lg bg-white/5 p-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-white">{debt.name}</p>
+                <p className="mt-1 text-[11px] text-white/50">
+                  {debt.apr}% APR
+                  {debt.minPayment > 0 && ` • ${money(debt.minPayment)}/mo`}
+                </p>
+              </div>
+              <p className="shrink-0 text-[15px] font-semibold text-white">
+                {money(debt.balance)}
+              </p>
+            </div>
+            {debt.balance > 0 && debt.minPayment > 0 && (
+              <div className="mt-2 border-t border-white/10 pt-2">
+                <p className="text-[10px] text-white/50">
+                  ~{Math.round(debt.balance / debt.minPayment)} months to payoff
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Scene>
+  );
+}
+
+function LoansInterestSection({ debts, index }: { debts: Debt[]; index: number }) {
+  // Filter to interesting loans: not credit cards, has APR
+  const loans = debts.filter(
+    (d) =>
+      d.debtType && d.debtType !== "credit_card" && d.apr > 0 && d.balance > 0,
+  );
+
+  if (loans.length === 0) return null;
+
+  const monthlyInterest = loans.reduce((sum, d) => {
+    return sum + (d.balance * d.apr) / 100 / 12;
+  }, 0);
+
+  return (
+    <Scene index={index} emoji="💰" title="Loans & Interest" accent={GREEN}>
+      <div className="mt-3 rounded-xl bg-tint p-3 text-center">
+        <p className="text-[12px] text-muted">Interest paid this month</p>
+        <p className="text-[28px] font-black leading-tight text-white">
+          {money(monthlyInterest)}
+        </p>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {loans.map((loan) => {
+          const monthlyInt = (loan.balance * loan.apr) / 100 / 12;
+          const monthsToPayoff =
+            loan.minPayment > monthlyInt
+              ? Math.round(loan.balance / (loan.minPayment - monthlyInt))
+              : null;
+
+          return (
+            <div key={loan.id} className="rounded-lg bg-white/5 p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[13px] font-medium text-white">{loan.name}</p>
+                <p className="text-[12px] font-semibold text-white">
+                  {loan.apr}%
+                </p>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-center text-[11px]">
+                <div>
+                  <p className="text-white/50">Balance</p>
+                  <p className="text-white">{money(loan.balance)}</p>
+                </div>
+                <div>
+                  <p className="text-white/50">Payment</p>
+                  <p className="text-white">{money(loan.minPayment)}</p>
+                </div>
+                <div>
+                  <p className="text-white/50">Interest</p>
+                  <p className="text-white">{money(monthlyInt)}</p>
+                </div>
+              </div>
+              {monthsToPayoff && (
+                <p className="mt-2 border-t border-white/10 pt-2 text-center text-[10px] text-white/50">
+                  ~{monthsToPayoff} months to payoff
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Scene>
   );
 }
