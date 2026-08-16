@@ -135,7 +135,8 @@ export type HouseholdPicture = {
   // ── Scene 1: what we owe ────────────────────────────────────────────────
   totalDebt: number;
   businessDebt: number;
-  /** Chris, Jamie and joint — the household's own debt, rental excluded. */
+  /** Chris, Jamie and joint — the household's own debt, rental excluded, but
+   *  including what the rental only secures (see `realScope`). */
   personalDebt: number;
   /** The rental property's own mortgage and deferred balance. */
   rentalDebt: number;
@@ -237,6 +238,32 @@ function asScope(v: string | null | undefined): Scope {
   return SCOPES.includes(v as Scope) ? (v as Scope) : "joint";
 }
 
+/**
+ * Accounts Money App files under the rental that the rental doesn't owe.
+ *
+ * The Beacon/Berkshire HELOC is the only one so far: Money App books it to
+ * Lennon Court because the property is what secures it, and the export folds
+ * that section into the `lennon` scope. But the balance isn't the property's —
+ * it's the 2019–2023 personal borrowing poured into one container (see
+ * `spendingHistory.ts`). Left where it lands, $199k of what the two of them
+ * spent reads as the rental's own mortgage debt, and the household's number
+ * comes out that much too kind.
+ *
+ * It reads as Chris's rather than joint because that's what the scopes mean
+ * here (see SCOPE_NAME): the loan is in his name, on his property. Whose
+ * spending it really was is said on the account itself, in BigPictureClient's
+ * ACCOUNT_NOTES.
+ *
+ * Matched on the name rather than the account id: an id changes if the account
+ * is re-linked in Money App, the name doesn't.
+ */
+const SECURED_BY_THE_RENTAL_BUT_NOT_ITS = /beacon|b[ei]rkshire/i;
+
+function realScope(scope: Scope, name: string): Scope {
+  if (scope !== "lennon") return scope;
+  return SECURED_BY_THE_RENTAL_BUT_NOT_ITS.test(name) ? "chris" : scope;
+}
+
 /** Possessive — reads as part of a sentence ("Chris's · $12,900 used of…"). */
 export const SCOPE_LABEL: Record<Scope, string> = {
   chris: "Chris's",
@@ -321,7 +348,7 @@ async function fetchAccounts(): Promise<{
       id: String(a.id),
       name: a.name,
       type: a.type,
-      scope: asScope(a.scope),
+      scope: realScope(asScope(a.scope), a.name),
       balance: Number(a.balance) || 0,
       apr: Number(a.apr) || 0,
       minPayment: Number(a.minPayment) || 0,
@@ -653,7 +680,9 @@ export async function getHouseholdPicture(): Promise<{
   // Three buckets, not two. The rental property is a business of its own —
   // its mortgage sits against an asset that earns rent, which is a different
   // thing from what the two of them owe, and lumping it into "personal" made
-  // that number look far worse than it is.
+  // that number look far worse than it is. What the property only *secures*
+  // has already been read back as personal by `realScope` above, so this is
+  // the property's own borrowing and nothing else.
   const totalFor = (keep: (s: Scope) => boolean) =>
     sum(accounts.filter((a) => keep(a.scope)).map((a) => a.balance));
 
