@@ -2,7 +2,7 @@ import { PageTitle } from "@/components/ui";
 import BillsClient from "@/components/BillsClient";
 import {
   getBills,
-  getPaidBillIdsThisMonth,
+  getPaidBillIdsForBillMonth,
   getRolloverBillIds,
   getWeeklyIncome,
 } from "@/lib/store";
@@ -21,7 +21,7 @@ export default async function BillsPage() {
   const [bills, income, paidIds, rolloverIds] = await Promise.all([
     getBills(),
     getWeeklyIncome(),
-    getPaidBillIdsThisMonth(),
+    getPaidBillIdsForBillMonth(),
     getRolloverBillIds(),
   ]);
 

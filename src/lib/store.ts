@@ -21,6 +21,7 @@ import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
 import { parsePlacements, type Placements } from "./navLayout";
 import { DEFAULT_HOME_BUYING, type HomeBuyingInputs } from "./homeBuying";
 import { DEFAULT_CAR_INFO, type CarInfo, type CarHistoryEntry } from "./carInfo";
+import { billMonthRange } from "./billMonth";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
@@ -374,21 +375,22 @@ export async function getBills(): Promise<Bill[]> {
   }));
 }
 
-// Which bills already have a payment logged this calendar month? Used to show
-// the big "Paid" checkmarks and the "left to pay" headline on the Bills page.
-export async function getPaidBillIdsThisMonth(): Promise<string[]> {
-  const now = new Date();
-  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+// Which bills are already covered for the month the Bills page is showing?
+// Used for the big "Paid" checkmarks and the "left to pay" headline. That's
+// next month, not this one — see billMonth.ts for why.
+export async function getPaidBillIdsForBillMonth(): Promise<string[]> {
+  const { start, end } = billMonthRange();
   const c = client();
   if (!c) {
     return Object.keys(samplePayments).filter((billId) =>
-      samplePayments[billId].some((p) => p.paidDate >= monthStart)
+      samplePayments[billId].some((p) => p.paidDate >= start && p.paidDate < end)
     );
   }
   const { data, error } = await c
     .from("bill_payments")
     .select("bill_id")
-    .gte("paid_date", monthStart);
+    .gte("paid_date", start)
+    .lt("paid_date", end);
   if (error || !data) return [];
   return [...new Set(data.map((row) => String(row.bill_id)))];
 }
