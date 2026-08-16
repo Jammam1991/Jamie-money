@@ -21,6 +21,14 @@
 //                       to be this app's own address, not Chris's and not the
 //                       accountant's.
 
+/** One ledger account's share of a Schedule C line. */
+export type ScheduleCLineAccount = {
+  /** Full path, e.g. "Sales:Guest Passes". */
+  path: string;
+  amount: number;
+  transactions: ScheduleCLineTx[];
+};
+
 export type ScheduleCLine = {
   code: string;
   label: string;
@@ -30,6 +38,13 @@ export type ScheduleCLine = {
   /** One entry per transaction behind this line, newest first — lets a
    *  category expand to show what's actually in it. */
   transactions: ScheduleCLineTx[];
+  /** The same money split by ledger account, largest first. THE ONLY correct
+   *  way to group this line by account — see the note on `groupByAccount` in
+   *  BusinessFinancesClient for what deriving it from `transactions` cost.
+   *  Optional for the usual reason: it arrived in a later Money App, and one
+   *  that predates it falls back to the old (wrong-ish) grouping rather than
+   *  showing nothing. */
+  accounts?: ScheduleCLineAccount[];
 };
 
 // These types are a hand-written mirror of what Money App's endpoint returns,

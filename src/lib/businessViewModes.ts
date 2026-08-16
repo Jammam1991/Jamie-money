@@ -128,12 +128,18 @@ export const VIEW_MODES: ViewMode[] = [
 /**
  * What the page opens on.
  *
- * Changed to "full" so the Schedule C lines match MoneyApp's Chart of Accounts.
- * The full picture includes all transactions (chargebacks, returns, grants, etc.)
- * that Money App tracks. The "operating" and "seller" views can still be selected
- * to see filtered cuts.
+ * Deliberately NOT "full": this is the figure Jamie has been reading since the
+ * page shipped, and it's the one Chris picked to line up with the Operating
+ * Profit tile on his own dashboard. Changing the default would silently move
+ * the headline number for someone who never touched the selector.
+ *
+ * This was briefly flipped to "full" chasing a Chart of Accounts mismatch. It
+ * was the wrong lever — `operational` only ever drops grants, depreciation and
+ * the "Taxes paid" tree (see moneyapp's lib/business-operational.ts), never
+ * revenue accounts. The real cause was per-account attribution; see the note on
+ * `line.accounts` in BusinessFinancesClient.
  */
-export const DEFAULT_VIEW_MODE: ViewModeId = "full";
+export const DEFAULT_VIEW_MODE: ViewModeId = "operating";
 
 export const modeById = (id: ViewModeId): ViewMode =>
   VIEW_MODES.find((m) => m.id === id) ?? VIEW_MODES[1];

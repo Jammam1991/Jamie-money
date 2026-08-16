@@ -1173,6 +1173,17 @@ type AccountGroup = { account: string; total: number; txs: ScheduleCLineTx[] };
 // more, all at once. Splitting by account before listing transactions is
 // what makes a 177-transaction category actually readable, same as Money
 // App's own P&L page groups a category into its accounts.
+//
+// FALLBACK ONLY — prefer `line.accounts`, which Money App computes per ledger
+// line. This function can't: `accountPath` names only ONE account per
+// transaction (whichever line was biggest), so every Stripe payout — one
+// deposit carrying memberships, guest passes, product sales and chargebacks —
+// gets filed whole under its largest line. That read Guest Passes as $105 of a
+// real $1,775.50 and buried a -$2,153 of Chargebacks inside Recurring
+// Memberships, with the category totals still correct the whole time, which is
+// what made it look like a filtering bug for so long. Kept because the two apps
+// deploy separately and a Money App that predates `accounts` should degrade to
+// a rough grouping rather than an empty one.
 function groupByAccount(txs: ScheduleCLineTx[]): AccountGroup[] {
   const byAccount = new Map<string, ScheduleCLineTx[]>();
   for (const t of txs) {
@@ -1206,7 +1217,16 @@ function LineRow({
   good?: boolean;
 }) {
   const txs = line.transactions ?? [];
-  const groups = groupByAccount(txs);
+  // Money App's own per-account split when it sends one, and only fall back to
+  // inferring it from the transaction list when it doesn't. The two disagree
+  // whenever a transaction is split across accounts — see `groupByAccount`.
+  const groups = line.accounts?.length
+    ? line.accounts.map((a) => ({
+        account: accountLeaf(a.path),
+        total: a.amount,
+        txs: a.transactions ?? [],
+      }))
+    : groupByAccount(txs);
   const [openAccounts, setOpenAccounts] = useState<Set<string>>(new Set());
   const toggleAccount = (account: string) =>
     setOpenAccounts((prev) => {
