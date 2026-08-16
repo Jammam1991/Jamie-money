@@ -12,6 +12,7 @@ import {
   Building2,
   Landmark,
   Dumbbell,
+  KeyRound,
   Compass,
   Briefcase,
   HeartHandshake,
@@ -62,6 +63,7 @@ const links = [
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },
   { href: "/tax-center", label: "Tax Center", Icon: Landmark },
   { href: "/gym-story", label: "Gym Story", Icon: Dumbbell },
+  { href: "/gym-lease", label: "Gym Lease", Icon: KeyRound },
   {
     href: "#history",
     label: "History",

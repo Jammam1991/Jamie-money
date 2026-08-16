@@ -17,6 +17,7 @@ export type PageKey =
   | "divorce"
   | "married-vs-divorce"
   | "gym-story"
+  | "gym-lease"
   | "home-buying"
   | "big-picture"
   | "cars";
@@ -119,6 +120,13 @@ export const PAGES: AppPage[] = [
     label: "Gym Story",
     where: "menu",
     blurb: "How the gym started, backed by the real numbers from Money App.",
+  },
+  {
+    key: "gym-lease",
+    href: "/gym-lease",
+    label: "Gym Lease",
+    where: "menu",
+    blurb: "The current lease terms, and what's being shopped to replace it.",
   },
   {
     key: "home-buying",
