@@ -198,6 +198,12 @@ export type BusinessFinances = {
   view: ViewSettings;
   year: number | "all-time";
   month?: number;
+  /** The exact dates these figures cover — Money App's own answer, not a guess
+   *  from the year. For all-time it spans every year that was actually summed,
+   *  which is the only honest thing to caption the page with: the gym's first
+   *  two months are here only if 2024 is ticked on this app's Shared access
+   *  row. Optional for the usual reason — it arrived in a later Money App. */
+  range?: { start: string; end: string };
   /** The years this app is allowed to open, newest first. */
   years: number[];
   /** The last business transaction in the year — how current the books are. */
@@ -262,8 +268,22 @@ export async function getBusinessFinances(
   // what keeps the all-time total honest, since a year fetched under different
   // switches than its siblings would be summed into the same figure as if it
   // weren't. `trim=slim` is the spelling Money App's own P&L screens use.
+  //
+  // `period=boxingrx` is on EVERY request, not just 2024's. Chris's books also
+  // hold Montier's pre-acquisition history — 2023, and January through
+  // November 26 of 2024, when the gym was still Jamie's: roughly $60k of income
+  // against almost no cost. Asking for "2024" plainly would drag all of that
+  // into this page's totals and make the gym look far better than it has ever
+  // done. This is the same 11/27/24 cut Money App's own "BoxingRX" period
+  // makes, and Money App owns the date, so the two can't drift. On every other
+  // year it does nothing.
   const cutParams = (extra?: Record<string, string>) => {
-    const p = new URLSearchParams({ email, operational: String(operational), ...extra });
+    const p = new URLSearchParams({
+      email,
+      operational: String(operational),
+      period: "boxingrx",
+      ...extra,
+    });
     if (slim) p.set("trim", "slim");
     if (noFed) p.set("fed", "hide");
     return p;
@@ -281,15 +301,18 @@ export async function getBusinessFinances(
       if (!firstRes.ok) throw new Error(`Money App returned ${firstRes.status}`);
       const firstData = (await firstRes.json()) as BusinessFinances;
 
-      // Only fetch years Money App itself vouches for via `years`. An
-      // earlier version of this also force-requested BUSINESS_START_YEAR
-      // (2024) even when it wasn't in that list — Money App doesn't
-      // recognize year=2024 through this endpoint and returned unscoped
-      // data for it instead of a clean error, which silently inflated the
-      // all-time total by roughly a year's worth of income and expenses.
-      // If Chris adds 2024 to this app's allowed years in Money App's
-      // Shared access settings, it'll show up in `years` and get included
-      // here automatically — nothing else needs to change.
+      // Only fetch years Money App itself vouches for via `years` — the tax
+      // years ticked on this app's Shared access row. An earlier version also
+      // force-requested 2024 when it wasn't on that list; Money App answered
+      // with a year it WAS allowed instead of an error, and the all-time total
+      // silently gained a duplicate year of income and expenses. Money App now
+      // refuses a year that isn't shared (403), so that can't recur, and both
+      // guards stay: this only ever asks for what it was told it may have.
+      //
+      // Which also means the year list IS the coverage. Tick 2024 on that row
+      // and it appears here on the next load with nothing to redeploy; leave it
+      // off and this page is missing the gym's first two months — so `years` is
+      // what the caption below has to be built from, never a fixed start date.
       const allYearPromises = firstData.years.map(async (y) => {
         const yParams = cutParams({ year: String(y) });
         const res = await fetch(
@@ -349,31 +372,50 @@ export async function getBusinessFinances(
   }
 }
 
-const BUSINESS_START_YEAR = 2024;
-const BUSINESS_START_MONTH = 10; // November, 0-indexed
 const MONTH_LETTERS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 
 /**
- * Every real calendar month from the business's start (Nov 2024) through
- * today, in order. This is what makes the all-time monthly chart's x-axis —
- * NOT one bucket per (year, month) pair, which is what caused the previous
- * version to sometimes emit 24 entries for 2 years and crash the chart (it
- * indexes a fixed 12-entry MONTHS array by position).
+ * Every real calendar month from `start` through today, in order. This is what
+ * makes the all-time monthly chart's x-axis — NOT one bucket per (year, month)
+ * pair, which is what caused an earlier version to emit 24 entries for 2 years
+ * and crash the chart (it indexes a fixed 12-entry MONTHS array by position).
+ *
+ * `start` comes from the years that were actually fetched, not from a fixed
+ * Nov-2024. Hard-coding it made the array 22 slots long while only 20 of them
+ * could ever hold data, and the headline divided by the 22 — so "averages to a
+ * year" read $7,971 when the 20 months it really had say $8,768. A chart axis
+ * has to describe the data behind it.
  */
-function chronologicalMonths(): { year: number; month: number }[] {
+function chronologicalMonths(start: { year: number; month: number }): { year: number; month: number }[] {
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth();
 
   const out: { year: number; month: number }[] = [];
-  for (let year = BUSINESS_START_YEAR; year <= currentYear; year++) {
-    const startMonth = year === BUSINESS_START_YEAR ? BUSINESS_START_MONTH : 0;
+  for (let year = start.year; year <= currentYear; year++) {
+    const startMonth = year === start.year ? start.month : 0;
     const endMonth = year === currentYear ? currentMonth : 11;
     for (let month = startMonth; month <= endMonth; month++) {
       out.push({ year, month });
     }
   }
   return out;
+}
+
+/**
+ * The first month any of these years actually covers.
+ *
+ * Money App reports the exact window it read as `range`, so 2024 comes back
+ * starting 11/27 rather than 01/01 under the BoxingRX cut. An older Money App
+ * sends no range at all, hence the fall back to January of the earliest year.
+ */
+function coverageStart(years: BusinessFinances[]): { year: number; month: number; date: string } {
+  const dates = years
+    .map((y) => y.range?.start ?? `${y.year}-01-01`)
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort();
+  const date = dates[0] ?? `${Math.min(...years.map((y) => Number(y.year)))}-01-01`;
+  return { year: Number(date.slice(0, 4)), month: Number(date.slice(5, 7)) - 1, date };
 }
 
 /**
@@ -385,9 +427,10 @@ function aggregateYears(years: BusinessFinances[]): BusinessFinances {
   }
 
   const first = years[0];
-  const months = chronologicalMonths();
-  const monthLabels = months.map(({ year, month }) =>
-    month === BUSINESS_START_MONTH || month === 0
+  const start = coverageStart(years);
+  const months = chronologicalMonths(start);
+  const monthLabels = months.map(({ year, month }, i) =>
+    i === 0 || month === 0
       ? `${MONTH_LETTERS[month]}'${String(year).slice(2)}`
       : MONTH_LETTERS[month],
   );
@@ -395,6 +438,10 @@ function aggregateYears(years: BusinessFinances[]): BusinessFinances {
   const aggregated: BusinessFinances = {
     view: first.view,
     year: "all-time",
+    range: {
+      start: start.date,
+      end: years.map((y) => y.range?.end ?? `${y.year}-12-31`).sort().at(-1)!,
+    },
     years: first.years,
     throughDate: first.throughDate, // Most recent date
     actual: aggregateRollups(

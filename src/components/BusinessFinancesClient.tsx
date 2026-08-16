@@ -392,7 +392,14 @@ function IntroCard({
 
   let dateRangeText = "";
   if (isAllTime) {
-    dateRangeText = `From 11/27/24 through ${data.throughDate ? shortDate(data.throughDate) : "today"}`;
+    // The start comes from the years Money App actually handed over, never a
+    // fixed 11/27/24. Those are the tax years ticked on this app's Shared
+    // access row, and while 2024 wasn't ticked this line claimed two months of
+    // coverage the page didn't have — the gym's first two, at that.
+    const from = data.range?.start;
+    dateRangeText = `From ${from ? shortDate(from) : "the start"} through ${
+      data.throughDate ? shortDate(data.throughDate) : "today"
+    }`;
   } else if (data.month) {
     dateRangeText = `${MONTHS[data.month - 1]} ${data.year}`;
   } else if (data.throughDate) {
