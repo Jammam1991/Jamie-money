@@ -4,6 +4,7 @@ import BigPictureClient from "@/components/BigPictureClient";
 import { pageGate } from "@/lib/visibility";
 import { moneyAppReady } from "@/lib/moneyapp";
 import { getHouseholdPicture } from "@/lib/householdPicture";
+import { getDebts, getDebtSnapshotRows } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -11,12 +12,16 @@ export default async function BigPicturePage() {
   const { role, comingSoon } = await pageGate("big-picture");
   if (comingSoon) return <ComingSoon title="The Big Picture" />;
 
-  const { picture, error } = await getHouseholdPicture();
+  const [{ picture, error }, debts, debtSnapshots] = await Promise.all([
+    getHouseholdPicture(),
+    getDebts(),
+    getDebtSnapshotRows(),
+  ]);
 
   if (!picture) {
     return (
       <div>
-        <PageTitle>The Big Picture</PageTitle>
+        <PageTitle>Big Picture Debt Management</PageTitle>
         <Card>
           <p className="text-[15px] font-medium">Nothing to show yet</p>
           <p className="mt-1 text-[14px] text-muted">{error}</p>
@@ -36,7 +41,12 @@ export default async function BigPicturePage() {
 
   return (
     <div>
-      <BigPictureClient picture={picture} admin={role === "admin"} />
+      <BigPictureClient
+        picture={picture}
+        admin={role === "admin"}
+        debts={debts}
+        debtSnapshots={debtSnapshots}
+      />
     </div>
   );
 }
