@@ -64,6 +64,48 @@ export async function isLoggedIn(): Promise<boolean> {
   return (await getRole()) !== null;
 }
 
+// ── The login link ────────────────────────────────────────────────────────────
+// Jamie's password lives in Vercel, so he can't set or reset it himself and
+// there's no "forgot password" to offer him. Instead Chris taps a button on
+// Settings and Jamie gets a link that logs him straight in.
+//
+// The link carries its own expiry, signed with Chris's password — so there's
+// nothing to store and nothing to sweep up later. Editing the expiry to buy
+// more time breaks the signature, and the signature can't be worked out
+// without the password. Once used, the ordinary 30-day cookie takes over.
+
+export const LINK_MINUTES = 15;
+
+// Signed with Chris's password rather than Jamie's: changing Jamie's password
+// shouldn't invalidate a link Chris just sent, and changing Chris's password
+// should kill any link still in flight.
+function linkSecret(): string | undefined {
+  return process.env.ADMIN_PASSWORD;
+}
+
+export function linkConfigured(): boolean {
+  return Boolean(linkSecret()) && viewerConfigured();
+}
+
+// `now` is passed in rather than read here so the two halves can't disagree
+// about the time, and so this stays testable.
+export function makeLoginLink(now: number): string | null {
+  const secret = linkSecret();
+  if (!secret || !viewerConfigured()) return null;
+  const expires = now + LINK_MINUTES * 60_000;
+  return `${expires}.${hmac(secret, `jamie-link-v1:${expires}`)}`;
+}
+
+export function loginLinkValid(key: string, now: number): boolean {
+  const secret = linkSecret();
+  if (!secret) return false;
+  const dot = key.indexOf(".");
+  if (dot < 1) return false;
+  const expires = Number(key.slice(0, dot));
+  if (!Number.isFinite(expires) || expires < now) return false;
+  return eq(key.slice(dot + 1), hmac(secret, `jamie-link-v1:${expires}`));
+}
+
 const VIEW_AS_COOKIE = "jm_view_as";
 
 export async function isViewingAsJamie(): Promise<boolean> {

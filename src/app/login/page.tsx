@@ -5,12 +5,27 @@ import { getRole, adminConfigured, viewerConfigured } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
-  const role = await getRole();
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ link?: string }>;
+}) {
+  const [role, sp] = await Promise.all([getRole(), searchParams]);
 
   return (
     <div>
       <PageTitle>Jamie&apos;s Money</PageTitle>
+      {/* Landing here from a link means it sat unread too long. Say so, so it
+          doesn't read as "your link was wrong" or as something being broken. */}
+      {sp.link === "expired" && !role && (
+        <Card className="mb-3">
+          <p className="text-[14px] font-medium">That link has expired.</p>
+          <p className="text-[13px] text-muted">
+            Login links only last a few minutes. Ask Chris to send a fresh one,
+            or type your password below.
+          </p>
+        </Card>
+      )}
       <Card>
         {role ? (
           <div className="space-y-1">
