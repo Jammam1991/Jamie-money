@@ -13,6 +13,7 @@ import {
   getHouseholdIncome,
 } from "@/lib/store";
 import { getTaxDocuments } from "@/lib/taxCenter";
+import { getExtraPayments } from "@/lib/monthlyExtras";
 import { getPasswordEntries, vaultConfigured } from "@/lib/passwords";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +24,15 @@ export default async function SettingsPage() {
 
   const vaultOpen = await isVaultUnlocked();
 
-  const [comingSoon, taxDocuments, householdIncome, passwords, debts, deferred] =
-    await Promise.all([
+  const [
+    comingSoon,
+    taxDocuments,
+    householdIncome,
+    passwords,
+    debts,
+    deferred,
+    extras,
+  ] = await Promise.all([
     getComingSoonPages(),
     getTaxDocuments(),
     getHouseholdIncome(),
@@ -32,6 +40,7 @@ export default async function SettingsPage() {
     vaultOpen ? getPasswordEntries() : Promise.resolve([]),
     getDebts(),
     getDeferredDebtIds(),
+    getExtraPayments(),
   ]);
 
   return (
@@ -40,7 +49,11 @@ export default async function SettingsPage() {
         <PageTitle>Settings</PageTitle>
         <SettingsClient initialComingSoon={comingSoon} />
       </div>
-      <DeferredDebtsAdmin debts={debts} initialDeferred={deferred} />
+      <DeferredDebtsAdmin
+        debts={debts}
+        extras={extras}
+        initialDeferred={deferred}
+      />
       <HouseholdIncomeAdmin initial={householdIncome} />
       <TaxDocumentsAdmin initialDocuments={taxDocuments} />
       <PasswordsAdmin

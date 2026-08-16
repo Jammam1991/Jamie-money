@@ -35,6 +35,13 @@ import {
 } from "@/lib/payoff";
 import { groupByCategory } from "@/lib/debtCategories";
 import { CARRY_CATEGORIES, type ChrisCarry } from "@/lib/chrisCarry";
+import { SECURITY_DEPOSIT } from "@/lib/offsets";
+import {
+  CARRY_ROW_ID,
+  DEFAULT_SPLIT_PCT,
+  gymShareFigures,
+  SETTLEMENT_ROW_ID,
+} from "@/lib/monthlyExtras";
 import { parseReportText, type ParsedDebt } from "@/lib/parseReport";
 import { extractPdfText } from "@/lib/pdfText";
 import PlaidConnect from "@/components/PlaidConnect";
@@ -115,7 +122,6 @@ interface PersonalDebtItem {
 // None of this money has moved yet, which is why it sits beside the total
 // rather than inside it. A headline that quietly assumes a watch sells and a
 // payment arrives is not what Jamie owes today.
-const SECURITY_DEPOSIT = 30000;
 
 type Offset = {
   key: string;
@@ -285,12 +291,9 @@ export default function DebtClient({
   // only what's left after that comes out of the $153,000 Chris is personally
   // carrying. Nothing new is being borrowed: this is that same $153,000, split
   // by who it's really for.
-  const DEFAULT_SPLIT_PCT = 50;
   const splitPct = splitTerms.splitPct ?? DEFAULT_SPLIT_PCT;
   const totalInvestment = businessTotal + dueToChrisTotal;
   const jamieInvestmentShare = totalInvestment * (splitPct / 100);
-  const jamieOwesChris = Math.max(0, jamieInvestmentShare - businessTotal);
-  const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
 
   // The row used to read "$0/mo", as though Jamie's share of the gym cost
   // nothing to carry. It isn't free — Chris services it every month out of his
@@ -300,8 +303,16 @@ export default function DebtClient({
   // Same ratio as the balance on purpose: he owes $35,288 of the $123,000 Chris
   // is carrying, so he owes that fraction of the cost of carrying it. Anything
   // else would be a second, different split nobody agreed to.
-  const jamieCarryShare = dueToChrisTotal > 0 ? jamieOwesChris / dueToChrisTotal : 0;
-  const jamieMonthlyToChris = chrisCarry.monthly * jamieCarryShare;
+  const gymShare = gymShareFigures({
+    businessTotal,
+    dueToChrisTotal,
+    splitPct,
+    chrisCarryMonthly: chrisCarry.monthly,
+  });
+  const jamieOwesChris = gymShare.balance;
+  const jamieCarryShare = gymShare.share;
+  const jamieMonthlyToChris = gymShare.monthly;
+  const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
 
   const securedTotal = total + settlement.balance + businessTotal + jamieOwesChris;
   // What's left once the things coming back are counted. The deposit is already
@@ -315,14 +326,14 @@ export default function DebtClient({
   const monthlyTotal =
     totalMinimum(debts) + settlement.minPayment + jamieMonthlyToChris;
 
-  // What isn't actually going out right now. A deferred debt is still owed and
-  // still in every balance on this page — only its payment is on hold.
-  const deferredDebts = debts.filter((d) => deferredIds.includes(d.id));
-  const deferredMonthly = totalMinimum(deferredDebts);
-  const monthlyNow = monthlyTotal - deferredMonthly;
-
-  // One line per payment, in the same order the buckets appear below. Built
-  // from the same numbers as the total, so the list always adds up to it.
+  // One line per payment, biggest first. Built from the same numbers as the
+  // total, so the list always adds up to it.
+  //
+  // The settlement and the gym share are in here alongside the real debts and
+  // can be deferred like any of them. They have no row in the debts table —
+  // they're worked out — but they're money that leaves every month just the
+  // same, and they're the two most likely to be on hold: the settlement isn't
+  // even agreed yet.
   const monthlyRows = [
     ...debts.map((d) => ({
       key: d.id,
@@ -331,19 +342,28 @@ export default function DebtClient({
       deferred: deferredIds.includes(d.id),
     })),
     {
-      key: "__chris_carry__",
+      key: CARRY_ROW_ID,
       label: "Your share of the gym debt Chris carries",
       monthly: jamieMonthlyToChris,
-      deferred: false,
+      deferred: deferredIds.includes(CARRY_ROW_ID),
     },
     {
-      key: "__settlement__",
+      key: SETTLEMENT_ROW_ID,
       label: settlement.name,
       monthly: settlement.minPayment,
-      deferred: false,
+      deferred: deferredIds.includes(SETTLEMENT_ROW_ID),
     },
   ].sort((a, b) => b.monthly - a.monthly);
+
+  // What isn't actually going out right now. A deferred payment is still owed
+  // and still in every balance on this page — only the payment is on hold.
+  //
+  // Summed off `monthlyRows` rather than from the debts list, so a deferred
+  // settlement or gym share is counted too and the subtraction always matches
+  // the rows shown.
   const deferredRows = monthlyRows.filter((r) => r.deferred);
+  const deferredMonthly = deferredRows.reduce((sum, r) => sum + r.monthly, 0);
+  const monthlyNow = monthlyTotal - deferredMonthly;
   const securedInterest = monthlyInterest(debts);
 
   // The same money cut a different way: Jamie's own unsecured debt, his car,
