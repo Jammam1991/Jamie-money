@@ -19,8 +19,20 @@ import {
   GripVertical,
   Check,
   RotateCcw,
+  History as HistoryIcon,
+  ChevronDown,
 } from "lucide-react";
 import { setMenuOrder } from "@/lib/actions";
+
+// The rows tucked behind "History" — settlement mechanics and what-ifs, kept
+// out of the top-level menu since they're looked at far less often than the
+// day-to-day pages.
+const historyLinks = [
+  { href: "/big-picture", label: "The Big Picture", Icon: Compass },
+  { href: "/story", label: "The Debt Story", Icon: BookOpen },
+  { href: "/divorce", label: "Divorce", Icon: Scale },
+  { href: "/married-vs-divorce", label: "Married vs Divorce", Icon: HeartHandshake },
+];
 
 // The slide-out menu. Every row always shows — a page parked as "Coming Soon"
 // on the Settings screen keeps its link and says so when Jamie opens it.
@@ -29,9 +41,11 @@ import { setMenuOrder } from "@/lib/actions";
 // order suits them and their own order is saved, but it's only an order: a page
 // can never appear in the menu without being here, and one taken out of here
 // disappears from the menu no matter what was saved.
+//
+// "History" is one row in that same order — its href never routes anywhere,
+// it just expands in place — so dragging it around works exactly like any
+// other row while its four children stay fixed underneath it.
 const links = [
-  // First, because it's the one that frames everything under it.
-  { href: "/big-picture", label: "The Big Picture", Icon: Compass },
   { href: "/job-vs-business", label: "Job vs Business", Icon: Scale },
   // Sits right under it — that page asks "job or gym?", this one is what to do
   // about it once the answer is a job.
@@ -43,16 +57,14 @@ const links = [
   { href: "/home-buying", label: "Home Buying", Icon: Home },
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },
   { href: "/tax-center", label: "Tax Center", Icon: Landmark },
-  { href: "/divorce", label: "Divorce", Icon: Scale },
-  // Sits right under it — that page is the mechanics of splitting up, this one
-  // is what the splitting up would actually cost.
-  { href: "/married-vs-divorce", label: "Married vs Divorce", Icon: HeartHandshake },
-  {
-    href: "/story",
-    label: "The Debt Story",
-    Icon: BookOpen,
-  },
   { href: "/gym-story", label: "Gym Story", Icon: Dumbbell },
+  {
+    href: "#history",
+    label: "History",
+    Icon: HistoryIcon,
+    isGroup: true as const,
+    children: historyLinks,
+  },
 ];
 
 type MenuLink = (typeof links)[number];
@@ -94,6 +106,7 @@ export default function Header({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [items, setItems] = useState<MenuLink[]>(() => inSavedOrder(menuOrder));
   const [dragging, setDragging] = useState<number | null>(null);
   const [, startTransition] = useTransition();
@@ -187,6 +200,8 @@ export default function Header({
   function close() {
     setMenuOpen(false);
     setEditing(false);
+    // Collapsed by default every time the menu is reopened.
+    setHistoryOpen(false);
   }
 
   return (
@@ -247,7 +262,7 @@ export default function Header({
           )}
 
           <nav className="p-4 space-y-2">
-            {items.map(({ href, label, Icon }, i) => {
+            {items.map(({ href, label, Icon, isGroup, children }, i) => {
               const isDragging = dragging === i;
 
               // While reordering, the row is a handle rather than a link — a
@@ -287,6 +302,50 @@ export default function Header({
                     >
                       <GripVertical size={18} />
                     </button>
+                  </div>
+                );
+              }
+
+              // The History row doesn't navigate — it expands in place to
+              // show its own rows underneath, indented so they read as
+              // nested rather than as more top-level pages.
+              if (isGroup && children) {
+                return (
+                  <div key={href}>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryOpen((v) => !v)}
+                      aria-expanded={historyOpen}
+                      className="flex w-full items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon size={20} />
+                        <span className="font-medium">{label}</span>
+                      </div>
+                      <ChevronDown
+                        size={18}
+                        className="text-muted transition-transform"
+                        style={{ transform: historyOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+                      />
+                    </button>
+                    {historyOpen && (
+                      <div className="mt-2 ml-4 space-y-2 border-l border-border pl-3">
+                        {children.map((c) => (
+                          <Link
+                            key={c.href}
+                            href={c.href}
+                            onClick={close}
+                            className="flex items-center justify-between p-3 rounded-xl border border-border hover:bg-tint transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <c.Icon size={18} />
+                              <span className="font-medium">{c.label}</span>
+                            </div>
+                            <span className="text-muted">&gt;</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               }
