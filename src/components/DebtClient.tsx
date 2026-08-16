@@ -93,29 +93,6 @@ function previousMonth(key: string): string {
     : `${year}-${String(month - 1).padStart(2, "0")}`;
 }
 
-// "2026-08" → "August". Read straight off the string for the same reason as
-// previousMonth: building a Date from a month key and formatting it can slide
-// into the month before, depending on the timezone the page renders in.
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-function monthName(key: string): string {
-  const month = Number(key.split("-")[1]);
-  return MONTH_NAMES[month - 1] ?? key;
-}
-
 const inputClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-[15px] outline-none focus:border-[var(--muted)]";
 const primaryBtn =
@@ -331,32 +308,17 @@ export default function DebtClient({
   const jamieMonthlyToChris = gymShare.monthly;
   const chrisRemainingShare = dueToChrisTotal - jamieOwesChris;
 
-  // ── Carrying now, and the settlement kept out of it ────────────────────────
-  // Everything owed, the settlement included. Kept because the settlement card
-  // needs to say what the two figures come to together — but it is NOT what
-  // the headline shows.
-  const owedIncludingSettlement =
-    total + settlement.balance + businessTotal + jamieOwesChris;
-
-  // What Jamie is actually carrying: the same money without the divorce
-  // settlement. The settlement is deferred — not his to pay right now — and a
-  // headline that folds it in tells him he owes $54,000 more this month than
-  // he does. It gets its own card underneath instead, so nothing is hidden;
-  // it just stops inflating the number he plans around.
-  const carryingTotal = owedIncludingSettlement - settlement.balance;
-
-  // Same cut on the monthly side: every payment except the settlement's.
-  const monthlyTotal = totalMinimum(debts) + jamieMonthlyToChris;
-  const monthlyIncludingSettlement = monthlyTotal + settlement.minPayment;
-
-  // What's left once the things coming back are counted. The deposit is
-  // already inside the total above — it came off the gym investment — so only
-  // the Rolex and the medical payment come off again here.
-  //
-  // Netted off the carrying total, not off everything, so "owed today" in that
-  // card means the same thing as the headline right above it.
+  const securedTotal = total + settlement.balance + businessTotal + jamieOwesChris;
+  // What's left once the things coming back are counted. The deposit is already
+  // inside `securedTotal` — it came off the gym investment above — so only the
+  // Rolex and the medical payment come off again here.
   const offsetTotal = OFFSETS.reduce((sum, o) => sum + o.amount, 0);
-  const netTotal = carryingTotal - offsetTotal;
+  const netTotal = securedTotal - offsetTotal;
+  // Every monthly payment on this page added up — including Jamie's share of
+  // what Chris pays on the gym money, which the header used to leave out even
+  // though the row for it sits right below showing its own figure.
+  const monthlyTotal =
+    totalMinimum(debts) + settlement.minPayment + jamieMonthlyToChris;
 
   const securedInterest = monthlyInterest(debts);
 
@@ -376,7 +338,7 @@ export default function DebtClient({
       key: "personal-cards",
       emoji: "💳",
       color: VIOLET,
-      label: "Spending Debt",
+      label: "Jamie's cards",
       note: "cards and loans in Jamie's name",
       balance: totalBalance(personalUnsecuredDebts),
       monthly: totalMinimum(personalUnsecuredDebts),
@@ -387,7 +349,7 @@ export default function DebtClient({
       key: "car",
       emoji: "🚗",
       color: SKY,
-      label: "Auto Debt",
+      label: "Jamie's car",
       note: "backed by the car itself",
       balance: totalBalance(personalCarDebts),
       monthly: totalMinimum(personalCarDebts),
@@ -398,7 +360,7 @@ export default function DebtClient({
       key: "business",
       emoji: "🏋️",
       color: AMBER,
-      label: "Business Debt",
+      label: "Direct business debt",
       note: "the gym's loans and cards",
       balance: businessTotal,
       monthly: totalMinimum(businessDebts),
@@ -409,7 +371,7 @@ export default function DebtClient({
       key: "due-to-chris",
       emoji: "💰",
       color: ROSE,
-      label: "Business Debt — owed to Chris",
+      label: "Personal debt for business",
       // The balance is Jamie's cut, not Chris's whole carry — the $153,000
       // Chris personally put in only becomes Jamie's debt after the split and
       // after netting out what Jamie already carries in his own name
@@ -423,11 +385,24 @@ export default function DebtClient({
       debts: [] as Debt[], // uses custom rendering — see the split panel below
       items: dueToChrisItems,
     },
-    // The divorce settlement used to sit here as a fifth row. It has its own
-    // card below now: it's deferred, and a deferred debt listed alongside the
-    // ones being paid every month reads as another bill to find.
-    //
-    // Business and owed-to-Chris rows show even at zero to be clear nothing is
+    {
+      key: "divorce",
+      emoji: "📄",
+      color: RED,
+      label: "Divorce settlement",
+      // Flagged as not-final even once Chris has typed a figure. $200,000 is
+      // the number being worked to, not a number anyone has signed — and a row
+      // that just reads "what Jamie owes Chris" states it as settled fact.
+      note:
+        terms.total === null
+          ? "an estimate (Actual To Be Determined)"
+          : "what Jamie owes Chris (Actual To Be Determined)",
+      balance: settlement.balance,
+      monthly: settlement.minPayment,
+      debts: [] as Debt[], // it has no rows — it opens its own panel instead
+      items: [] as PersonalDebtItem[],
+    },
+    // Direct and due-to-Chris rows show even at zero to be clear nothing is
     // hiding: the names Chris expects there need to exist as debts before
     // they can be sorted into them.
   ].filter((row) => row.balance > 0 || row.key === "business" || row.key === "due-to-chris");
@@ -849,7 +824,7 @@ export default function DebtClient({
               Total balance
             </p>
             <p className="text-[30px] font-black leading-none">
-              {money(carryingTotal)}
+              {money(securedTotal)}
             </p>
           </div>
           <div>
@@ -862,17 +837,9 @@ export default function DebtClient({
           </div>
         </div>
         <p className="mt-1.5 text-[12px] text-muted">
-          What you&apos;re carrying now · {money(securedInterest)} of the
-          payment is pure interest
+          {money(monthlyTotal)} a month to keep up · {money(securedInterest)} of
+          that is pure interest
         </p>
-        {/* Says out loud what the headline leaves out, so a number that got
-            smaller can't read as debt quietly going away. */}
-        {settlement.balance > 0 && (
-          <p className="mt-1 text-[12px] text-muted">
-            The {money(settlement.balance)} divorce settlement is deferred and
-            sits in its own card below.
-          </p>
-        )}
         {offsetTotal > 0 && (
           <p className="mt-1 text-[12px]" style={{ color: GREEN }}>
             {money(netTotal)}{" "}once what&apos;s coming back lands — see below
@@ -885,7 +852,7 @@ export default function DebtClient({
             <div
               key={b.key}
               style={{
-                width: `${(b.balance / (carryingTotal || 1)) * 100}%`,
+                width: `${(b.balance / (securedTotal || 1)) * 100}%`,
                 background: b.color,
               }}
             />
