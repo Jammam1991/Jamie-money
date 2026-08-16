@@ -9,14 +9,14 @@ export const dynamic = "force-dynamic";
 // GET /api/moneyapp/cron → pull Jamie's debts + credit score from Money App on
 // a schedule.
 //
-// A nightly Vercel cron hits this (see vercel.json). The Debt page pulls on its
-// own too, but only when someone opens it — this is what keeps the numbers
-// current for the pages that read the same rows without opening Debt (Home,
-// Credit Report).
+// A nightly Vercel cron hits this (see vercel.json). It is the ONLY pull that
+// happens without someone asking for it: opening the Debt page does not sync,
+// whatever an earlier version of this comment claimed. The other way in is the
+// "Sync from Money App" button (MoneyAppConnect), which is admin-only and sits
+// in the Business Debt section and under "Where these numbers come from".
 //
-// Unlike the page-load pull, this one is not throttled: it runs once a night by
-// definition, and skipping it because someone happened to open the Debt page an
-// hour earlier would mean the nightly refresh silently stops happening.
+// So a gap between Money App and this app closes overnight at the latest —
+// worth knowing when a number here disagrees with one over there.
 //
 // If CRON_SECRET is set in Vercel, only requests carrying it are allowed —
 // Vercel Cron sends it automatically as `Authorization: Bearer <secret>`.

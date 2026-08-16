@@ -1109,6 +1109,26 @@ export default function DebtClient({
                       splitPanel()
                     ) : b.debts.length > 0 ? (
                       b.debts.map(row)
+                    ) : b.key === "business" ? (
+                      // "They land here on their own" was only half true: the
+                      // pull runs on a nightly cron or from a button folded
+                      // away at the bottom of the page, so an empty section
+                      // read as "the gym owes nothing" when it actually meant
+                      // "nobody has pulled yet" — or that the scope column is
+                      // missing, which empties this section while every other
+                      // balance still looks right. The button that fixes it
+                      // belongs where the gap shows, not three cards below.
+                      <div>
+                        <p className="text-xs text-muted">
+                          Nothing here yet. The gym&apos;s accounts come from Money
+                          App on a nightly pull{admin ? " — or pull them now." : "."}
+                        </p>
+                        {admin && (
+                          <div className="mt-2">
+                            <MoneyAppConnect />
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <p className="text-xs text-muted">
                         Nothing here yet. The gym&apos;s accounts arrive from Money
