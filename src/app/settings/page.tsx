@@ -4,7 +4,15 @@ import SettingsClient from "@/components/SettingsClient";
 import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
 import PasswordsAdmin from "@/components/PasswordsAdmin";
-import { getRole, isVaultUnlocked, VAULT_MINUTES } from "@/lib/auth";
+import LoginLinkAdmin from "@/components/LoginLinkAdmin";
+import {
+  getRole,
+  isVaultUnlocked,
+  linkConfigured,
+  LINK_MINUTES,
+  VAULT_MINUTES,
+} from "@/lib/auth";
+import { linkRecipients } from "@/lib/loginLink";
 import {
   getComingSoonPages,
   getHouseholdIncome,
@@ -48,6 +56,11 @@ export default async function SettingsPage() {
           here would change nothing on screen. The component, the actions and
           the stored ids are all still in place — put this back and it works
           again the moment that card returns. */}
+      <LoginLinkAdmin
+        minutes={LINK_MINUTES}
+        configured={linkConfigured()}
+        sendsTo={linkRecipients()}
+      />
       <HouseholdIncomeAdmin initial={householdIncome} />
       <TaxDocumentsAdmin initialDocuments={taxDocuments} />
       <PasswordsAdmin

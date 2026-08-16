@@ -46,6 +46,7 @@ import {
   vaultConfigured,
   type RevealResult,
 } from "./passwords";
+import { emailLoginLink, linkUrl } from "./loginLink";
 import { menuOrderKey } from "./menuOrder";
 import { billMonthRange } from "./billMonth";
 import { MAX_NAV_TABS, PAGES, isSlot, pageByKey } from "./pages";
@@ -142,6 +143,33 @@ export async function logout(): Promise<void> {
   const store = await cookies();
   store.delete(AUTH_COOKIE);
   redirect("/");
+}
+
+// ── Getting Jamie in ──────────────────────────────────────────────────────────
+// Both of these mint a link that logs Jamie in without a password. Only Chris
+// can ask for one, and it grants Jamie's view-only role — never Chris's.
+
+export async function sendJamieLoginLink(): Promise<
+  ActionResult & { sentTo?: string[] }
+> {
+  if (!(await isAdmin())) return { ok: false, error: "Only the manager can send that." };
+  const result = await emailLoginLink(Date.now());
+  return result.ok ? { ok: true, sentTo: result.sentTo } : { ok: false, error: result.error };
+}
+
+// For texting it, or reading it out loud — handy when the email bounces or
+// Jamie is standing right there.
+export async function copyJamieLoginLink(): Promise<ActionResult & { url?: string }> {
+  if (!(await isAdmin())) return { ok: false, error: "Only the manager can make one." };
+  const url = linkUrl(Date.now());
+  if (!url) {
+    return {
+      ok: false,
+      error:
+        "Passwords aren't set up yet — add ADMIN_PASSWORD and JAMIE_PASSWORD in Vercel, then redeploy.",
+    };
+  }
+  return { ok: true, url };
 }
 
 const VIEW_AS_COOKIE = "jm_view_as";
