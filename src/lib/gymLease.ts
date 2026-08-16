@@ -58,7 +58,7 @@ export const CURRENT_LEASE: CurrentLease = {
     { year: 2, label: "Year 2", monthly: 5358.51 },
     { year: 3, label: "Year 3", monthly: 5519.27 },
   ],
-  camMonthly: 2300,
+  camMonthly: 2323.4,
   camDescription:
     "Tenant's pro-rata share of shopping center operating costs (CAM) — billed on top of base rent as a monthly estimate, reconciled after year-end against actual costs. The estimate is set by the landlord and changes; this is the current figure from the gym dashboard's lease board.",
   securityDeposit: 33212,
