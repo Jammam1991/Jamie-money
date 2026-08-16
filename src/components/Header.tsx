@@ -16,6 +16,7 @@ import {
   Briefcase,
   HeartHandshake,
   Home,
+  Car,
   GripVertical,
   Check,
   RotateCcw,
@@ -55,6 +56,9 @@ const links = [
   // Sits right under those two — it's the same card and car payments read
   // forwards, into the house they still allow room for.
   { href: "/home-buying", label: "Home Buying", Icon: Home },
+  // Sits right under the car payment line in Home Buying — this is what that
+  // payment is actually for.
+  { href: "/cars", label: "Cars", Icon: Car },
   { href: "/business-finances", label: "Business Finances", Icon: Building2 },
   { href: "/tax-center", label: "Tax Center", Icon: Landmark },
   { href: "/gym-story", label: "Gym Story", Icon: Dumbbell },

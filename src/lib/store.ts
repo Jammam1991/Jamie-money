@@ -19,6 +19,7 @@ import {
 } from "./data";
 import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
 import { DEFAULT_HOME_BUYING, type HomeBuyingInputs } from "./homeBuying";
+import { DEFAULT_CAR_INFO, type CarInfo, type CarHistoryEntry } from "./carInfo";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
@@ -540,6 +541,85 @@ export async function getHomeBuying(): Promise<HomeBuyingInputs | null> {
     };
   } catch {
     return null;
+  }
+}
+
+// ── Cars ─────────────────────────────────────────────────────────────────────
+// Mileage, insurance, warranty and value overrides — none of it lives in the
+// debts table, so it's one JSON row in `settings`, same as Home Buying above.
+export const CAR_INFO_KEY = "car_info";
+
+export async function getCarInfo(): Promise<CarInfo> {
+  const c = client();
+  if (!c) return DEFAULT_CAR_INFO;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", CAR_INFO_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return DEFAULT_CAR_INFO;
+  try {
+    const saved = JSON.parse(String(data.value)) as Partial<CarInfo>;
+    const num = (v: unknown, fallback: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : fallback;
+    };
+    const numOrNull = (v: unknown) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const str = (v: unknown) => (typeof v === "string" ? v : "");
+    const dateOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+    return {
+      purchasePrice: num(saved.purchasePrice, DEFAULT_CAR_INFO.purchasePrice),
+      purchaseDate: dateOrNull(saved.purchaseDate),
+      mileage: numOrNull(saved.mileage),
+      mileageUpdatedAt: dateOrNull(saved.mileageUpdatedAt),
+      insuranceProvider: str(saved.insuranceProvider),
+      insuranceMonthly: num(saved.insuranceMonthly, 0),
+      insurancePolicyNumber: str(saved.insurancePolicyNumber),
+      estimatedValueOverride: numOrNull(saved.estimatedValueOverride),
+      warrantyExpires: dateOrNull(saved.warrantyExpires),
+      warrantyMileageLimit: numOrNull(saved.warrantyMileageLimit),
+      warrantyCoverage: str(saved.warrantyCoverage),
+      maintenanceToDate: num(saved.maintenanceToDate, 0),
+    };
+  } catch {
+    return DEFAULT_CAR_INFO;
+  }
+}
+
+export const CAR_HISTORY_KEY = "car_history";
+
+export async function getCarHistory(): Promise<CarHistoryEntry[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", CAR_HISTORY_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return [];
+  try {
+    const saved = JSON.parse(String(data.value));
+    if (!Array.isArray(saved)) return [];
+    const num = (v: unknown) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const dateOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+    return saved.map((e, i) => ({
+      id: typeof e?.id === "string" && e.id ? e.id : String(i),
+      name: typeof e?.name === "string" ? e.name : "",
+      purchaseDate: dateOrNull(e?.purchaseDate),
+      soldDate: dateOrNull(e?.soldDate),
+      purchasePrice: num(e?.purchasePrice),
+      tradeInValue: num(e?.tradeInValue),
+      negativeEquity: num(e?.negativeEquity),
+      notes: typeof e?.notes === "string" ? e.notes : "",
+    }));
+  } catch {
+    return [];
   }
 }
 

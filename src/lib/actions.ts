@@ -16,6 +16,8 @@ import {
   HOUSEHOLD_INCOME_KEY,
   INVESTMENT_SPLIT_KEY,
   SETTLEMENT_TOTAL_KEY,
+  CAR_INFO_KEY,
+  CAR_HISTORY_KEY,
   type HouseholdIncome,
   type InvestmentSplitTerms,
   type SettlementTerms,
@@ -42,6 +44,7 @@ import {
 import { menuOrderKey } from "./menuOrder";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
 import type { HomeBuyingInputs } from "./homeBuying";
+import type { CarInfo, CarHistoryEntry } from "./carInfo";
 import type { BillDocument, BillPayment, CashKind } from "./data";
 import { anyFeedConfigured, searchJobFeeds } from "./jobFeeds";
 import { readJobLink } from "./jobLink";
@@ -365,6 +368,83 @@ export async function setHomeBuying(
     );
   if (error) return { ok: false, error: error.message };
   revalidatePath("/home-buying");
+  return { ok: true };
+}
+
+// ── Cars ──────────────────────────────────────────────────────────────────────
+// Mileage, insurance, warranty and value — Jamie's own scratch pad about the
+// car, same login bar as Home Buying since there's nothing here to protect.
+export async function setCarInfo(input: CarInfo): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const num = (v: number, max: number) =>
+    !Number.isFinite(v) || v < 0 ? 0 : Math.min(v, max);
+  const numOrNull = (v: number | null, max: number) =>
+    v === null || !Number.isFinite(v) || v < 0 ? null : Math.min(v, max);
+  const dateOrNull = (v: string | null) =>
+    v && v.trim() ? v.trim().slice(0, 10) : null;
+  const str = (v: string, max: number) => String(v ?? "").trim().slice(0, max);
+
+  const clean: CarInfo = {
+    purchasePrice: num(input.purchasePrice, 10_000_000),
+    purchaseDate: dateOrNull(input.purchaseDate),
+    mileage: numOrNull(input.mileage, 2_000_000),
+    mileageUpdatedAt: dateOrNull(input.mileageUpdatedAt),
+    insuranceProvider: str(input.insuranceProvider, 100),
+    insuranceMonthly: num(input.insuranceMonthly, 100_000),
+    insurancePolicyNumber: str(input.insurancePolicyNumber, 100),
+    estimatedValueOverride: numOrNull(input.estimatedValueOverride, 10_000_000),
+    warrantyExpires: dateOrNull(input.warrantyExpires),
+    warrantyMileageLimit: numOrNull(input.warrantyMileageLimit, 2_000_000),
+    warrantyCoverage: str(input.warrantyCoverage, 500),
+    maintenanceToDate: num(input.maintenanceToDate, 10_000_000),
+  };
+
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: CAR_INFO_KEY, value: JSON.stringify(clean) },
+      { onConflict: "key" },
+    );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/cars");
+  return { ok: true };
+}
+
+export async function setCarHistory(input: CarHistoryEntry[]): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const num = (v: number | null, max: number) =>
+    v === null || !Number.isFinite(v) || v < 0 ? null : Math.min(v, max);
+  const dateOrNull = (v: string | null) =>
+    v && v.trim() ? v.trim().slice(0, 10) : null;
+  const str = (v: string, max: number) => String(v ?? "").trim().slice(0, max);
+
+  const clean: CarHistoryEntry[] = input.slice(0, 50).map((e) => ({
+    id: str(e.id, 40) || crypto.randomUUID(),
+    name: str(e.name, 100),
+    purchaseDate: dateOrNull(e.purchaseDate),
+    soldDate: dateOrNull(e.soldDate),
+    purchasePrice: num(e.purchasePrice, 10_000_000),
+    tradeInValue: num(e.tradeInValue, 10_000_000),
+    negativeEquity: num(e.negativeEquity, 10_000_000),
+    notes: str(e.notes, 500),
+  }));
+
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: CAR_HISTORY_KEY, value: JSON.stringify(clean) },
+      { onConflict: "key" },
+    );
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/cars");
   return { ok: true };
 }
 

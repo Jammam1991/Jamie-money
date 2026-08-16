@@ -18,7 +18,8 @@ export type PageKey =
   | "married-vs-divorce"
   | "gym-story"
   | "home-buying"
-  | "big-picture";
+  | "big-picture"
+  | "cars";
 
 export interface AppPage {
   key: PageKey;
@@ -136,6 +137,14 @@ export const PAGES: AppPage[] = [
     // own — every debt across the household, and the credit left to draw on.
     blurb:
       "The whole household: all our debt, the monthly gap, and how much credit is left.",
+  },
+  {
+    key: "cars",
+    href: "/cars",
+    label: "Cars",
+    where: "menu",
+    blurb:
+      "The Taycan's loan, mileage, insurance and warranty, plus what came before it.",
   },
 ];
 
