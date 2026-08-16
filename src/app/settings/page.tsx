@@ -5,7 +5,12 @@ import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
 import PasswordsAdmin from "@/components/PasswordsAdmin";
 import { getRole, isVaultUnlocked, VAULT_MINUTES } from "@/lib/auth";
-import { getComingSoonPages, getHouseholdIncome } from "@/lib/store";
+import {
+  getComingSoonPages,
+  getHouseholdIncome,
+  getPageSlots,
+  getRemovedPages,
+} from "@/lib/store";
 import { getTaxDocuments } from "@/lib/taxCenter";
 import { getPasswordEntries, vaultConfigured } from "@/lib/passwords";
 
@@ -17,9 +22,11 @@ export default async function SettingsPage() {
 
   const vaultOpen = await isVaultUnlocked();
 
-  const [comingSoon, taxDocuments, householdIncome, passwords] =
+  const [comingSoon, removed, placements, taxDocuments, householdIncome, passwords] =
     await Promise.all([
       getComingSoonPages(),
+      getRemovedPages(),
+      getPageSlots(),
       getTaxDocuments(),
       getHouseholdIncome(),
       // Labels only, and only once the password book's own lock is open.
@@ -30,7 +37,11 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <div>
         <PageTitle>Settings</PageTitle>
-        <SettingsClient initialComingSoon={comingSoon} />
+        <SettingsClient
+          initialComingSoon={comingSoon}
+          initialRemoved={removed}
+          initialPlacements={placements}
+        />
       </div>
       {/* The deferred-debts switches are hidden for now. The Debt page no
           longer shows a "paying now, without deferred" figure, so a toggle

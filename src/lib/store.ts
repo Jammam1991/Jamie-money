@@ -18,6 +18,7 @@ import {
   type OwesCharge,
 } from "./data";
 import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
+import { parsePlacements, type Placements } from "./navLayout";
 import { DEFAULT_HOME_BUYING, type HomeBuyingInputs } from "./homeBuying";
 import { DEFAULT_CAR_INFO, type CarInfo, type CarHistoryEntry } from "./carInfo";
 
@@ -306,23 +307,57 @@ export const getDeferredDebtIds = cache(async function getDeferredDebtIds(): Pro
 
 export const DEFERRED_DEBTS_KEY = "deferred_debts";
 
-export const getComingSoonPages = cache(async function getComingSoonPages(): Promise<
-  string[]
-> {
+// ── What Jamie gets on each page ─────────────────────────────────────────────
+// Two separate lists, both set on the Settings screen:
+//
+//   coming soon — the link stays put, the page says "Coming Soon" instead of
+//                 loading anything real.
+//   removed     — the link is gone from Jamie's bottom bar and menu, and the
+//                 address bounces him home.
+//
+// A page is in one or the other, never both. Chris is never in either: he keeps
+// every link and every real page, and checks Jamie's version with "View as
+// Jamie".
+//
+// `hidden_pages` is the older key and holds the coming-soon list. Renaming it
+// would lose what's already parked, so it keeps the name it was born with.
+export const COMING_SOON_KEY = "hidden_pages";
+export const REMOVED_PAGES_KEY = "removed_pages";
+// Where Chris has moved pages: a JSON map of page key → the places it shows.
+export const PAGE_SLOTS_KEY = "page_slots";
+
+async function readJsonSetting(key: string): Promise<unknown> {
   const c = client();
-  if (!c) return [];
+  if (!c) return null;
   const { data, error } = await c
     .from("settings")
     .select("value")
-    .eq("key", "hidden_pages")
+    .eq("key", key)
     .maybeSingle();
-  if (error || !data) return [];
+  if (error || !data?.value) return null;
   try {
-    const parsed = JSON.parse(data.value);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
+    return JSON.parse(String(data.value));
   } catch {
-    return [];
+    return null;
   }
+}
+
+export const getComingSoonPages = cache(async function getComingSoonPages(): Promise<
+  string[]
+> {
+  const parsed = await readJsonSetting(COMING_SOON_KEY);
+  return Array.isArray(parsed) ? parsed.map(String) : [];
+});
+
+export const getRemovedPages = cache(async function getRemovedPages(): Promise<
+  string[]
+> {
+  const parsed = await readJsonSetting(REMOVED_PAGES_KEY);
+  return Array.isArray(parsed) ? parsed.map(String) : [];
+});
+
+export const getPageSlots = cache(async function getPageSlots(): Promise<Placements> {
+  return parsePlacements(await readJsonSetting(PAGE_SLOTS_KEY));
 });
 
 export async function getBills(): Promise<Bill[]> {

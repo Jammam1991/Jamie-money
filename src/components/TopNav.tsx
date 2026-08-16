@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV_TABS } from "@/lib/navTabs";
+import { pageByKey, type PageKey } from "@/lib/pages";
 
 // The same tabs as the bottom bar, laid out for a mouse and a wide screen.
 //
@@ -10,11 +10,12 @@ import { NAV_TABS } from "@/lib/navTabs";
 // two want opposite things: the phone bar is fixed to the bottom, full-width,
 // and pads itself around the home indicator; this one sits in the page flow at
 // the top with the tabs grouped left. Shared markup would be a knot of
-// conditionals for no gain — what's actually shared is the tab list, and that
-// lives in navTabs.ts so the two can't drift apart.
-export default function TopNav({ showPastDue = true }: { showPastDue?: boolean }) {
+// conditionals for no gain — what's actually shared is which tabs there are,
+// and that's worked out once on the server and handed to both.
+export default function TopNav({ tabs }: { tabs: PageKey[] }) {
   const pathname = usePathname();
-  const visible = NAV_TABS.filter((t) => t.href !== "/owes" || showPastDue);
+  const visible = tabs.map(pageByKey).filter((p) => p !== undefined);
+  if (visible.length === 0) return null;
 
   return (
     <nav className="hidden border-b border-border bg-card md:block">

@@ -9,7 +9,12 @@ import {
   getBillDocuments,
   getBillPayments,
   getComingSoonPages,
+  getRemovedPages,
+  getPageSlots,
   getDeferredDebtIds,
+  COMING_SOON_KEY,
+  REMOVED_PAGES_KEY,
+  PAGE_SLOTS_KEY,
   DEFERRED_DEBTS_KEY,
   recordLogin,
   HOME_BUYING_KEY,
@@ -42,6 +47,8 @@ import {
   type RevealResult,
 } from "./passwords";
 import { menuOrderKey } from "./menuOrder";
+import { MAX_NAV_TABS, PAGES, isSlot, pageByKey } from "./pages";
+import { isReachable, slotsFor } from "./navLayout";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
 import type { HomeBuyingInputs } from "./homeBuying";
 import type { CarInfo, CarHistoryEntry } from "./carInfo";
@@ -198,29 +205,98 @@ export async function setDebtDeferred(
   return { ok: true };
 }
 
-// ── Which pages say "Coming Soon" to Jamie ────────────────────────────────────
-// Stored as one JSON list of page keys under the `hidden_pages` setting.
-export async function setPageComingSoon(
+// ── What Jamie gets on a page ─────────────────────────────────────────────────
+// Three states, kept as two lists of page keys: "coming-soon" parks the page
+// behind a placeholder with its link still in place, "hidden" takes the link
+// off his bottom bar and menu altogether. A page is in one list or the other,
+// never both, so setting either always clears the other.
+export type JamiePageState = "real" | "coming-soon" | "hidden";
+
+export async function setPageForJamie(
   key: string,
-  comingSoon: boolean
+  state: JamiePageState
 ): Promise<ActionResult> {
   const denied = await guard();
   if (denied) return denied;
   const c = client();
   if (!c) return NOT_CONNECTED;
 
-  const next = new Set(await getComingSoonPages());
-  if (comingSoon) next.add(key);
-  else next.delete(key);
+  const page = pageByKey(key);
+  if (!page) return { ok: false, error: "That page doesn't exist." };
+  // My Cash is the way back to the home screen, so it's never parked or taken
+  // away — the app would have nowhere to land.
+  if (page.fixed && state !== "real")
+    return { ok: false, error: `${page.label} always shows.` };
+
+  const comingSoon = new Set(await getComingSoonPages());
+  const removed = new Set(await getRemovedPages());
+  comingSoon.delete(key);
+  removed.delete(key);
+  if (state === "coming-soon") comingSoon.add(key);
+  if (state === "hidden") removed.add(key);
+
+  const { error } = await c.from("settings").upsert(
+    [
+      { key: COMING_SOON_KEY, value: JSON.stringify([...comingSoon]) },
+      { key: REMOVED_PAGES_KEY, value: JSON.stringify([...removed]) },
+    ],
+    { onConflict: "key" }
+  );
+  if (error) return { ok: false, error: error.message };
+  // The nav and menu live in the root layout, so refresh every page.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// ── Where a page's link sits ──────────────────────────────────────────────────
+// The bottom bar, the menu, the History group inside the menu, or any mix.
+// This is the layout of the app rather than something set per person, so it
+// applies to Chris and Jamie alike — what Jamie doesn't see is settled by
+// setPageForJamie above.
+export async function setPageSlots(
+  key: string,
+  slots: string[]
+): Promise<ActionResult> {
+  const denied = await guard();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const page = pageByKey(key);
+  if (!page) return { ok: false, error: "That page doesn't exist." };
+  if (page.fixed) return { ok: false, error: `${page.label} can't be moved.` };
+
+  const clean = [...new Set(slots.filter(isSlot))];
+  // A page with no link anywhere is a screen with no door. The home-screen card
+  // counts as a door, which is why Job vs Business (quick look) may sit here
+  // with nothing ticked.
+  if (!isReachable(page, clean))
+    return {
+      ok: false,
+      error: `${page.label} has to show somewhere. Tick a spot for it, or hide it from Jamie instead.`,
+    };
+
+  const placements = { ...(await getPageSlots()), [key]: clean };
+
+  // Count the bar the way it will actually render. The tabs Jamie doesn't get
+  // are still counted: this is one shared layout, and Chris's own bar is what
+  // would overflow.
+  if (clean.includes("nav")) {
+    const tabs = PAGES.filter((p) => slotsFor(p, placements).includes("nav"));
+    if (tabs.length > MAX_NAV_TABS)
+      return {
+        ok: false,
+        error: `The bottom bar holds ${MAX_NAV_TABS} tabs. Take one off first.`,
+      };
+  }
 
   const { error } = await c
     .from("settings")
     .upsert(
-      { key: "hidden_pages", value: JSON.stringify([...next]) },
+      { key: PAGE_SLOTS_KEY, value: JSON.stringify(placements) },
       { onConflict: "key" }
     );
   if (error) return { ok: false, error: error.message };
-  // The nav and menu live in the root layout, so refresh every page.
   revalidatePath("/", "layout");
   return { ok: true };
 }
