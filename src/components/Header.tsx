@@ -222,11 +222,20 @@ export default function Header({
       </div>
 
       {menuOpen && (
-        <div className="fixed inset-0 z-40 bg-black/20" onClick={close} />
+        // z-[55]: above BottomNav's z-50, so the scrim also covers (and
+        // dims) the bottom tab bar instead of leaving it floating on top.
+        <div className="fixed inset-0 z-[55] bg-black/20" onClick={close} />
       )}
 
       {menuOpen && (
-        <div className="fixed top-0 right-0 z-50 h-screen w-72 bg-card border-l border-border overflow-y-auto">
+        // z-[60]: BottomNav is `fixed bottom-0 z-50` and renders after this
+        // panel in the DOM, so at equal z-index it paints over the bottom of
+        // the menu — hiding the last History rows and eating their taps.
+        // Sitting above it fixes both.
+        <div
+          className="fixed top-0 right-0 z-[60] h-screen w-72 bg-card border-l border-border overflow-y-auto"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           <div className="flex items-center justify-between p-4 border-b border-border">
             <span className="text-lg font-medium">Menu</span>
             <div className="flex items-center gap-1">
