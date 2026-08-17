@@ -255,42 +255,6 @@ function CutTag({ mode }: { mode: ViewMode }) {
   );
 }
 
-// A full-width on/off card for a subtraction that isn't one of the five cuts
-// — see the note on MoneyStory. Disabled rather than hidden when there's
-// nothing to subtract, so the reason ("couldn't reach the gym dashboard") is
-// a tooltip away instead of the option just vanishing. Sized and bordered to
-// match the ViewPicker cards above — same weight of thing, same shape.
-function ToggleChip({
-  label,
-  on,
-  onClick,
-  disabled,
-  title,
-}: {
-  label: string;
-  on: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="block w-full rounded-xl border-2 px-4 py-3 text-left text-[15px] font-semibold transition-colors disabled:opacity-40"
-      style={
-        on && !disabled
-          ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
-          : { borderColor: "var(--muted)" }
-      }
-    >
-      {label}
-    </button>
-  );
-}
-
 // A section that's shut until you want it.
 //
 // Everything on this page except the sum itself now lives behind one of these.
@@ -766,6 +730,17 @@ function Totals({
           big
           open={open === "profit"}
           onToggle={() => toggle("profit")}
+          // The two "what if Jamie's pay came out of this too?" questions used
+          // to be full-width buttons behind the tap — right next to the number
+          // they change is where Jamie actually looks for them.
+          toggle={
+            <JamieToggle
+              jamieCut={jamieCut}
+              setJamieCut={setJamieCut}
+              jamiePay={jamiePay}
+              jamieDistributions={rollup.jamieDistributions}
+            />
+          }
         >
           {(projection || avgAnnualProfit !== null) && (
             <p className="text-[13px] text-muted">
@@ -777,34 +752,6 @@ function Totals({
           <p className="text-[12px] text-muted">
             Jamie&apos;s PT cash that hasn&apos;t been written down yet isn&apos;t in here.
           </p>
-
-          {/* The two "what if Jamie's pay came out of this too?" questions. */}
-          <div className="space-y-2">
-            <ToggleChip
-              label="Include Jamie's Pay"
-              on={jamieCut === "pay"}
-              onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
-              // `!jamiePay`, not `== null`: a period Jamie earned nothing in has
-              // nothing to subtract either, and a button that lights up and moves
-              // no number reads as broken. Same guard the distributions toggle
-              // below already uses.
-              disabled={!jamiePay}
-              title={
-                jamiePay == null
-                  ? "Couldn't reach the gym dashboard for this period."
-                  : !jamiePay
-                    ? "The gym dashboard has no pay recorded for this period."
-                    : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it."
-              }
-            />
-            <ToggleChip
-              label="Include all Jamie's Distributions"
-              on={jamieCut === "dist"}
-              onClick={() => setJamieCut((v) => (v === "dist" ? "none" : "dist"))}
-              disabled={!rollup.jamieDistributions}
-              title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance. Already includes the earned pay, so it replaces that cut."
-            />
-          </div>
         </BigNumberRow>
       </div>
     </Card>
@@ -823,6 +770,7 @@ function BigNumberRow({
   open,
   onToggle,
   big,
+  toggle,
   children,
 }: {
   label: string;
@@ -833,6 +781,9 @@ function BigNumberRow({
   onToggle: () => void;
   /** The profit row reads a size up from Revenue and Expenses — it's the answer. */
   big?: boolean;
+  /** A control that changes what the number above it reads — shown next to it
+   *  always, not behind the tap, since it isn't a detail, it's a question. */
+  toggle?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const size = big ? "text-[38px]" : "text-[30px]";
@@ -857,13 +808,81 @@ function BigNumberRow({
   return (
     <div className="py-3 first:pt-0 last:pb-0">
       {expandable ? (
-        <button type="button" onClick={onToggle} aria-expanded={open}>
+        <button type="button" onClick={onToggle} aria-expanded={open} className="block w-full">
           {inner}
         </button>
       ) : (
         inner
       )}
+      {toggle}
       {expandable && open && <div className="mt-3 space-y-2">{children}</div>}
+    </div>
+  );
+}
+
+// The two "what if Jamie's pay came out of this too?" pills — small enough to
+// sit right next to the profit number instead of hiding behind its tap, since
+// they change the number rather than just explain it. Same radio behavior as
+// before: pick one, or neither; clicking the picked one clears back to neither.
+function JamieToggle({
+  jamieCut,
+  setJamieCut,
+  jamiePay,
+  jamieDistributions,
+}: {
+  jamieCut: "none" | "pay" | "dist";
+  setJamieCut: React.Dispatch<React.SetStateAction<"none" | "pay" | "dist">>;
+  jamiePay: number | null;
+  jamieDistributions: number | undefined;
+}) {
+  const pills: Array<{
+    key: "pay" | "dist";
+    label: string;
+    disabled: boolean;
+    title: string;
+  }> = [
+    {
+      key: "pay",
+      label: "Include Jamie's Pay",
+      // `!jamiePay`, not `== null`: a period Jamie earned nothing in has
+      // nothing to subtract either, and a pill that lights up and moves no
+      // number reads as broken.
+      disabled: !jamiePay,
+      title:
+        jamiePay == null
+          ? "Couldn't reach the gym dashboard for this period."
+          : !jamiePay
+            ? "The gym dashboard has no pay recorded for this period."
+            : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it.",
+    },
+    {
+      key: "dist",
+      label: "Include all Jamie's Distributions",
+      disabled: !jamieDistributions,
+      title:
+        "Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance. Already includes the earned pay, so it replaces that cut.",
+    },
+  ];
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {pills.map((p) => (
+        <button
+          key={p.key}
+          type="button"
+          onClick={() => setJamieCut((v) => (v === p.key ? "none" : p.key))}
+          disabled={p.disabled}
+          title={p.title}
+          className="rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors disabled:opacity-40"
+          style={
+            jamieCut === p.key
+              ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
+              : { borderColor: "var(--muted)", color: "var(--muted)" }
+          }
+        >
+          {p.label}
+        </button>
+      ))}
     </div>
   );
 }
