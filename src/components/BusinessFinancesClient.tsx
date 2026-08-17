@@ -9,6 +9,7 @@ import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx 
 import { showsProfit } from "@/lib/businessFinances";
 import {
   cutLines,
+  displayMode,
   headlineFor,
   modeById,
   VIEW_MODES,
@@ -23,11 +24,14 @@ import {
 // and a hidden list look the same from in here, and that's on purpose: this
 // component draws what it was sent and doesn't try to explain the gaps.
 //
-// WHICH CUT is a URL question, not component state. Four of the five modes
-// change what Money App is asked for, so they can't be a `useState` toggle
-// anyway — and putting all five in `?view=` means every mode is a link Chris
-// can send, the back button steps between them, and a reload doesn't quietly
-// drop Jamie back on a different set of numbers than he left on.
+// WHICH CUT is a URL question, not component state. All four modes change
+// what Money App is asked for, so they can't be a `useState` toggle anyway —
+// and putting them in `?view=` means every mode is a link Chris can send, the
+// back button steps between them, and a reload doesn't quietly drop Jamie
+// back on a different set of numbers than he left on. "Mistakes taken out" is
+// a second, orthogonal URL question (`?clean=1`) — see the note on
+// `readClean` in businessViewModes.ts — so it can be layered on top of
+// whichever of the four cuts is picked without swapping the cut out.
 //
 // LAYOUT: the sum comes first and everything else is shut. Jamie is not an
 // accountant, and the page used to open on a five-way question about which
@@ -70,10 +74,15 @@ function shortDate(iso: string): string {
 export default function BusinessFinancesClient({
   data,
   modeId,
+  clean,
   jamiePay,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
+  /** Whether "mistakes taken out" is on. A toggle layered on top of `modeId`,
+   *  not a fifth mode — see the note on `readClean` — so switching it doesn't
+   *  also switch which of the four cuts is on screen. */
+  clean: boolean;
   /** Jamie's earned pay for this period, from the gym dashboard — null when
    *  it couldn't be reached, which just means the toggle in MoneyStory stays
    *  disabled rather than the page breaking. */
@@ -89,18 +98,21 @@ export default function BusinessFinancesClient({
   const mode = modeById(modeId);
 
   // A year with no mistakes marked still has a `noMistakes` block, just an
-  // empty one — so whether the clean cut is worth offering is a question about
+  // empty one — so whether the toggle is worth offering is a question about
   // the list, not about the block being there.
   const hasMistakes = Boolean(noMistakes && noMistakes.mistakes.length > 0);
   // Showing "minus our mistakes" over a year with none marked would promise a
   // different number and then show the same one. Fall back to the plain
-  // figures instead, and the picker below drops the option entirely.
-  const cleanShowing = mode.noMistakes && hasMistakes;
+  // figures instead, and the panel below doesn't render at all.
+  const cleanShowing = clean && hasMistakes;
   const rollup: Rollup = cleanShowing && noMistakes ? noMistakes.rollup : data.actual;
+  // Same cut, mistakes-aware wording — see `displayMode`.
+  const shownMode = displayMode(mode, cleanShowing);
 
-  // Switching cuts keeps the year/month you're on, and switching year/month
-  // keeps the cut — neither picker resets the other.
-  const hrefFor = (id: ViewModeId) => {
+  // Switching cuts keeps the year/month AND the mistakes toggle; switching the
+  // toggle keeps the cut; switching year/month keeps both. No picker resets
+  // another one just by being touched.
+  const hrefFor = (id: ViewModeId, wantClean: boolean = clean) => {
     const params = new URLSearchParams();
     if (data.year === "all-time") params.set("year", "all-time");
     else {
@@ -108,6 +120,7 @@ export default function BusinessFinancesClient({
       if (data.month) params.set("month", String(data.month));
     }
     params.set("view", id);
+    if (wantClean) params.set("clean", "1");
     return `/business-finances?${params.toString()}`;
   };
 
@@ -116,7 +129,10 @@ export default function BusinessFinancesClient({
   // same switches, so measuring them the same way is what makes the difference
   // below equal the gap between the two figures shown. (Money App's own
   // `profitDifference` is worked out against `netProfit` regardless of cut,
-  // which is a different basis than this panel displays.)
+  // which is a different basis than this panel displays.) `mode` here is
+  // always one of the four real cuts — never a stand-in "clean" mode that
+  // would silently swap operating/seller/cpa back to the full picture — so
+  // this stays correct under whichever cut the toggle was clicked from.
   const actualProfit = headlineFor(data.actual, mode).profit;
   const fixedProfit = noMistakes ? headlineFor(noMistakes.rollup, mode).profit : actualProfit;
 
@@ -125,19 +141,17 @@ export default function BusinessFinancesClient({
   return (
     <div className="space-y-4">
       {/* Two dropdowns, nothing else up top: which stretch of time, and which
-          of the five cuts to read it through. Everything below answers to
-          whatever these two say. */}
+          of the four cuts to read it through. Everything below answers to
+          whatever these two say (plus the mistakes toggle, if it's on). */}
       <div className="flex flex-wrap gap-2">
-        <DateDropdown data={data} modeId={modeId} />
-        {showsProfit(view) && (
-          <ViewDropdown mode={mode} hrefFor={hrefFor} offerClean={hasMistakes} />
-        )}
+        <DateDropdown data={data} modeId={modeId} clean={clean} />
+        {showsProfit(view) && <ViewDropdown mode={mode} hrefFor={hrefFor} />}
       </div>
 
       {view.show_headline && (
         <Totals
           rollup={rollup}
-          mode={mode}
+          mode={shownMode}
           year={data.year}
           month={data.month}
           range={data.range}
@@ -150,7 +164,7 @@ export default function BusinessFinancesClient({
       {hasMistakes && noMistakes && (
         <MistakesPanel
           on={cleanShowing}
-          toggleHref={hrefFor(cleanShowing ? "full" : "clean")}
+          toggleHref={hrefFor(modeId, !cleanShowing)}
           actualProfit={actualProfit}
           fixedProfit={fixedProfit}
           difference={fixedProfit - actualProfit}
@@ -159,13 +173,13 @@ export default function BusinessFinancesClient({
       )}
 
       {view.show_monthly && (
-        <MonthlyStrip rollup={rollup} mode={mode} labels={data.monthLabels} />
+        <MonthlyStrip rollup={rollup} mode={shownMode} labels={data.monthLabels} />
       )}
 
       {/* Last, and shut: this explains why the sum at the top isn't the same as
           some other cut of it. Worth having, never the first thing to read. */}
       {view.show_headline && (
-        <CutDetailCard rollup={rollup} mode={mode} allowFed={offerFed} />
+        <CutDetailCard rollup={rollup} mode={shownMode} allowFed={offerFed} />
       )}
 
       {view.show_flagged && data.flagged.length > 0 && (
@@ -303,24 +317,24 @@ function Disclosure({
   );
 }
 
-// Five ways to read the same books, as one dropdown.
+// Four ways to read the same books, as one dropdown.
 //
 // A stacked-card picker used to spell out each mode's sentence in full — worth
 // it when the page had room for it, but Jamie asked for a front that's just
 // the three numbers and two selectors. The words for what each cut leaves out
 // still live in businessViewModes.ts and still show up in "What these numbers
 // leave in and out" below; this control is just how you switch between them.
+// "Without the start-up mistakes" isn't one of the four — that's the separate
+// toggle in the mistakes panel below, which stacks on top of whichever of
+// these is picked here instead of replacing it.
 function ViewDropdown({
   mode,
   hrefFor,
-  offerClean,
 }: {
   mode: ViewMode;
   hrefFor: (id: ViewModeId) => string;
-  offerClean: boolean;
 }) {
   const router = useRouter();
-  const modes = VIEW_MODES.filter((m) => m.id !== "clean" || offerClean);
 
   return (
     <select
@@ -330,7 +344,7 @@ function ViewDropdown({
       className="flex-1 rounded-xl border-2 bg-card px-3 py-2.5 text-[14px] font-semibold"
       style={{ borderColor: "var(--muted)" }}
     >
-      {modes.map((m) => (
+      {VIEW_MODES.map((m) => (
         <option key={m.id} value={m.id}>
           {m.label}
         </option>
@@ -344,9 +358,11 @@ function ViewDropdown({
 function DateDropdown({
   data,
   modeId,
+  clean,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
+  clean: boolean;
 }) {
   const router = useRouter();
   if (data.years.length === 0) return null;
@@ -366,9 +382,11 @@ function DateDropdown({
       params.set("year", y);
       if (kind === "month") params.set("month", m);
     }
-    // Carries the chosen cut across the change, so picking a different date
-    // doesn't silently drop Jamie back on the default view.
+    // Carries the chosen cut, and the mistakes toggle, across the change, so
+    // picking a different date doesn't silently drop Jamie back on the
+    // default view or quietly put the mistakes back in.
     params.set("view", modeId);
+    if (clean) params.set("clean", "1");
     router.push(`/business-finances?${params.toString()}`, { scroll: false });
   };
 
@@ -626,7 +644,7 @@ function Totals({
   const { moneyIn, moneyOut, interest, profit: rawProfit } = headlineFor(rollup, mode);
   const totalExpenses = moneyOut + interest;
 
-  // Neither of these is part of any of the five cuts above — a distribution
+  // Neither of these is part of any of the cuts above — a distribution
   // isn't a P&L expense under any of them, and Jamie's pay isn't in Money
   // App's ledger at all (it's the gym dashboard's own figure). They're a
   // second, independent question — "what's left once Jamie's actually been
@@ -1008,10 +1026,10 @@ function MistakesPanel({
   mistakes,
 }: {
   on: boolean;
-  /** Where the button goes — the clean cut, or back to the full picture.
-   *  A link rather than local state, because "minus our mistakes" is one of
-   *  the five modes in the picker above and the two must never disagree
-   *  about which one is showing. */
+  /** Where the button goes — the toggle flipped, same cut underneath. A link
+   *  rather than local state, because the toggle lives in the URL (see the
+   *  note on `readClean`) and the two must never disagree about which
+   *  numbers are showing. */
   toggleHref: string;
   actualProfit: number;
   fixedProfit: number;

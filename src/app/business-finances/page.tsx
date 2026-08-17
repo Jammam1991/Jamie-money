@@ -3,7 +3,7 @@ import ComingSoon from "@/components/ComingSoon";
 import BusinessFinancesClient from "@/components/BusinessFinancesClient";
 import { pageGate } from "@/lib/visibility";
 import { businessFinancesReady, getBusinessFinances } from "@/lib/businessFinances";
-import { modeById, readViewMode } from "@/lib/businessViewModes";
+import { modeById, readClean, readViewMode } from "@/lib/businessViewModes";
 import { earnedPayForPeriod, getJamiePayMonths } from "@/lib/gymPay";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,13 @@ export const dynamic = "force-dynamic";
 export default async function BusinessFinancesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string; view?: string; operational?: string }>;
+  searchParams: Promise<{
+    year?: string;
+    month?: string;
+    view?: string;
+    operational?: string;
+    clean?: string;
+  }>;
 }) {
   const { comingSoon } = await pageGate("business-finances");
   if (comingSoon) return <ComingSoon title="Business Finances" />;
@@ -24,11 +30,15 @@ export default async function BusinessFinancesPage({
   const isAllTime = yearStr === "all-time";
   const year = isAllTime ? undefined : (Number.isFinite(parseInt(yearStr, 10)) ? parseInt(yearStr, 10) : undefined);
   const month = Number.isFinite(parseInt(monthStr, 10)) ? parseInt(monthStr, 10) : undefined;
-  // Which of the five cuts to ask Money App for. The mode carries the switches
+  // Which of the four cuts to ask Money App for. The mode carries the switches
   // so the page never has to reason about `operational` and `trim` separately
   // — and so "which numbers am I looking at?" has one answer, not two.
   const modeId = readViewMode(sp);
   const mode = modeById(modeId);
+  // Whether "mistakes taken out" is on, layered on top of whichever cut above
+  // is selected — kept separate from `modeId` so toggling it can't silently
+  // swap the cut out from under Jamie (see the note on `readClean`).
+  const clean = readClean(sp);
 
   // Fetched alongside Money App rather than after it — the two have nothing
   // to do with each other, so there's no reason to pay for them one at a
@@ -68,7 +78,7 @@ export default async function BusinessFinancesPage({
   return (
     <div>
       <PageTitle>Business Finances</PageTitle>
-      <BusinessFinancesClient data={data} modeId={modeId} jamiePay={jamiePay} />
+      <BusinessFinancesClient data={data} modeId={modeId} clean={clean} jamiePay={jamiePay} />
     </div>
   );
 }
