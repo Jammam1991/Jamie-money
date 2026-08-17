@@ -659,6 +659,12 @@ function Totals({
   const jamieDistOut = jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
   const profit = rawProfit - jamiePayOut - jamieDistOut;
   const madeMoney = profit >= 0;
+  // Jamie's pay/distributions never sit inside `rawProfit` (see the note on
+  // `jamieDistributions` in Rollup) — only `jamieCut` above pulls them back
+  // out. Say so on the label itself, since "The gym made $41,059" reads like
+  // a final number and it isn't one until this line says which cut it is.
+  const jamieCutLabel =
+    jamieCut === "pay" ? "after Jamie's pay" : jamieCut === "dist" ? "after Jamie's distributions" : "before owner pay";
 
   // Grant/forgiveness money is its own Schedule C line ("other_income"), and
   // under the gym's-own-money cut `moneyIn` (Total Revenue, above) is built
@@ -750,7 +756,7 @@ function Totals({
         </BigNumberRow>
 
         <BigNumberRow
-          label={madeMoney ? mode.profitTitle : mode.lossTitle}
+          label={`${madeMoney ? mode.profitTitle : mode.lossTitle} (${jamieCutLabel})`}
           amount={profit}
           color={madeMoney ? "var(--good)" : "var(--neg)"}
           expandable
