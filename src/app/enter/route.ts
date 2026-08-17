@@ -6,7 +6,17 @@ import { recordLogin } from "@/lib/store";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /enter?k=… → the other end of the link Chris sends Jamie.
+// Where a good link lands Jamie. `to` is untrusted input, so only a plain
+// in-app path is allowed — anything else (a full URL, a protocol-relative
+// "//evil.com") falls back to home instead of becoming an open redirect.
+function landingPath(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
+// GET /enter?k=…&to=… → the other end of a link Chris or a reminder email
+// sent Jamie. `to` picks the page he lands on (e.g. /bills) — omit it and he
+// lands on home, same as before.
 //
 // A good key swaps itself for the ordinary 30-day login cookie, so from here
 // on Jamie is signed in exactly as if he'd typed the password. A bad or
@@ -24,7 +34,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?link=expired", request.url));
   }
 
-  const response = NextResponse.redirect(new URL("/", request.url));
+  const to = landingPath(request.nextUrl.searchParams.get("to"));
+  const response = NextResponse.redirect(new URL(to, request.url));
   response.cookies.set(AUTH_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
