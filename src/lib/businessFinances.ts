@@ -534,13 +534,55 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     };
   };
 
+  // Same Schedule C line across two years (e.g. "Gross receipts or sales" for
+  // 2025 and 2026) is one row in the all-time list, not two — otherwise every
+  // category appears once per year with that year's own count and amount,
+  // looking like duplicate rows.
+  const mergeAccounts = (
+    a: ScheduleCLineAccount[] | undefined,
+    b: ScheduleCLineAccount[] | undefined,
+  ): ScheduleCLineAccount[] | undefined => {
+    if (!a && !b) return undefined;
+    const byPath = new Map<string, ScheduleCLineAccount>();
+    for (const acc of [...(a ?? []), ...(b ?? [])]) {
+      const existing = byPath.get(acc.path);
+      if (existing) {
+        existing.amount += acc.amount;
+        existing.transactions = [...existing.transactions, ...acc.transactions];
+      } else {
+        byPath.set(acc.path, { ...acc, transactions: [...acc.transactions] });
+      }
+    }
+    return [...byPath.values()].sort((x, y) => Math.abs(y.amount) - Math.abs(x.amount));
+  };
+
+  const mergedLines = new Map<string, ScheduleCLine>();
+  for (const r of unique) {
+    for (const line of r.lines) {
+      const existing = mergedLines.get(line.code);
+      if (existing) {
+        existing.amount += line.amount;
+        existing.transactions = [...existing.transactions, ...line.transactions].sort((a, b) =>
+          b.date.localeCompare(a.date),
+        );
+        existing.accounts = mergeAccounts(existing.accounts, line.accounts);
+      } else {
+        mergedLines.set(line.code, {
+          ...line,
+          transactions: [...line.transactions],
+          accounts: line.accounts ? [...line.accounts] : undefined,
+        });
+      }
+    }
+  }
+
   const monthlyNetProfit = months.map(
     ({ year, month }) => byYear.get(year)?.monthlyNetProfit[month] ?? 0,
   );
 
   return {
     year: -1, // Special value for all-time
-    lines: unique.flatMap((r) => r.lines),
+    lines: [...mergedLines.values()],
     income: sumIncome,
     otherIncome: sumOtherIncome,
     cogs: sumCogs,
