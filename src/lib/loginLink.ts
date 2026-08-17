@@ -23,9 +23,13 @@ export function linkRecipients(): string[] {
     .filter(Boolean);
 }
 
-export function linkUrl(now: number): string | null {
+// `path` is where the link drops Jamie after it signs him in — home by
+// default, or somewhere more specific like /bills for a reminder email.
+export function linkUrl(now: number, path = "/"): string | null {
   const key = makeLoginLink(now);
-  return key ? `${appUrl()}/enter?k=${encodeURIComponent(key)}` : null;
+  if (!key) return null;
+  const to = path === "/" ? "" : `&to=${encodeURIComponent(path)}`;
+  return `${appUrl()}/enter?k=${encodeURIComponent(key)}${to}`;
 }
 
 export type SendResult = { ok: true; sentTo: string[] } | { ok: false; error: string };
