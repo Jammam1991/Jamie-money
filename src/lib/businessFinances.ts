@@ -129,6 +129,11 @@ export type Rollup = {
    *  P&L expense — but a caller can subtract it to show "what's left after
    *  Jamie's paid". Optional: arrived in a later Money App. */
   jamieDistributions?: number;
+  /** Same total as `jamieDistributions`, itemized by bucket (Taycan, Equinox,
+   *  Charges, Transfers, Car Insurance, ...) with each bucket's transactions —
+   *  what "Include all Jamie's Distributions" is actually made of. Optional:
+   *  arrived in a later Money App than `jamieDistributions` did. */
+  jamieDistributionsDetail?: CutBucket;
 };
 
 /** One transaction Chris marked as a start-up mistake in Money App. */
@@ -564,6 +569,7 @@ function aggregateRollups(rollups: Rollup[], months: { year: number; month: numb
     operational: unique.some((r) => r.operational),
     slimmed: unique.some((r) => r.slimmed),
     jamieDistributions: sumJamieDistributions,
+    jamieDistributionsDetail: mergeBuckets((r) => r.jamieDistributionsDetail),
     cutDetail: {
       grants: mergeBuckets((r) => r.cutDetail?.grants),
       interest: mergeBuckets((r) => r.cutDetail?.interest),

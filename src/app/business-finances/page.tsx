@@ -4,7 +4,7 @@ import BusinessFinancesClient from "@/components/BusinessFinancesClient";
 import { pageGate } from "@/lib/visibility";
 import { businessFinancesReady, getBusinessFinances } from "@/lib/businessFinances";
 import { modeById, readClean, readViewMode } from "@/lib/businessViewModes";
-import { earnedPayForPeriod, getJamiePayMonths } from "@/lib/gymPay";
+import { earnedPayDetailForPeriod, earnedPayForPeriod, getJamiePayMonths } from "@/lib/gymPay";
 
 export const dynamic = "force-dynamic";
 
@@ -74,11 +74,18 @@ export default async function BusinessFinancesPage({
   // App has quietly resolved to the current year. Narrowing on the URL's
   // silence matched no month and handed the toggle a $0 to subtract.
   const jamiePay = earnedPayForPeriod(payMonths, data.year, data.month);
+  const jamiePayDetail = earnedPayDetailForPeriod(payMonths, data.year, data.month);
 
   return (
     <div>
       <PageTitle>Business Finances</PageTitle>
-      <BusinessFinancesClient data={data} modeId={modeId} clean={clean} jamiePay={jamiePay} />
+      <BusinessFinancesClient
+        data={data}
+        modeId={modeId}
+        clean={clean}
+        jamiePay={jamiePay}
+        jamiePayDetail={jamiePayDetail}
+      />
     </div>
   );
 }
