@@ -8,6 +8,7 @@ import { Card, Tint } from "@/components/ui";
 import type { BusinessFinances, CutBucket, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
 import { showsProfit } from "@/lib/businessFinances";
 import type { EarnedPayDetail, EarnLine } from "@/lib/gymPay";
+import type { BudgetGroups, BudgetGroupTotal } from "@/lib/businessBudgetGroups";
 import {
   cutLines,
   displayMode,
@@ -67,6 +68,72 @@ function getYearEndProjection(profit: number, year: number): number | null {
   return (profit / daysIntoYear) * 365;
 }
 
+// ── "Monthly Average" ─────────────────────────────────────────────────────
+// Scales every dollar figure a data shape carries by the same divisor —
+// data transforms, not renderer changes, so CategoryList/BudgetGroupList/
+// PayBreakdown/DistributionBreakdown stay exactly as they are and just get
+// handed smaller numbers. Divisor 1 returns the input untouched (no new
+// arrays/objects) so the non-toggled path never pays for this.
+function scaleLines(lines: ScheduleCLine[], divisor: number): ScheduleCLine[] {
+  if (divisor === 1) return lines;
+  return lines.map((l) => ({
+    ...l,
+    amount: l.amount / divisor,
+    transactions: l.transactions.map((t) => ({ ...t, amount: t.amount / divisor })),
+    accounts: l.accounts?.map((a) => ({
+      ...a,
+      amount: a.amount / divisor,
+      transactions: a.transactions.map((t) => ({ ...t, amount: t.amount / divisor })),
+    })),
+  }));
+}
+
+function scaleBudgetGroups(g: BudgetGroups, divisor: number): BudgetGroups {
+  if (divisor === 1) return g;
+  const scaleGroup = (group: BudgetGroupTotal): BudgetGroupTotal => ({
+    total: group.total / divisor,
+    rows: group.rows.map((r) => ({ ...r, amount: r.amount / divisor })),
+  });
+  return { fixed: scaleGroup(g.fixed), variable: scaleGroup(g.variable) };
+}
+
+function scalePayDetail(d: EarnedPayDetail, divisor: number): EarnedPayDetail {
+  if (divisor === 1) return d;
+  const scaleLine = (l: EarnLine) => ({ ...l, amount: l.amount / divisor });
+  return {
+    total: d.total / divisor,
+    parts: {
+      pt: d.parts.pt / divisor,
+      classes: d.parts.classes / divisor,
+      showedLeads: d.parts.showedLeads / divisor,
+      commission: d.parts.commission / divisor,
+      management: d.parts.management / divisor,
+      profitShare: d.parts.profitShare / divisor,
+    },
+    details: d.details
+      ? {
+          pt: d.details.pt.map(scaleLine),
+          classes: d.details.classes.map(scaleLine),
+          showedLeads: d.details.showedLeads.map(scaleLine),
+          commission: d.details.commission.map(scaleLine),
+          management: d.details.management.map(scaleLine),
+        }
+      : null,
+  };
+}
+
+function scaleBucket(b: CutBucket | undefined, divisor: number): CutBucket | undefined {
+  if (!b || divisor === 1) return b;
+  return {
+    total: b.total / divisor,
+    items: b.items.map((i) => ({
+      ...i,
+      amount: i.amount / divisor,
+      transactions: i.transactions?.map((t) => ({ ...t, amount: t.amount / divisor })),
+    })),
+  };
+}
+
 function shortDate(iso: string): string {
   const [y, m, d] = iso.split("-");
   return `${Number(m)}/${Number(d)}/${y.slice(2)}`;
@@ -78,6 +145,7 @@ export default function BusinessFinancesClient({
   clean,
   jamiePay,
   jamiePayDetail,
+  budgetGroups,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
@@ -94,6 +162,10 @@ export default function BusinessFinancesClient({
    *  sessions behind each where the gym dashboard sent them. Null under the
    *  same conditions `jamiePay` is null. */
   jamiePayDetail: EarnedPayDetail | null;
+  /** Total Expenses split into Fixed/Variable, same category names as
+   *  Chris's own Budget page. Null when Money App's budget endpoint couldn't
+   *  be reached — Total Expenses falls back to the Schedule C breakdown. */
+  budgetGroups: BudgetGroups | null;
 }) {
   const { view, noMistakes } = data;
   // Whether FED can be NAMED on this screen. The tax view drops those items
@@ -165,6 +237,7 @@ export default function BusinessFinancesClient({
           throughDate={data.throughDate}
           jamiePay={jamiePay}
           jamiePayDetail={jamiePayDetail}
+          budgetGroups={budgetGroups}
           showCategories={view.show_schedule_c}
         />
       )}
@@ -633,6 +706,7 @@ function Totals({
   throughDate,
   jamiePay,
   jamiePayDetail,
+  budgetGroups,
   showCategories,
 }: {
   rollup: Rollup;
@@ -643,6 +717,7 @@ function Totals({
   throughDate: string | null;
   jamiePay: number | null;
   jamiePayDetail: EarnedPayDetail | null;
+  budgetGroups: BudgetGroups | null;
   /** Chris's "Schedule C line by line" tick-box. Off means Money App never
    *  sends the category detail, so Revenue and Expenses show a plain number
    *  with nothing to tap open — same rule the rest of this page follows. */
@@ -706,6 +781,16 @@ function Totals({
   const toggle = (key: "revenue" | "expenses" | "profit" | "jamieCut") =>
     setOpen((v) => (v === key ? null : key));
 
+  // Every dollar on this card, divided by however many calendar months the
+  // period actually spans — "what does a typical month of this look like"
+  // instead of the period total. A single month IS its own average, so the
+  // toggle only shows up when there's more than one to average across.
+  const periodMonths = rollup.monthlyNetProfit.length > 0 ? rollup.monthlyNetProfit.length : 1;
+  const showMonthlyAvgToggle = periodMonths > 1;
+  const [monthlyAvg, setMonthlyAvg] = useState(false);
+  const divisor = monthlyAvg && showMonthlyAvgToggle ? periodMonths : 1;
+  const divide = (n: number) => n / divisor;
+
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
@@ -715,10 +800,25 @@ function Totals({
         <CutTag mode={mode} />
       </div>
 
+      {showMonthlyAvgToggle && (
+        <button
+          type="button"
+          onClick={() => setMonthlyAvg((v) => !v)}
+          className="mt-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors"
+          style={
+            monthlyAvg
+              ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
+              : { borderColor: "var(--muted)", color: "var(--muted)" }
+          }
+        >
+          Monthly Average
+        </button>
+      )}
+
       <div className="mt-1 divide-y" style={{ borderColor: "var(--border)" }}>
         <BigNumberRow
           label="Total Revenue"
-          amount={moneyIn}
+          amount={divide(moneyIn)}
           color="var(--good)"
           expandable={showCategories}
           open={open === "revenue"}
@@ -729,15 +829,15 @@ function Totals({
               out entirely and every other cut folds it in. */}
           {rollup.otherIncome !== 0 && (
             <p className="text-[12px] text-muted">
-              {mode.operational ? "Doesn't count" : "Counts"} {money(rollup.otherIncome)} of grant money
+              {mode.operational ? "Doesn't count" : "Counts"} {money(divide(rollup.otherIncome))} of grant money
             </p>
           )}
-          <CategoryList lines={income} positive untagged={rollup.untagged.income} />
+          <CategoryList lines={scaleLines(income, divisor)} positive untagged={divide(rollup.untagged.income)} />
         </BigNumberRow>
 
         <BigNumberRow
           label="Total Expenses"
-          amount={totalExpenses}
+          amount={divide(totalExpenses)}
           color="var(--neg)"
           expandable={showCategories}
           open={open === "expenses"}
@@ -758,15 +858,22 @@ function Totals({
                   The cost of the borrowing, not of running the gym
                 </span>
               </span>
-              <span className="shrink-0 text-[14px] font-medium">{money(interest)}</span>
+              <span className="shrink-0 text-[14px] font-medium">{money(divide(interest))}</span>
             </div>
           )}
-          <CategoryList lines={spending} untagged={rollup.untagged.cogs + rollup.untagged.expense} />
+          {budgetGroups ? (
+            <BudgetGroupList groups={scaleBudgetGroups(budgetGroups, divisor)} />
+          ) : (
+            <CategoryList
+              lines={scaleLines(spending, divisor)}
+              untagged={divide(rollup.untagged.cogs + rollup.untagged.expense)}
+            />
+          )}
         </BigNumberRow>
 
         <BigNumberRow
           label={`${rawMadeMoney ? mode.profitTitle : mode.lossTitle} (before owner pay)`}
-          amount={rawProfit}
+          amount={divide(rawProfit)}
           color={rawMadeMoney ? "var(--good)" : "var(--neg)"}
           expandable
           big
@@ -784,6 +891,10 @@ function Totals({
             />
           }
         >
+          {/* Tied to the real totals, not the monthly-average view — an
+              annualized projection is already "per year"; dividing it by the
+              months in the period and multiplying back out would be a no-op
+              for all-time and wrong for a single year, so it ignores the toggle. */}
           {(projection || avgAnnualProfit !== null) && (
             <p className="text-[13px] text-muted">
               {projection
@@ -804,26 +915,26 @@ function Totals({
           <>
             <BigNumberRow
               label={jamieCut === "pay" ? "Jamie's Pay" : "Jamie's Distributions"}
-              amount={jamieCutOut}
+              amount={divide(jamieCutOut)}
               color="var(--neg)"
               expandable
               open={open === "jamieCut"}
               onToggle={() => toggle("jamieCut")}
             >
               {jamieCut === "pay" ? (
-                <PayBreakdown detail={jamiePayDetail} />
+                <PayBreakdown detail={jamiePayDetail && scalePayDetail(jamiePayDetail, divisor)} />
               ) : (
                 <DistributionBreakdown
-                  detail={rollup.jamieDistributionsDetail}
-                  total={rollup.jamieDistributions ?? 0}
-                  jamiePay={jamiePay}
+                  detail={scaleBucket(rollup.jamieDistributionsDetail, divisor)}
+                  total={divide(rollup.jamieDistributions ?? 0)}
+                  jamiePay={jamiePay == null ? null : divide(jamiePay)}
                 />
               )}
             </BigNumberRow>
 
             <BigNumberRow
               label="Net Profit"
-              amount={profit}
+              amount={divide(profit)}
               color={netMadeMoney ? "var(--good)" : "var(--neg)"}
               expandable={false}
               big
@@ -1183,6 +1294,48 @@ function CategoryList({
         </p>
       )}
     </>
+  );
+}
+
+// Total Expenses, split into Fixed and Variable — same section names and
+// same category names as Chris's own P&L (Budget) screen, instead of the
+// Schedule C tax-line rollup (which groups by tax-return box, not by what
+// Chris actually calls things on his own screen). No per-transaction
+// drill-down here: Money App's budget endpoint sends category totals, not
+// the transactions behind them, so a row is as far as this goes.
+function BudgetGroupList({ groups }: { groups: BudgetGroups }) {
+  const sections: Array<{ key: string; label: string; group: BudgetGroupTotal }> = [
+    { key: "fixed", label: "Fixed Expenses", group: groups.fixed },
+    { key: "variable", label: "Variable Expenses", group: groups.variable },
+  ].filter((s) => s.group.rows.length > 0);
+
+  if (sections.length === 0) {
+    return <p className="text-[13px] text-muted">Nothing here for this stretch of time.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {sections.map((s) => (
+        <div key={s.key}>
+          <div className="flex items-baseline justify-between gap-3 px-1 pb-1">
+            <p className="text-[12px] font-semibold text-muted">{s.label}</p>
+            <p className="text-[12px] font-semibold text-muted">{money(s.group.total)}</p>
+          </div>
+          <ul className="space-y-1">
+            {s.group.rows.map((r) => (
+              <li
+                key={r.category}
+                className="flex items-baseline justify-between gap-3 rounded-xl px-3 py-2"
+                style={{ background: "var(--tint)" }}
+              >
+                <span className="min-w-0 truncate text-[14px]">{r.category}</span>
+                <span className="shrink-0 text-[14px] font-medium">{money(r.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }
 
