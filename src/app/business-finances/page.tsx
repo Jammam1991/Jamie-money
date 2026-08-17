@@ -5,6 +5,7 @@ import { pageGate } from "@/lib/visibility";
 import { businessFinancesReady, getBusinessFinances } from "@/lib/businessFinances";
 import { modeById, readClean, readViewMode } from "@/lib/businessViewModes";
 import { earnedPayDetailForPeriod, earnedPayForPeriod, getJamiePayMonths } from "@/lib/gymPay";
+import { getBudgetGroups } from "@/lib/businessBudgetGroups";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,12 @@ export default async function BusinessFinancesPage({
   // silence matched no month and handed the toggle a $0 to subtract.
   const jamiePay = earnedPayForPeriod(payMonths, data.year, data.month);
   const jamiePayDetail = earnedPayDetailForPeriod(payMonths, data.year, data.month);
+  // Needs `data.range`, which only exists once Money App has answered above —
+  // can't run alongside the first Promise.all for that reason. One request
+  // per calendar month in range, so this is the slow one; it runs after
+  // everything else so a slow Budget-groups answer never holds up figures
+  // that were ready sooner.
+  const budgetGroups = await getBudgetGroups(data.range, { slim: mode.slim, noFed: mode.noFed });
 
   return (
     <div>
@@ -85,6 +92,7 @@ export default async function BusinessFinancesPage({
         clean={clean}
         jamiePay={jamiePay}
         jamiePayDetail={jamiePayDetail}
+        budgetGroups={budgetGroups}
       />
     </div>
   );
