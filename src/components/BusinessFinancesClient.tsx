@@ -642,7 +642,16 @@ function Totals({
   const profit = rawProfit - jamiePayOut - jamieDistOut;
   const madeMoney = profit >= 0;
 
-  const income = rollup.lines.filter((l) => l.classification === "income");
+  // Grant/forgiveness money is its own Schedule C line ("other_income"), and
+  // under the gym's-own-money cut `moneyIn` (Total Revenue, above) is built
+  // from `rollup.income` alone — which never includes it (see headlineFor).
+  // Leaving the "Other income" row in this list under that cut made the
+  // category rows add up to MORE than the headline they sit under, off by
+  // exactly the grant amount. Every other cut folds grants into `moneyIn`, so
+  // the row belongs here for those.
+  const income = rollup.lines.filter(
+    (l) => l.classification === "income" && !(mode.operational && l.code === "other_income"),
+  );
   const spending = rollup.lines
     .filter((l) => l.classification !== "income")
     .sort((a, b) => b.amount - a.amount);
