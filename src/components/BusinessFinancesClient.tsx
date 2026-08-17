@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Card, Tint } from "@/components/ui";
 import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
@@ -119,14 +120,22 @@ export default function BusinessFinancesClient({
   const actualProfit = headlineFor(data.actual, mode).profit;
   const fixedProfit = noMistakes ? headlineFor(noMistakes.rollup, mode).profit : actualProfit;
 
-  const linesSection = view.show_schedule_c ? <Lines rollup={rollup} mode={mode} /> : null;
-
   // The answer, then the two ways to change it, then the detail behind it.
   // Nothing above the sum, because nothing else is what Jamie came for.
   return (
     <div className="space-y-4">
+      {/* Two dropdowns, nothing else up top: which stretch of time, and which
+          of the five cuts to read it through. Everything below answers to
+          whatever these two say. */}
+      <div className="flex flex-wrap gap-2">
+        <DateDropdown data={data} modeId={modeId} />
+        {showsProfit(view) && (
+          <ViewDropdown mode={mode} hrefFor={hrefFor} offerClean={hasMistakes} />
+        )}
+      </div>
+
       {view.show_headline && (
-        <MoneyStory
+        <Totals
           rollup={rollup}
           mode={mode}
           year={data.year}
@@ -134,25 +143,9 @@ export default function BusinessFinancesClient({
           range={data.range}
           throughDate={data.throughDate}
           jamiePay={jamiePay}
+          showCategories={view.show_schedule_c}
         />
       )}
-
-      <TimePicker data={data} modeId={modeId} />
-
-      {showsProfit(view) && (
-        <ViewPicker
-          mode={mode}
-          hrefFor={hrefFor}
-          offerClean={hasMistakes}
-          offerFed={offerFed}
-        />
-      )}
-
-      {/* The CPA cut leads with the tax lines: the question it answers is
-          "which box does this go in", so the breakdown IS the answer and the
-          month-by-month strip is beside the point. Every other cut keeps the
-          strip first, where it's always been. */}
-      {mode.taxLayout && linesSection}
 
       {hasMistakes && noMistakes && (
         <MistakesPanel
@@ -168,8 +161,6 @@ export default function BusinessFinancesClient({
       {view.show_monthly && (
         <MonthlyStrip rollup={rollup} mode={mode} labels={data.monthLabels} />
       )}
-
-      {!mode.taxLayout && linesSection}
 
       {/* Last, and shut: this explains why the sum at the top isn't the same as
           some other cut of it. Worth having, never the first thing to read. */}
@@ -348,164 +339,95 @@ function Disclosure({
   );
 }
 
-// Five ways to read the same books — shut unless asked for.
+// Five ways to read the same books, as one dropdown.
 //
-// Links, not buttons — four of the five change what Money App is asked for
-// (see the note at the top of this file). Stacked full-width rather than a row
-// of chips because each one needs its sentence: "Seller view" means nothing on
-// its own, and a mode nobody can tell apart from its neighbour is the problem
-// this card exists to fix.
-function ViewPicker({
+// A stacked-card picker used to spell out each mode's sentence in full — worth
+// it when the page had room for it, but Jamie asked for a front that's just
+// the three numbers and two selectors. The words for what each cut leaves out
+// still live in businessViewModes.ts and still show up in "What these numbers
+// leave in and out" below; this control is just how you switch between them.
+function ViewDropdown({
   mode,
   hrefFor,
   offerClean,
-  offerFed,
 }: {
   mode: ViewMode;
   hrefFor: (id: ViewModeId) => string;
   offerClean: boolean;
-  offerFed: boolean;
 }) {
+  const router = useRouter();
   const modes = VIEW_MODES.filter((m) => m.id !== "clean" || offerClean);
 
   return (
-    <Disclosure title="Count it a different way" summary={mode.label}>
-      <p className="text-[13px] text-muted">
-        Same books every time. Each one just leaves something different out.
-      </p>
-      <div className="mt-3 space-y-2">
-        {modes.map((m) => {
-          const active = m.id === mode.id;
-          return (
-            <Link
-              key={m.id}
-              href={hrefFor(m.id)}
-              scroll={false}
-              aria-current={active ? "true" : undefined}
-              // The default --border is close enough to white that the
-              // unselected cards were nearly invisible — --muted reads as an
-              // actual line instead of a hint of one.
-              className="block rounded-xl border-2 px-3 py-2.5 transition-colors"
-              style={
-                active
-                  ? { background: "var(--good)", borderColor: "var(--good)", color: "#fff" }
-                  : { borderColor: "var(--muted)" }
-              }
-            >
-              <p className="text-[14px] font-semibold">{m.label}</p>
-              <p
-                className="mt-0.5 text-[12px]"
-                style={active ? { color: "rgba(255,255,255,0.88)" } : { color: "var(--muted)" }}
-              >
-                {!offerFed && m.blurbFedHidden ? m.blurbFedHidden : m.blurb}
-              </p>
-            </Link>
-          );
-        })}
-      </div>
-    </Disclosure>
-  );
-}
-
-/** A pill in the date picker. One shape for all-time, years and months. */
-function PickerPill({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      scroll={false}
-      aria-current={active ? "true" : undefined}
-      className="rounded-lg border border-border px-3 py-1.5 text-[13px]"
-      style={
-        active ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" } : undefined
-      }
+    <select
+      value={mode.id}
+      onChange={(e) => router.push(hrefFor(e.target.value as ViewModeId), { scroll: false })}
+      aria-label="Count it a different way"
+      className="flex-1 rounded-xl border-2 bg-card px-3 py-2.5 text-[14px] font-semibold"
+      style={{ borderColor: "var(--muted)" }}
     >
-      {label}
-    </Link>
+      {modes.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
-// Which stretch of time to look at — shut unless asked for.
-//
-// One row of years, and the twelve months only for the year you're actually on.
-// It used to render a chevron per year that expanded its own twelve months
-// independently, so all-time plus three years could put forty date buttons on
-// screen above the number they were meant to filter. Tapping a year now goes to
-// that year AND is what reveals its months, which is one idea instead of two.
-function TimePicker({
+// Which stretch of time to look at, as one dropdown — every year Money App
+// will hand over, each with its own twelve months grouped underneath it.
+function DateDropdown({
   data,
   modeId,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
 }) {
-  const isAllTime = data.year === "all-time";
-  // Carries the chosen cut across a year/month/all-time click, so picking a
-  // different month doesn't silently drop Jamie back on the default view.
-  const withView = (href: string) => `${href}&view=${modeId}`;
-
-  const summary = isAllTime
-    ? "All time"
-    : data.month
-      ? `${MONTHS[data.month - 1]} ${data.year}`
-      : String(data.year);
-
+  const router = useRouter();
   if (data.years.length === 0) return null;
 
+  const isAllTime = data.year === "all-time";
+  const value = isAllTime
+    ? "all-time"
+    : data.month
+      ? `month-${data.year}-${data.month}`
+      : `year-${data.year}`;
+
+  const onChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const [kind, y, m] = e.target.value.split("-");
+    const params = new URLSearchParams();
+    if (kind === "all") params.set("year", "all-time");
+    else {
+      params.set("year", y);
+      if (kind === "month") params.set("month", m);
+    }
+    // Carries the chosen cut across the change, so picking a different date
+    // doesn't silently drop Jamie back on the default view.
+    params.set("view", modeId);
+    router.push(`/business-finances?${params.toString()}`, { scroll: false });
+  };
+
   return (
-    <Disclosure title="Look at a different time" summary={summary}>
-      <div className="flex flex-wrap gap-2">
-        <PickerPill
-          href={withView("/business-finances?year=all-time")}
-          label="All time"
-          active={isAllTime}
-        />
-        {data.years.map((y) => (
-          <PickerPill
-            key={y}
-            href={withView(`/business-finances?year=${y}`)}
-            label={String(y)}
-            active={y === data.year && !data.month}
-          />
-        ))}
-      </div>
-
-      {/* Months, only for the year already open. Nothing to show under
-          all-time, and showing three years' worth at once was the old problem. */}
-      {!isAllTime && (
-        <>
-          <p className="mt-3 text-[13px] text-muted">Or one month of {data.year}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {MONTHS.map((month, idx) => (
-              <Link
-                key={month}
-                href={withView(`/business-finances?year=${data.year}&month=${idx + 1}`)}
-                scroll={false}
-                className="rounded-lg border border-border px-2.5 py-1 text-[12px]"
-                style={
-                  data.month === idx + 1
-                    ? { background: "var(--good)", color: "#fff", borderColor: "var(--good)" }
-                    : undefined
-                }
-              >
-                {month}
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-
-      <p className="mt-3 text-[12px] text-muted">
-        Straight from Chris&apos;s accounting app. He picks what shows up here.
-      </p>
-    </Disclosure>
+    <select
+      value={value}
+      onChange={onChange}
+      aria-label="Look at a different time"
+      className="flex-1 rounded-xl border-2 bg-card px-3 py-2.5 text-[14px] font-semibold"
+      style={{ borderColor: "var(--muted)" }}
+    >
+      <option value="all-time">All time</option>
+      {data.years.map((y) => (
+        <optgroup key={y} label={String(y)}>
+          <option value={`year-${y}`}>Full year {y}</option>
+          {MONTHS.map((month, idx) => (
+            <option key={month} value={`month-${y}-${idx + 1}`}>
+              {month} {y}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   );
 }
 
@@ -704,17 +626,15 @@ function CutRow({
   );
 }
 
-// Money in, money out, what's left — as ONE column you read top to bottom.
+// Three numbers, big, and nothing else — until you tap one.
 //
-// This card is the whole page in miniature, and it comes first for that reason.
-// The page used to open on a five-option question about which accounting cut to
-// use, then show the answer as a big number, then two tiles beside each other,
-// then a separate ladder underneath — four shapes for one sum. Jamie had to
-// assemble the arithmetic himself from pieces that didn't line up. Now the sum
-// IS the layout: in, out, what came off, what's left, one row each, one column,
-// same order every time. Everything else on the page moved below it or behind a
-// tap, because none of it is the answer.
-function MoneyStory({
+// The page used to open on a five-option question about which accounting cut
+// to use, then a big number, then a column of rows explaining it. Jamie asked
+// for something his business partner can read in one glance: Total Revenue,
+// Total Expenses, Profit, done. Everything that used to sit in that column —
+// loan interest, Jamie's pay and distributions, the year-end projection — is
+// still here, just folded behind whichever of the three numbers it explains.
+function Totals({
   rollup,
   mode,
   year,
@@ -722,6 +642,7 @@ function MoneyStory({
   range,
   throughDate,
   jamiePay,
+  showCategories,
 }: {
   rollup: Rollup;
   mode: ViewMode;
@@ -730,18 +651,22 @@ function MoneyStory({
   range?: { start: string; end: string };
   throughDate: string | null;
   jamiePay: number | null;
+  /** Chris's "Schedule C line by line" tick-box. Off means Money App never
+   *  sends the category detail, so Revenue and Expenses show a plain number
+   *  with nothing to tap open — same rule the rest of this page follows. */
+  showCategories: boolean;
 }) {
   // What "money in", "money out" and "profit" mean depends on the cut — see
-  // headlineFor. The three always tie out, so the two tiles explain the big
-  // number rather than sitting near it.
+  // headlineFor. Total Expenses folds loan interest into running costs so the
+  // three numbers always add up: Revenue − Expenses = Profit, on screen.
   const { moneyIn, moneyOut, interest, profit: rawProfit } = headlineFor(rollup, mode);
+  const totalExpenses = moneyOut + interest;
 
   // Neither of these is part of any of the five cuts above — a distribution
   // isn't a P&L expense under any of them, and Jamie's pay isn't in Money
   // App's ledger at all (it's the gym dashboard's own figure). They're a
   // second, independent question — "what's left once Jamie's actually been
-  // paid?" — so they're plain client toggles rather than another URL mode:
-  // no cut to ask Money App for, just arithmetic on numbers already in hand.
+  // paid?" — so they're plain client toggles rather than another URL mode.
   //
   // ONE value, not two booleans: the earned-pay figure is already inside the
   // distribution total, so subtracting both took the same money out twice and
@@ -751,29 +676,12 @@ function MoneyStory({
   const jamiePayOut = jamieCut === "pay" ? (jamiePay ?? 0) : 0;
   const jamieDistOut = jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
   const profit = rawProfit - jamiePayOut - jamieDistOut;
+  const madeMoney = profit >= 0;
 
-  // Everything that comes OFF, in the order it's subtracted. A list rather than
-  // fixed rows so the column always ends on `profit`: money in, minus every row
-  // below it, is the big number — whatever the Jamie chips are set to, and
-  // whichever cut is on.
-  const takenOff = [
-    {
-      label: "What it costs to run the gym",
-      note: null as string | null,
-      amount: moneyOut,
-    },
-    {
-      label: "Loan interest",
-      // The one number the two apps used to disagree about. Chris's P&L keeps
-      // interest out of its expenses tile and subtracts it further down, so
-      // folding it into "running the gym" made the same books read $18,273
-      // apart. Its own row, and they match.
-      note: "The cost of the borrowing, not of running the gym",
-      amount: interest,
-    },
-    { label: "Jamie's pay", note: null, amount: jamiePayOut },
-    { label: "Jamie's distributions", note: null, amount: jamieDistOut },
-  ].filter((r) => r.amount !== 0);
+  const income = rollup.lines.filter((l) => l.classification === "income");
+  const spending = rollup.lines
+    .filter((l) => l.classification !== "income")
+    .sort((a, b) => b.amount - a.amount);
 
   // Only show year-end projection for current year, not for months or all-time
   const projection =
@@ -788,148 +696,216 @@ function MoneyStory({
       ? (profit / rollup.monthlyNetProfit.length) * 12
       : null;
 
-  const madeMoney = profit >= 0;
+  const [open, setOpen] = useState<"revenue" | "expenses" | "profit" | null>(null);
+  const toggle = (key: "revenue" | "expenses" | "profit") =>
+    setOpen((v) => (v === key ? null : key));
 
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[14px] text-muted">{madeMoney ? mode.profitTitle : mode.lossTitle}</p>
+        <p className="text-[13px] text-muted">
+          <TimeSpan year={year} month={month} range={range} throughDate={throughDate} />
+        </p>
         <CutTag mode={mode} />
       </div>
-      <p
-        className="mt-0.5 text-[40px] font-bold leading-tight"
-        style={{ color: madeMoney ? "var(--good)" : "var(--neg)" }}
-      >
-        {money(Math.abs(profit))}
-      </p>
-      <p className="text-[13px] text-muted">
-        <TimeSpan year={year} month={month} range={range} throughDate={throughDate} />
-      </p>
 
-      {/* The sum, as one column. Every row is "and then this", read downward. */}
-      <div className="mt-4">
-        <FlowRow label="Money that came in" amount={moneyIn} tone="in">
+      <div className="mt-1 divide-y" style={{ borderColor: "var(--border)" }}>
+        <BigNumberRow
+          label="Total Revenue"
+          amount={moneyIn}
+          color="var(--good)"
+          expandable={showCategories}
+          open={open === "revenue"}
+          onToggle={() => toggle("revenue")}
+        >
           {/* Grant money is the single biggest reason this figure disagrees
               with one on Chris's own screens: the gym's-own-money cut leaves it
-              out entirely and every other cut folds it in. Saying the amount
-              HERE answers that without anyone having to ask. */}
-          {rollup.otherIncome !== 0 &&
-            `${mode.operational ? "Doesn't count" : "Counts"} ${money(rollup.otherIncome)} of grant money`}
-        </FlowRow>
-        {takenOff.map((r) => (
-          <div key={r.label}>
-            <FlowRow label={r.label} amount={-r.amount} tone="out">
-              {r.note}
-            </FlowRow>
-            {/* Gross before interest — income minus what it costs to run the
-                gym, stopping short of the finance-cost and Jamie rows below.
-                Only worth a line when something actually follows it; on its
-                own it would just repeat "Left over". */}
-            {r.label === "What it costs to run the gym" &&
-              takenOff.some((x) => x.label !== "What it costs to run the gym") && (
-                <div
-                  className="mt-1 mb-1 flex items-baseline justify-between gap-3 border-t pt-2"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <span className="text-[13px] font-medium text-muted">
-                    Operating profit, before interest
-                  </span>
-                  <span className="text-[14px] font-medium text-muted">
-                    {money(moneyIn - moneyOut)}
-                  </span>
-                </div>
-              )}
-          </div>
-        ))}
-        <div
-          className="mt-1 flex items-baseline justify-between gap-3 border-t pt-2.5"
-          style={{ borderColor: "var(--border)" }}
+              out entirely and every other cut folds it in. */}
+          {rollup.otherIncome !== 0 && (
+            <p className="text-[12px] text-muted">
+              {mode.operational ? "Doesn't count" : "Counts"} {money(rollup.otherIncome)} of grant money
+            </p>
+          )}
+          <CategoryList lines={income} positive untagged={rollup.untagged.income} />
+        </BigNumberRow>
+
+        <BigNumberRow
+          label="Total Expenses"
+          amount={totalExpenses}
+          color="var(--neg)"
+          expandable={showCategories}
+          open={open === "expenses"}
+          onToggle={() => toggle("expenses")}
         >
-          <span className="text-[15px] font-semibold">
-            {madeMoney ? "Left over" : "Short by"}
-          </span>
-          <span
-            className="text-[17px] font-bold"
-            style={{ color: madeMoney ? "var(--good)" : "var(--neg)" }}
-          >
-            {money(Math.abs(profit))}
-          </span>
-        </div>
-      </div>
+          {/* The one number the two apps used to disagree about. Chris's P&L
+              keeps interest out of its expenses tile and subtracts it further
+              down, so folding it into "running the gym" made the same books
+              read $18,273 apart. Its own row here instead, and they match. */}
+          {interest !== 0 && (
+            <div
+              className="flex items-baseline justify-between gap-3 rounded-xl px-3 py-2.5"
+              style={{ background: "var(--tint)" }}
+            >
+              <span className="min-w-0 text-[14px]">
+                Loan interest
+                <span className="block text-[11px] leading-snug text-muted">
+                  The cost of the borrowing, not of running the gym
+                </span>
+              </span>
+              <span className="shrink-0 text-[14px] font-medium">{money(interest)}</span>
+            </div>
+          )}
+          <CategoryList lines={spending} untagged={rollup.untagged.cogs + rollup.untagged.expense} />
+        </BigNumberRow>
 
-      {(projection || avgAnnualProfit !== null) && (
-        <p className="mt-3 text-[13px] text-muted">
-          {projection
-            ? `Heading for about ${money(projection)} by the end of the year.`
-            : `That's about ${money(avgAnnualProfit!)} a year.`}
-        </p>
-      )}
-      <p className="mt-1 text-[12px] text-muted">
-        Jamie&apos;s PT cash that hasn&apos;t been written down yet isn&apos;t in here.
-      </p>
+        <BigNumberRow
+          label={madeMoney ? mode.profitTitle : mode.lossTitle}
+          amount={profit}
+          color={madeMoney ? "var(--good)" : "var(--neg)"}
+          expandable
+          big
+          open={open === "profit"}
+          onToggle={() => toggle("profit")}
+        >
+          {(projection || avgAnnualProfit !== null) && (
+            <p className="text-[13px] text-muted">
+              {projection
+                ? `Heading for about ${money(projection)} by the end of the year.`
+                : `That's about ${money(avgAnnualProfit!)} a year.`}
+            </p>
+          )}
+          <p className="text-[12px] text-muted">
+            Jamie&apos;s PT cash that hasn&apos;t been written down yet isn&apos;t in here.
+          </p>
 
-      {/* The two "what if Jamie's pay came out of this too?" questions. Below
-          the sum, not above it: they change the answer, so the plain answer
-          has to be readable first. */}
-      <div className="mt-3 space-y-2">
-        <ToggleChip
-          label="Include Jamie's Pay"
-          on={jamieCut === "pay"}
-          onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
-          // `!jamiePay`, not `== null`: a period Jamie earned nothing in has
-          // nothing to subtract either, and a button that lights up and moves
-          // no number reads as broken. Same guard the distributions toggle
-          // below already uses.
-          disabled={!jamiePay}
-          title={
-            jamiePay == null
-              ? "Couldn't reach the gym dashboard for this period."
-              : !jamiePay
-                ? "The gym dashboard has no pay recorded for this period."
-                : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it."
-          }
-        />
-        <ToggleChip
-          label="Include all Jamie's Distributions"
-          on={jamieCut === "dist"}
-          onClick={() => setJamieCut((v) => (v === "dist" ? "none" : "dist"))}
-          disabled={!rollup.jamieDistributions}
-          title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance. Already includes the earned pay, so it replaces that cut."
-        />
+          {/* The two "what if Jamie's pay came out of this too?" questions. */}
+          <div className="space-y-2">
+            <ToggleChip
+              label="Include Jamie's Pay"
+              on={jamieCut === "pay"}
+              onClick={() => setJamieCut((v) => (v === "pay" ? "none" : "pay"))}
+              // `!jamiePay`, not `== null`: a period Jamie earned nothing in has
+              // nothing to subtract either, and a button that lights up and moves
+              // no number reads as broken. Same guard the distributions toggle
+              // below already uses.
+              disabled={!jamiePay}
+              title={
+                jamiePay == null
+                  ? "Couldn't reach the gym dashboard for this period."
+                  : !jamiePay
+                    ? "The gym dashboard has no pay recorded for this period."
+                    : "Subtracts what the gym dashboard's pay model says Jamie earned. Replaces the full-distributions cut — the earned pay is already part of it."
+              }
+            />
+            <ToggleChip
+              label="Include all Jamie's Distributions"
+              on={jamieCut === "dist"}
+              onClick={() => setJamieCut((v) => (v === "dist" ? "none" : "dist"))}
+              disabled={!rollup.jamieDistributions}
+              title="Subtracts everything drawn from Jamie's distribution tree — Taycan, Equinox, Charges, Transfers, Car Insurance. Already includes the earned pay, so it replaces that cut."
+            />
+          </div>
+        </BigNumberRow>
       </div>
     </Card>
   );
 }
 
-// One line of the sum. Money in reads plain; everything after it is a
-// subtraction and reads with the minus, so the column adds up on sight.
-function FlowRow({
+// One of the three numbers. Big enough to read at a glance; a tap opens
+// exactly what's behind it, same interaction as every other drill-down on
+// this page. Non-expandable rows (Chris's Schedule C tick-box is off) render
+// as a plain row — no chevron promising a detail that isn't coming.
+function BigNumberRow({
   label,
   amount,
-  tone,
+  color,
+  expandable,
+  open,
+  onToggle,
+  big,
   children,
 }: {
   label: string;
   amount: number;
-  tone: "in" | "out";
-  /** Optional one-line "and here's what that means" under the label. */
+  color: string;
+  expandable: boolean;
+  open: boolean;
+  onToggle: () => void;
+  /** The profit row reads a size up from Revenue and Expenses — it's the answer. */
+  big?: boolean;
   children?: React.ReactNode;
 }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <span className="min-w-0">
-        <span className="block text-[14px]">{label}</span>
-        {children && (
-          <span className="block text-[11px] leading-snug text-muted">{children}</span>
+  const size = big ? "text-[38px]" : "text-[30px]";
+  const inner = (
+    <span className="flex w-full items-center justify-between gap-3 text-left">
+      <span className="text-[14px] font-medium text-muted">{label}</span>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <span className={`${size} font-bold leading-none tabular-nums`} style={{ color }}>
+          {money(Math.abs(amount))}
+        </span>
+        {expandable && (
+          <ChevronDown
+            size={20}
+            className="shrink-0 text-muted transition-transform"
+            style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}
+          />
         )}
       </span>
-      <span
-        className="shrink-0 text-[15px] font-semibold tabular-nums"
-        style={tone === "out" ? { color: "var(--neg)" } : undefined}
-      >
-        {money(amount)}
-      </span>
+    </span>
+  );
+
+  return (
+    <div className="py-3 first:pt-0 last:pb-0">
+      {expandable ? (
+        <button type="button" onClick={onToggle} aria-expanded={open}>
+          {inner}
+        </button>
+      ) : (
+        inner
+      )}
+      {expandable && open && <div className="mt-3 space-y-2">{children}</div>}
     </div>
+  );
+}
+
+// The categories behind Total Revenue or Total Expenses — each one opens to
+// its own accounts and, from there, the exact transactions. Same two-level
+// drill-down as every other breakdown on this page (LineRow).
+function CategoryList({
+  lines,
+  positive,
+  untagged,
+}: {
+  lines: ScheduleCLine[];
+  positive?: boolean;
+  untagged?: number;
+}) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (code: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+
+  if (lines.length === 0) {
+    return <p className="text-[13px] text-muted">Nothing here for this stretch of time.</p>;
+  }
+
+  return (
+    <>
+      <ul className="space-y-1">
+        {lines.map((l) => (
+          <LineRow key={l.code} line={l} open={open.has(l.code)} onToggle={() => toggle(l.code)} good={positive} />
+        ))}
+      </ul>
+      {!!untagged && (
+        <p className="text-[12px] text-muted">
+          Some of the total isn&apos;t sorted into a category yet, so these add up to less than the number above.
+        </p>
+      )}
+    </>
   );
 }
 
@@ -1213,79 +1189,6 @@ function MonthlyStrip({
         Best month {money(Math.max(...months))} · worst month {money(Math.min(...months))}
       </p>
     </Card>
-  );
-}
-
-// Where the money actually went, line by line. Every category expands to the
-// individual transactions behind it — same interaction as the mistakes list
-// above, so a category isn't just a number Jamie has to take on faith.
-function Lines({ rollup, mode }: { rollup: Rollup; mode: ViewMode }) {
-  const income = rollup.lines.filter((l) => l.classification === "income");
-  const spending = rollup.lines
-    .filter((l) => l.classification !== "income")
-    .sort((a, b) => b.amount - a.amount);
-
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  const toggle = (code: string) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
-      return next;
-    });
-
-  if (income.length === 0 && spending.length === 0) return null;
-
-  return (
-    <Disclosure
-      title={mode.taxLayout ? "Line by line, as the tax return sees it" : "Where every dollar went"}
-      summary={`${income.length + spending.length} categories — tap to open`}
-      tag={<CutTag mode={mode} />}
-      // The tax cut is the one place this list IS the answer to the question
-      // being asked ("which box does this go in"), so it opens on its own.
-      defaultOpen={mode.taxLayout}
-    >
-      {/* Only said in the CPA cut, where it's the whole point: these headings
-          are the boxes on Schedule C, and a grant is taxable income even
-          though the operating view carves it out. */}
-      {mode.taxLayout && (
-        <p className="text-[13px] text-muted">
-          These headings are the boxes on the tax form. Grant money counts as
-          income here, even though it&apos;s left out of the gym&apos;s own numbers.
-        </p>
-      )}
-
-      {income.length > 0 && (
-        <>
-          <p className="text-[13px] font-medium text-muted">Money coming in</p>
-          <ul className="mt-1 space-y-1">
-            {income.map((l) => (
-              <LineRow key={l.code} line={l} open={open.has(l.code)} onToggle={() => toggle(l.code)} good />
-            ))}
-          </ul>
-        </>
-      )}
-
-      {spending.length > 0 && (
-        <>
-          <p className="mt-4 text-[13px] font-medium text-muted">Money going out</p>
-          <ul className="mt-1 space-y-1">
-            {spending.map((l) => (
-              <LineRow key={l.code} line={l} open={open.has(l.code)} onToggle={() => toggle(l.code)} />
-            ))}
-          </ul>
-        </>
-      )}
-
-      {(rollup.untagged.income !== 0 ||
-        rollup.untagged.cogs !== 0 ||
-        rollup.untagged.expense !== 0) && (
-        <p className="mt-3 text-[12px] text-muted">
-          Some of the total isn&apos;t sorted into a line yet, so the lines above add up to less
-          than the big numbers.
-        </p>
-      )}
-    </Disclosure>
   );
 }
 
