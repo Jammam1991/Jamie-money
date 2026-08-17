@@ -18,7 +18,16 @@ import type { CutBucket, Rollup } from "@/lib/businessFinances";
 // question: the FED-tagged items are exactly what comes out for the tax view,
 // so the picker was offering the same cut twice under two names. They're now
 // one mode — see the `cpa` entry below, and `readViewMode` for the old links.
-export type ViewModeId = "full" | "operating" | "seller" | "cpa" | "clean";
+//
+// "clean" used to live here too, as a fifth mode standing in for "full, with
+// the mistakes taken out". That made the mistakes toggle and the cut picker
+// fight over the same switch — turning mistakes off from "just the gym's own
+// money" silently dropped you onto the full picture instead, because "clean"
+// carried its own operational/slim/noFed of all-false. Whether the mistakes
+// are in or out is now an orthogonal question, carried by the `clean` query
+// param (see `readClean`) and layered on top of whichever of these four is
+// active — so the toggle changes one thing, not two.
+export type ViewModeId = "full" | "operating" | "seller" | "cpa";
 
 export type ViewMode = {
   id: ViewModeId;
@@ -44,8 +53,6 @@ export type ViewMode = {
   slim: boolean;
   /** Ask Money App to drop the FED-tagged transactions. */
   noFed: boolean;
-  /** Read the `noMistakes` cut that comes down in the same response. */
-  noMistakes: boolean;
   /** Lead with the Schedule C lines instead of the month-by-month strip. */
   taxLayout: boolean;
 };
@@ -61,7 +68,6 @@ export const VIEW_MODES: ViewMode[] = [
     operational: false,
     slim: false,
     noFed: false,
-    noMistakes: false,
     taxLayout: false,
   },
   {
@@ -74,7 +80,6 @@ export const VIEW_MODES: ViewMode[] = [
     operational: true,
     slim: false,
     noFed: false,
-    noMistakes: false,
     taxLayout: false,
   },
   {
@@ -87,7 +92,6 @@ export const VIEW_MODES: ViewMode[] = [
     operational: false,
     slim: true,
     noFed: false,
-    noMistakes: false,
     taxLayout: false,
   },
   {
@@ -105,21 +109,7 @@ export const VIEW_MODES: ViewMode[] = [
     operational: false,
     slim: false,
     noFed: true,
-    noMistakes: false,
     taxLayout: true,
-  },
-  {
-    id: "clean",
-    label: "Without the start-up mistakes",
-    blurb: "Everything, with the start-up mistakes Chris marked taken back out.",
-    profitTitle: "Without the mistakes, the gym made",
-    lossTitle: "Without the mistakes, the gym lost",
-    tag: "mistakes taken out",
-    operational: false,
-    slim: false,
-    noFed: false,
-    noMistakes: true,
-    taxLayout: false,
   },
 ];
 
@@ -158,8 +148,42 @@ export function readViewMode(sp: { view?: string; operational?: string }): ViewM
   // predates the selector entirely. All three still land where they meant to.
   if (sp.view === "slim") return "seller";
   if (sp.view === "fed") return "cpa";
+  // `?view=clean` was the fifth mode this page used to have — always the full
+  // picture, mistakes taken out. `readClean` below turns the toggle back on
+  // for a link spelled that way, so it lands on the same numbers it always
+  // did; this just has to resolve the cut half of it to something real.
+  if (sp.view === "clean") return "full";
   if (sp.operational === "false") return "full";
   return DEFAULT_VIEW_MODE;
+}
+
+/**
+ * Whether "mistakes taken out" is on — independent of which of the four cuts
+ * above is selected. Kept apart from `readViewMode` on purpose: the two used
+ * to be the same switch (`clean` was a mode, not a toggle), which meant asking
+ * to drop the mistakes from "just the gym's own money" silently dropped the
+ * operating cut too, since "clean" carried its own all-false operational/
+ * slim/noFed. Reading them separately means turning one on can't turn the
+ * other off.
+ */
+export function readClean(sp: { view?: string; clean?: string }): boolean {
+  return sp.clean === "1" || sp.view === "clean";
+}
+
+/**
+ * The mode's own words, with "mistakes taken out" folded into the corner tag
+ * when the toggle is on top of it — so the headline can't be read as the
+ * untouched cut by anyone who scrolled past the button above it. Only the
+ * display strings change; `operational`/`slim`/`noFed`/`taxLayout` pass
+ * through untouched; the actual number swap is `noMistakes.rollup` at the
+ * call site, chosen the same way under any of the four cuts.
+ */
+export function displayMode(mode: ViewMode, clean: boolean): ViewMode {
+  if (!clean) return mode;
+  return {
+    ...mode,
+    tag: mode.tag ? `${mode.tag} · mistakes taken out` : "mistakes taken out",
+  };
 }
 
 export type Headline = {
