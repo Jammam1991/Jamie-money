@@ -280,20 +280,76 @@ export async function getJamiePayMonths(): Promise<PayMonthsResult> {
  * to $0, and left the toggle looking broken — it subtracted nothing while
  * still reading as switched on.
  */
+function inPeriod(m: PayMonth, year: number | "all-time", month?: number): boolean {
+  // getPayMonths never reaches back before the gym existed, so every month
+  // it returns is inside "all time" by construction.
+  if (year === "all-time") return true;
+  const [y, mm] = m.month.split("-").map(Number);
+  return month ? y === year && mm === month : y === year;
+}
+
 export function earnedPayForPeriod(
   result: PayMonthsResult,
   year: number | "all-time",
   month?: number,
 ): number | null {
   if (result.problem) return null;
+  return result.months.filter((m) => inPeriod(m, year, month)).reduce((sum, m) => sum + m.earned, 0);
+}
 
-  const inPeriod = (m: PayMonth): boolean => {
-    // getPayMonths never reaches back before the gym existed, so every month
-    // it returns is inside "all time" by construction.
-    if (year === "all-time") return true;
-    const [y, mm] = m.month.split("-").map(Number);
-    return month ? y === year && mm === month : y === year;
-  };
+/** What the earned-pay total for a period is actually made of — the same
+ *  category split (`earnedParts`) and, where the gym dashboard sent it, the
+ *  individual sessions/classes/leads behind each category. Kept as a
+ *  separate function from `earnedPayForPeriod` rather than folding this in
+ *  there: most callers only need the one number, and building the merged
+ *  line lists is wasted work for them. */
+export type EarnedPayDetail = {
+  total: number;
+  parts: PayMonth["earnedParts"];
+  /** Null when every month in the period predates the gym dashboard sending
+   *  `earnedDetails` — same "not available" rule `earnedPayForPeriod` uses
+   *  for `problem`, just narrower: the total can still be right while the
+   *  session-level detail behind it is missing. */
+  details: EarnedDetails | null;
+};
 
-  return result.months.filter(inPeriod).reduce((sum, m) => sum + m.earned, 0);
+export function earnedPayDetailForPeriod(
+  result: PayMonthsResult,
+  year: number | "all-time",
+  month?: number,
+): EarnedPayDetail | null {
+  if (result.problem) return null;
+  const months = result.months.filter((m) => inPeriod(m, year, month));
+
+  const total = months.reduce((sum, m) => sum + m.earned, 0);
+  const parts = months.reduce(
+    (sum, m) => ({
+      pt: sum.pt + m.earnedParts.pt,
+      classes: sum.classes + m.earnedParts.classes,
+      showedLeads: sum.showedLeads + m.earnedParts.showedLeads,
+      commission: sum.commission + m.earnedParts.commission,
+      management: sum.management + m.earnedParts.management,
+      profitShare: sum.profitShare + m.earnedParts.profitShare,
+    }),
+    { pt: 0, classes: 0, showedLeads: 0, commission: 0, management: 0, profitShare: 0 },
+  );
+
+  const withDetails = months.filter((m): m is PayMonth & { earnedDetails: EarnedDetails } => m.earnedDetails !== null);
+  const mergeLines = (pick: (d: EarnedDetails) => EarnLine[]): EarnLine[] =>
+    withDetails
+      .flatMap((m) => pick(m.earnedDetails))
+      .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+
+  const details: EarnedDetails | null =
+    withDetails.length === 0
+      ? null
+      : {
+          pt: mergeLines((d) => d.pt),
+          classes: mergeLines((d) => d.classes),
+          showedLeads: mergeLines((d) => d.showedLeads),
+          commission: mergeLines((d) => d.commission),
+          management: mergeLines((d) => d.management),
+        };
+
+  return { total, parts, details };
 }

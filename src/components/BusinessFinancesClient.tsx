@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { Card, Tint } from "@/components/ui";
-import type { BusinessFinances, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
+import type { BusinessFinances, CutBucket, Mistake, Rollup, ScheduleCLine, ScheduleCLineTx } from "@/lib/businessFinances";
 import { showsProfit } from "@/lib/businessFinances";
+import type { EarnedPayDetail, EarnLine } from "@/lib/gymPay";
 import {
   cutLines,
   displayMode,
@@ -76,6 +77,7 @@ export default function BusinessFinancesClient({
   modeId,
   clean,
   jamiePay,
+  jamiePayDetail,
 }: {
   data: BusinessFinances;
   modeId: ViewModeId;
@@ -87,6 +89,11 @@ export default function BusinessFinancesClient({
    *  it couldn't be reached, which just means the toggle in MoneyStory stays
    *  disabled rather than the page breaking. */
   jamiePay: number | null;
+  /** Same figure as `jamiePay`, broken down by category (PT, classes, showed
+   *  leads, commission, management, profit share) with the individual
+   *  sessions behind each where the gym dashboard sent them. Null under the
+   *  same conditions `jamiePay` is null. */
+  jamiePayDetail: EarnedPayDetail | null;
 }) {
   const { view, noMistakes } = data;
   // Whether FED can be NAMED on this screen. The tax view drops those items
@@ -157,6 +164,7 @@ export default function BusinessFinancesClient({
           range={data.range}
           throughDate={data.throughDate}
           jamiePay={jamiePay}
+          jamiePayDetail={jamiePayDetail}
           showCategories={view.show_schedule_c}
         />
       )}
@@ -624,6 +632,7 @@ function Totals({
   range,
   throughDate,
   jamiePay,
+  jamiePayDetail,
   showCategories,
 }: {
   rollup: Rollup;
@@ -633,6 +642,7 @@ function Totals({
   range?: { start: string; end: string };
   throughDate: string | null;
   jamiePay: number | null;
+  jamiePayDetail: EarnedPayDetail | null;
   /** Chris's "Schedule C line by line" tick-box. Off means Money App never
    *  sends the category detail, so Revenue and Expenses show a plain number
    *  with nothing to tap open — same rule the rest of this page follows. */
@@ -655,16 +665,14 @@ function Totals({
   // overstated the loss. They behave like radio buttons — pick one, or neither,
   // never both; clicking the picked one clears back to neither.
   const [jamieCut, setJamieCut] = useState<"none" | "pay" | "dist">("none");
-  const jamiePayOut = jamieCut === "pay" ? (jamiePay ?? 0) : 0;
-  const jamieDistOut = jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
-  const profit = rawProfit - jamiePayOut - jamieDistOut;
-  const madeMoney = profit >= 0;
-  // Jamie's pay/distributions never sit inside `rawProfit` (see the note on
-  // `jamieDistributions` in Rollup) — only `jamieCut` above pulls them back
-  // out. Say so on the label itself, since "The gym made $41,059" reads like
-  // a final number and it isn't one until this line says which cut it is.
-  const jamieCutLabel =
-    jamieCut === "pay" ? "after Jamie's pay" : jamieCut === "dist" ? "after Jamie's distributions" : "before owner pay";
+  const jamieCutOut = jamieCut === "pay" ? (jamiePay ?? 0) : jamieCut === "dist" ? (rollup.jamieDistributions ?? 0) : 0;
+  // The top number stays "before owner pay" no matter what's picked below —
+  // it used to swap to the after-cut figure in place, which meant Jamie
+  // couldn't see the deduction next to what it came out of. Now the picker
+  // adds two more rows instead: the amount being taken out, and what's left.
+  const profit = rawProfit - jamieCutOut;
+  const rawMadeMoney = rawProfit >= 0;
+  const netMadeMoney = profit >= 0;
 
   // Grant/forgiveness money is its own Schedule C line ("other_income"), and
   // under the gym's-own-money cut `moneyIn` (Total Revenue, above) is built
@@ -680,9 +688,10 @@ function Totals({
     .filter((l) => l.classification !== "income")
     .sort((a, b) => b.amount - a.amount);
 
-  // Only show year-end projection for current year, not for months or all-time
+  // Tied to `rawProfit`, not the after-cut `profit` — this note sits under the
+  // top row, which always shows the before-owner-pay figure now.
   const projection =
-    typeof year === "number" && !month ? getYearEndProjection(profit, year) : null;
+    typeof year === "number" && !month ? getYearEndProjection(rawProfit, year) : null;
   // All-time spans however many real months have happened since the gym opened
   // — monthlyNetProfit is built to that exact length (see chronologicalMonths
   // in businessFinances.ts) — so annualizing is just scaling the total up to
@@ -690,11 +699,11 @@ function Totals({
   // a span that isn't a single year to begin with.
   const avgAnnualProfit =
     year === "all-time" && rollup.monthlyNetProfit.length > 0
-      ? (profit / rollup.monthlyNetProfit.length) * 12
+      ? (rawProfit / rollup.monthlyNetProfit.length) * 12
       : null;
 
-  const [open, setOpen] = useState<"revenue" | "expenses" | "profit" | null>(null);
-  const toggle = (key: "revenue" | "expenses" | "profit") =>
+  const [open, setOpen] = useState<"revenue" | "expenses" | "profit" | "jamieCut" | null>(null);
+  const toggle = (key: "revenue" | "expenses" | "profit" | "jamieCut") =>
     setOpen((v) => (v === key ? null : key));
 
   return (
@@ -756,9 +765,9 @@ function Totals({
         </BigNumberRow>
 
         <BigNumberRow
-          label={`${madeMoney ? mode.profitTitle : mode.lossTitle} (${jamieCutLabel})`}
-          amount={profit}
-          color={madeMoney ? "var(--good)" : "var(--neg)"}
+          label={`${rawMadeMoney ? mode.profitTitle : mode.lossTitle} (before owner pay)`}
+          amount={rawProfit}
+          color={rawMadeMoney ? "var(--good)" : "var(--neg)"}
           expandable
           big
           open={open === "profit"}
@@ -786,8 +795,224 @@ function Totals({
             Jamie&apos;s PT cash that hasn&apos;t been written down yet isn&apos;t in here.
           </p>
         </BigNumberRow>
+
+        {/* Picking a cut above doesn't change the number in the row above —
+            it adds these two instead: what's being taken out (tap the amount
+            for what it's made of) and what's left after it comes out. Same
+            waterfall shape Chris's own P&L Budget uses for this. */}
+        {jamieCut !== "none" && (
+          <>
+            <BigNumberRow
+              label={jamieCut === "pay" ? "Jamie's Pay" : "Jamie's Distributions"}
+              amount={jamieCutOut}
+              color="var(--neg)"
+              expandable
+              open={open === "jamieCut"}
+              onToggle={() => toggle("jamieCut")}
+            >
+              {jamieCut === "pay" ? (
+                <PayBreakdown detail={jamiePayDetail} />
+              ) : (
+                <DistributionBreakdown
+                  detail={rollup.jamieDistributionsDetail}
+                  total={rollup.jamieDistributions ?? 0}
+                  jamiePay={jamiePay}
+                />
+              )}
+            </BigNumberRow>
+
+            <BigNumberRow
+              label="Net Profit"
+              amount={profit}
+              color={netMadeMoney ? "var(--good)" : "var(--neg)"}
+              expandable={false}
+              big
+              open={false}
+              onToggle={() => {}}
+            />
+          </>
+        )}
       </div>
     </Card>
+  );
+}
+
+// What "Jamie's Pay" is made of — the gym dashboard's own category split,
+// each opening to the individual sessions/classes/leads behind it where the
+// dashboard sent them. Same two-level shape as every other drill-down here.
+function PayBreakdown({ detail }: { detail: EarnedPayDetail | null }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  if (!detail) {
+    return (
+      <p className="text-[13px] text-muted">
+        Couldn&apos;t reach the gym dashboard for what this is made of.
+      </p>
+    );
+  }
+
+  const parts: Array<{ key: string; label: string; amount: number; lines: EarnLine[] }> = [
+    { key: "pt", label: "Personal training", amount: detail.parts.pt, lines: detail.details?.pt ?? [] },
+    { key: "classes", label: "Classes", amount: detail.parts.classes, lines: detail.details?.classes ?? [] },
+    { key: "showedLeads", label: "Showed leads", amount: detail.parts.showedLeads, lines: detail.details?.showedLeads ?? [] },
+    { key: "commission", label: "Commission", amount: detail.parts.commission, lines: detail.details?.commission ?? [] },
+    { key: "management", label: "Management", amount: detail.parts.management, lines: detail.details?.management ?? [] },
+    // No line-level detail for this one — it's a share of profit, not sessions.
+    { key: "profitShare", label: "Profit share", amount: detail.parts.profitShare, lines: [] },
+  ].filter((p) => p.amount !== 0);
+
+  if (parts.length === 0) {
+    return <p className="text-[13px] text-muted">Nothing earned in this stretch of time.</p>;
+  }
+
+  return (
+    <ul className="space-y-1">
+      {parts.map((p) => {
+        const isOpen = open.has(p.key);
+        return (
+          <li key={p.key} className="rounded-xl" style={{ background: "var(--tint)" }}>
+            <button
+              type="button"
+              onClick={() => p.lines.length > 0 && toggle(p.key)}
+              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                {p.lines.length > 0 && (
+                  <ChevronDown
+                    size={14}
+                    className="shrink-0 text-muted transition-transform"
+                    style={{ transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)" }}
+                  />
+                )}
+                <span className="truncate text-[14px]">{p.label}</span>
+              </span>
+              <span className="shrink-0 text-[14px] font-medium">{money(p.amount)}</span>
+            </button>
+            {isOpen && p.lines.length > 0 && (
+              <ul className="space-y-1.5 px-3 pb-3">
+                {p.lines.map((l, i) => (
+                  <li key={i} className="flex items-baseline justify-between gap-3 rounded-md bg-card px-2 py-1.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-[12px]">{l.label}</p>
+                      <p className="text-[10px] text-muted">
+                        {l.date ? shortDate(l.date) : ""}
+                        {l.meta ? ` · ${l.meta}` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-[12px] font-medium">{money(l.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// What "Jamie's Distributions" is made of — the same 5 named buckets
+// (Taycan, Equinox, Charges, Transfers, Car Insurance, ...) Chris's own
+// Budget page groups this tree into, each opening to its transactions. Also
+// answers the divorce-relevant question this exists for: distributions taken
+// against pay earned is what Jamie would owe back, if anything.
+function DistributionBreakdown({
+  detail,
+  total,
+  jamiePay,
+}: {
+  detail: CutBucket | undefined;
+  total: number;
+  jamiePay: number | null;
+}) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (label: string) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+
+  // Owing nothing back isn't the same as "can't tell" — only render the line
+  // once there's a real earned-pay figure to measure the draws against.
+  const owedBack = jamiePay == null ? null : Math.max(0, total - jamiePay);
+
+  return (
+    <div className="space-y-2">
+      {owedBack !== null && (
+        <div className="rounded-xl px-3 py-2.5" style={{ background: "var(--tint)" }}>
+          <p className="text-[13px] text-muted">
+            {money(total)} taken against {money(jamiePay ?? 0)} earned
+          </p>
+          <p
+            className="mt-0.5 text-[15px] font-semibold"
+            style={{ color: owedBack > 0 ? "var(--neg)" : "var(--good)" }}
+          >
+            {owedBack > 0 ? `Owes back ${money(owedBack)}` : "Earned enough to cover it — owes nothing back"}
+          </p>
+        </div>
+      )}
+      {!detail || detail.items.length === 0 ? (
+        <p className="text-[13px] text-muted">No itemized breakdown for this stretch of time.</p>
+      ) : (
+        <ul className="space-y-1">
+          {detail.items.map((item) => {
+            const txs = item.transactions ?? [];
+            const isOpen = open.has(item.label);
+            return (
+              <li key={item.label} className="rounded-xl" style={{ background: "var(--tint)" }}>
+                <button
+                  type="button"
+                  onClick={() => txs.length > 0 && toggle(item.label)}
+                  className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {txs.length > 0 && (
+                      <ChevronDown
+                        size={14}
+                        className="shrink-0 text-muted transition-transform"
+                        style={{ transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)" }}
+                      />
+                    )}
+                    <span className="min-w-0">
+                      <span className="block truncate text-[14px]">{item.label}</span>
+                      <span className="block text-[11px] text-muted">
+                        {item.count === 1 ? "1 entry" : `${item.count} entries`}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[14px] font-medium">{money(Math.abs(item.amount))}</span>
+                </button>
+                {isOpen && txs.length > 0 && (
+                  <ul className="space-y-1.5 px-3 pb-3">
+                    {txs.map((t) => (
+                      <li key={t.id} className="flex items-baseline justify-between gap-3 rounded-md bg-card px-2 py-1.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-[12px]">{t.name ?? "—"}</p>
+                          <p className="text-[10px] text-muted">
+                            {shortDate(t.date)}
+                            {t.memo ? ` · ${t.memo}` : ""}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-[12px] font-medium">{money(Math.abs(t.amount))}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
