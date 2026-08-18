@@ -107,7 +107,15 @@ export type PayMonthsResult = { months: PayMonth[]; problem: string | null };
 
 // How long a good answer is reused for, and how long we'll wait for one.
 const GYM_CACHE_SECONDS = 300; // 5 minutes
-const GYM_TIMEOUT_MS = 8000;
+// 8s was too tight once the gym dashboard stopped truncating our request: an
+// all-time ask builds 36 months of pay over there, and each month still needs
+// its own budget/projection call to MoneyApp, so a cold cache legitimately
+// takes longer than that. We were hanging up on a request that was going to
+// succeed, and the page showed "couldn't reach the gym dashboard" for what was
+// really just "not finished yet". Only the first load in each cache window
+// waits at all; the pages that call this raise their own execution ceiling to
+// match (see `maxDuration` in each).
+const GYM_TIMEOUT_MS = 20000;
 
 export async function getPayMonths(months = 24): Promise<PayMonthsResult> {
   const baseUrl = gymUrl();

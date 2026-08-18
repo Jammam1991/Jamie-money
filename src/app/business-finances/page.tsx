@@ -9,6 +9,13 @@ import { getBudgetGroups } from "@/lib/businessBudgetGroups";
 
 export const dynamic = "force-dynamic";
 
+// This page waits on the gym dashboard, which can take up to GYM_TIMEOUT_MS
+// (20s) to build Jamie's pay on a cold cache. The platform's default execution
+// limit is shorter than that, so without this the render would be killed before
+// the wait it's willing to do ever finished — a timeout dressed up as a broken
+// connection.
+export const maxDuration = 30;
+
 export default async function BusinessFinancesPage({
   searchParams,
 }: {
