@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PageTitle, Card } from "@/components/ui";
 import LoginForm from "@/components/LoginForm";
-import { getRole, adminConfigured, viewerConfigured } from "@/lib/auth";
+import { getRole, adminConfigured, PIN_LENGTH } from "@/lib/auth";
+import { getJamiePinHash } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,11 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ link?: string }>;
 }) {
-  const [role, sp] = await Promise.all([getRole(), searchParams]);
+  const [role, sp, pinHash] = await Promise.all([
+    getRole(),
+    searchParams,
+    getJamiePinHash(),
+  ]);
 
   return (
     <div>
@@ -21,8 +26,8 @@ export default async function LoginPage({
         <Card className="mb-3">
           <p className="text-[14px] font-medium">That link has expired.</p>
           <p className="text-[13px] text-muted">
-            Login links only last a few minutes. Ask Chris to send a fresh one,
-            or type your password below.
+            Links only last a few minutes. Your PIN always works, though —
+            tap it in below.
           </p>
         </Card>
       )}
@@ -46,15 +51,15 @@ export default async function LoginPage({
             </Link>
           </div>
         ) : (
-          <LoginForm />
+          <LoginForm pinLength={PIN_LENGTH} pinReady={Boolean(pinHash)} />
         )}
       </Card>
 
-      {(!adminConfigured() || !viewerConfigured()) && (
+      {!adminConfigured() && (
         <p className="mt-3 text-xs text-muted">
-          Setup note: add <code>ADMIN_PASSWORD</code> (yours, to edit) and{" "}
-          <code>JAMIE_PASSWORD</code> (Jamie&apos;s, to view) as environment
-          variables in Vercel, then redeploy.
+          Setup note: add <code>ADMIN_PASSWORD</code> as an environment variable
+          in Vercel, then redeploy. Jamie&apos;s PIN is set in the app, on
+          Settings.
         </p>
       )}
     </div>

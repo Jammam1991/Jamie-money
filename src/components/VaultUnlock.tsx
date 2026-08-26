@@ -6,15 +6,25 @@ import { Card } from "@/components/ui";
 import { unlockVault } from "@/lib/actions";
 
 // The second lock. Being signed in gets you everywhere else in the app; this
-// one screen asks for the password again before it shows anybody's logins.
-export default function VaultUnlock({ minutes }: { minutes: number }) {
+// one screen asks again before it shows anybody's logins. Chris re-types his
+// password, Jamie re-taps his PIN — `pin` only changes the wording and the
+// keyboard, since the server already knows which is which from the role.
+export default function VaultUnlock({
+  minutes,
+  pin = false,
+}: {
+  minutes: number;
+  pin?: boolean;
+}) {
   const [state, action, pending] = useActionState(unlockVault, null);
 
   return (
     <Card>
       <form action={action} className="space-y-3">
         <div>
-          <p className="text-[15px] font-medium">Type your password again</p>
+          <p className="text-[15px] font-medium">
+            {pin ? "Tap your PIN in again" : "Type your password again"}
+          </p>
           <p className="mt-1 text-[13px] text-muted">
             The same one you signed in with. It opens the password book for{" "}
             {minutes} minutes, then it locks itself.
@@ -24,10 +34,11 @@ export default function VaultUnlock({ minutes }: { minutes: number }) {
           id="vault-password"
           name="password"
           type="password"
+          inputMode={pin ? "numeric" : "text"}
           autoComplete="current-password"
           autoFocus
           className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-[15px] outline-none focus:border-[var(--muted)]"
-          placeholder="Password"
+          placeholder={pin ? "PIN" : "Password"}
         />
         {state?.error && <p className="text-[13px] text-warn">{state.error}</p>}
         <button

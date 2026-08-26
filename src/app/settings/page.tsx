@@ -4,18 +4,20 @@ import SettingsClient from "@/components/SettingsClient";
 import HouseholdIncomeAdmin from "@/components/HouseholdIncomeAdmin";
 import TaxDocumentsAdmin from "@/components/TaxDocumentsAdmin";
 import PasswordsAdmin from "@/components/PasswordsAdmin";
-import LoginLinkAdmin from "@/components/LoginLinkAdmin";
+import JamieAccessAdmin from "@/components/JamieAccessAdmin";
 import {
   getRole,
   isVaultUnlocked,
   linkConfigured,
   LINK_MINUTES,
+  PIN_LENGTH,
   VAULT_MINUTES,
 } from "@/lib/auth";
-import { linkRecipients } from "@/lib/loginLink";
+import { appUrl, linkRecipients } from "@/lib/loginLink";
 import {
   getComingSoonPages,
   getHouseholdIncome,
+  getJamiePinHash,
   getPageSlots,
   getRemovedPages,
 } from "@/lib/store";
@@ -30,7 +32,7 @@ export default async function SettingsPage() {
 
   const vaultOpen = await isVaultUnlocked();
 
-  const [comingSoon, removed, placements, taxDocuments, householdIncome, passwords] =
+  const [comingSoon, removed, placements, taxDocuments, householdIncome, passwords, jamiePin] =
     await Promise.all([
       getComingSoonPages(),
       getRemovedPages(),
@@ -39,6 +41,7 @@ export default async function SettingsPage() {
       getHouseholdIncome(),
       // Labels only, and only once the password book's own lock is open.
       vaultOpen ? getPasswordEntries() : Promise.resolve([]),
+      getJamiePinHash(),
     ]);
 
   return (
@@ -56,9 +59,12 @@ export default async function SettingsPage() {
           here would change nothing on screen. The component, the actions and
           the stored ids are all still in place — put this back and it works
           again the moment that card returns. */}
-      <LoginLinkAdmin
+      <JamieAccessAdmin
+        pinSet={Boolean(jamiePin)}
+        pinLength={PIN_LENGTH}
+        appUrl={appUrl()}
         minutes={LINK_MINUTES}
-        configured={linkConfigured()}
+        linkConfigured={linkConfigured()}
         sendsTo={linkRecipients()}
       />
       <HouseholdIncomeAdmin initial={householdIncome} />

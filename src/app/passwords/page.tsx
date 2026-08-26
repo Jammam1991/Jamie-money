@@ -40,7 +40,7 @@ export default async function PasswordsPage() {
           </p>
         </Card>
       ) : !unlocked ? (
-        <VaultUnlock minutes={VAULT_MINUTES} />
+        <VaultUnlock minutes={VAULT_MINUTES} pin={role === "viewer"} />
       ) : (
         <>
           <p className="mb-3 flex items-center gap-1.5 text-[13px] text-muted">

@@ -23,6 +23,12 @@ import {
   SETTLEMENT_TOTAL_KEY,
   CAR_INFO_KEY,
   CAR_HISTORY_KEY,
+  PIN_LOCK_MINUTES,
+  PIN_TRIES,
+  getJamiePinHash,
+  getPinLock,
+  savePinLock,
+  saveJamiePinHash,
   type HouseholdIncome,
   type InvestmentSplitTerms,
   type SettlementTerms,
@@ -35,7 +41,12 @@ import {
   getRole,
   isAdmin,
   isLoggedIn,
+  isPin,
   isVaultUnlocked,
+  PIN_LENGTH,
+  pinHash,
+  pinMatches,
+  sessionCookie,
   vaultToken,
   viewerToken,
 } from "./auth";
@@ -91,13 +102,23 @@ async function guardLoggedIn(): Promise<ActionResult | null> {
 }
 
 // ── Login / logout ────────────────────────────────────────────────────────────
+// One box, two kinds of answer. Chris types his password; Jamie taps four
+// digits. Chris is checked first, so a numeric admin password still gets the
+// manager's role rather than Jamie's.
 export async function login(
   _prev: ActionResult | null,
   formData: FormData
 ): Promise<ActionResult> {
-  const pw = String(formData.get("password") ?? "");
+  const entered = String(formData.get("password") ?? "");
   const adminPw = process.env.ADMIN_PASSWORD;
-  const jamiePw = process.env.JAMIE_PASSWORD;
+  const legacyPw = process.env.JAMIE_PASSWORD;
+
+  if (!adminPw) {
+    return {
+      ok: false,
+      error: "Nothing's set up yet. Add ADMIN_PASSWORD in Vercel, then redeploy.",
+    };
+  }
 
   const same = (a: string, b: string) =>
     Buffer.from(a).length === Buffer.from(b).length &&
@@ -105,33 +126,55 @@ export async function login(
 
   let token: string | null = null;
   let role: "admin" | "viewer" | null = null;
-  if (adminPw && same(pw, adminPw)) {
+
+  if (same(entered, adminPw)) {
     role = "admin";
     token = adminToken();
-  } else if (jamiePw && same(pw, jamiePw)) {
+  } else if (legacyPw && same(entered, legacyPw)) {
+    // The old env-var password, kept working for anyone still using it.
     role = "viewer";
     token = viewerToken();
-  }
+  } else if (isPin(entered)) {
+    const now = Date.now();
+    const lock = await getPinLock();
 
-  if (!token || !role) {
-    if (!adminPw && !jamiePw) {
+    if (lock.until > now) {
+      const mins = Math.max(1, Math.ceil((lock.until - now) / 60_000));
       return {
         ok: false,
-        error:
-          "No passwords set up yet. Add ADMIN_PASSWORD and JAMIE_PASSWORD in Vercel.",
+        error: `Too many wrong tries. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
       };
     }
-    return { ok: false, error: "Wrong password." };
+
+    const stored = await getJamiePinHash();
+    if (!stored) {
+      return { ok: false, error: "No PIN has been set yet — ask Chris to set one." };
+    }
+
+    if (pinMatches(entered, stored)) {
+      // A good PIN wipes the slate, so a few fat-fingered tries last week
+      // don't add up to a lockout today.
+      if (lock.fails > 0) await savePinLock({ fails: 0, until: 0 });
+      role = "viewer";
+      token = viewerToken();
+    } else {
+      const fails = lock.fails + 1;
+      if (fails >= PIN_TRIES) {
+        await savePinLock({ fails: 0, until: now + PIN_LOCK_MINUTES * 60_000 });
+        return {
+          ok: false,
+          error: `That's ${PIN_TRIES} wrong tries — the PIN stops working for ${PIN_LOCK_MINUTES} minutes.`,
+        };
+      }
+      await savePinLock({ fails, until: 0 });
+      return { ok: false, error: "That PIN didn't work." };
+    }
   }
 
+  if (!token || !role) return { ok: false, error: "That didn't work." };
+
   const store = await cookies();
-  store.set(AUTH_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-  });
+  store.set(AUTH_COOKIE, token, sessionCookie());
 
   // Record Jamie's visit so Chris can see the login log.
   if (role === "viewer") await recordLogin();
@@ -146,6 +189,31 @@ export async function logout(): Promise<void> {
 }
 
 // ── Getting Jamie in ──────────────────────────────────────────────────────────
+// Jamie's PIN. Chris sets it here and texts it over — that's the whole flow.
+// What's stored is the HMAC, so this is a one-way door: the PIN can be replaced
+// but never read back, and "he forgot it" is answered with a new one.
+export async function setJamiePin(entered: string): Promise<ActionResult> {
+  if (!(await isAdmin())) return { ok: false, error: "Only the manager can set the PIN." };
+
+  const pin = entered.trim();
+  if (!isPin(pin)) return { ok: false, error: `The PIN has to be ${PIN_LENGTH} digits.` };
+
+  const hash = pinHash(pin);
+  if (!hash) return { ok: false, error: "Add ADMIN_PASSWORD in Vercel first, then redeploy." };
+
+  const err = await saveJamiePinHash(hash);
+  if (err) return { ok: false, error: err };
+
+  // A fresh PIN clears any lockout — otherwise changing it because Jamie was
+  // locked out would leave him locked out with the new one.
+  await savePinLock({ fails: 0, until: 0 });
+
+  revalidatePath("/settings");
+  revalidatePath("/login");
+  return { ok: true };
+}
+
+
 // Both of these mint a link that logs Jamie in without a password. Only Chris
 // can ask for one, and it grants Jamie's view-only role — never Chris's.
 
@@ -1278,16 +1346,23 @@ export async function unlockVault(
   if (!role) return { ok: false, error: "Please log in first." };
 
   const pw = String(formData.get("password") ?? "");
-  const expected = role === "admin" ? process.env.ADMIN_PASSWORD : process.env.JAMIE_PASSWORD;
   const token = vaultToken(role);
-  if (!expected || !token) {
-    return { ok: false, error: "No password is set up for this account yet." };
-  }
+  if (!token) return { ok: false, error: "No password is set up for this account yet." };
 
-  const a = Buffer.from(pw);
-  const b = Buffer.from(expected);
-  const same = a.length === b.length && crypto.timingSafeEqual(a, b);
-  if (!same) return { ok: false, error: "Wrong password." };
+  if (role === "admin") {
+    const expected = process.env.ADMIN_PASSWORD;
+    if (!expected) return { ok: false, error: "No password is set up for this account yet." };
+    const a = Buffer.from(pw);
+    const b = Buffer.from(expected);
+    if (!(a.length === b.length && crypto.timingSafeEqual(a, b))) {
+      return { ok: false, error: "Wrong password." };
+    }
+  } else {
+    // Jamie's second lock is the same four digits he logged in with.
+    const stored = await getJamiePinHash();
+    if (!stored) return { ok: false, error: "No PIN is set up yet." };
+    if (!pinMatches(pw, stored)) return { ok: false, error: "Wrong PIN." };
+  }
 
   const store = await cookies();
   store.set(VAULT_COOKIE, token, {

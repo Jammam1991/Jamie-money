@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { AUTH_COOKIE, loginLinkValid, viewerToken } from "@/lib/auth";
+import { AUTH_COOKIE, loginLinkValid, sessionCookie, viewerToken } from "@/lib/auth";
 import { recordLogin } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -18,10 +18,11 @@ function landingPath(raw: string | null): string {
 // sent Jamie. `to` picks the page he lands on (e.g. /bills) — omit it and he
 // lands on home, same as before.
 //
-// A good key swaps itself for the ordinary 30-day login cookie, so from here
-// on Jamie is signed in exactly as if he'd typed the password. A bad or
-// stale one drops him on the login page with a note, not an error screen —
-// the most likely reason to land here is a link that sat unread too long.
+// A good key swaps itself for the ordinary login cookie, so from here on Jamie
+// is signed in exactly as if he'd tapped his PIN in. A bad or stale one drops
+// him on the login page with a note, not an error screen — the most likely
+// reason to land here is a link that sat unread too long, and his PIN still
+// works.
 //
 // The cookie is set on the redirect itself rather than through `cookies()`,
 // because a Route Handler's own response is the only thing certain to carry
@@ -36,13 +37,7 @@ export async function GET(request: NextRequest) {
 
   const to = landingPath(request.nextUrl.searchParams.get("to"));
   const response = NextResponse.redirect(new URL(to, request.url));
-  response.cookies.set(AUTH_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30, // 30 days, same as typing the password
-  });
+  response.cookies.set(AUTH_COOKIE, token, sessionCookie());
 
   // Chris watches the login log to see how often Jamie checks in — a visit
   // that started from a link still counts as a visit.
