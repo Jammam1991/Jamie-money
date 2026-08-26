@@ -73,7 +73,7 @@ export async function emailLoginLink(now: number): Promise<SendResult> {
       text:
         `Hi Jamie! Tap this to open your money app:\n\n${url}\n\n` +
         `The link only works for ${LINK_MINUTES} minutes, so open it now. ` +
-        `Once you're in, you'll stay signed in for 30 days.\n\n` +
+        `Once you're in, you stay in — it won't ask you again.\n\n` +
         `Add it to your home screen and it works like a normal app.`,
     });
   } catch (err) {

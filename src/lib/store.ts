@@ -682,6 +682,78 @@ export async function getDivorce(): Promise<Divorce> {
   };
 }
 
+// ── Jamie's PIN ───────────────────────────────────────────────────────────────
+// Kept as two rows in the existing key/value `settings` table, so there's no
+// setup SQL and no environment variable: Chris sets Jamie's PIN from the
+// Settings screen on his phone and it's live straight away.
+//
+// `jamie_pin` holds the HMAC of the PIN, never the digits — see pinHash() in
+// auth.ts. `jamie_pin_lock` is the brute-force guard: four digits is only
+// 10,000 guesses, so after PIN_TRIES wrong ones in a row the PIN stops working
+// for PIN_LOCK_MINUTES. Chris's own password is unaffected, so a locked-out
+// Jamie never locks Chris out of fixing it.
+export const JAMIE_PIN_KEY = "jamie_pin";
+export const PIN_LOCK_KEY = "jamie_pin_lock";
+export const PIN_TRIES = 5;
+export const PIN_LOCK_MINUTES = 15;
+
+export async function getJamiePinHash(): Promise<string | null> {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", JAMIE_PIN_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return null;
+  const value = String(data.value).trim();
+  return value || null;
+}
+
+export async function saveJamiePinHash(hash: string): Promise<string | null> {
+  const c = client();
+  if (!c) return "The database isn't connected.";
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: JAMIE_PIN_KEY, value: hash }, { onConflict: "key" });
+  return error ? error.message : null;
+}
+
+/** `until` is a millisecond timestamp; 0 means "not locked". */
+export type PinLock = { fails: number; until: number };
+
+const NO_PIN_LOCK: PinLock = { fails: 0, until: 0 };
+
+export async function getPinLock(): Promise<PinLock> {
+  const c = client();
+  if (!c) return NO_PIN_LOCK;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", PIN_LOCK_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return NO_PIN_LOCK;
+  try {
+    const parsed = JSON.parse(String(data.value));
+    const fails = Number(parsed?.fails);
+    const until = Number(parsed?.until);
+    return {
+      fails: Number.isFinite(fails) && fails > 0 ? fails : 0,
+      until: Number.isFinite(until) && until > 0 ? until : 0,
+    };
+  } catch {
+    return NO_PIN_LOCK;
+  }
+}
+
+export async function savePinLock(lock: PinLock): Promise<void> {
+  const c = client();
+  if (!c) return;
+  await c
+    .from("settings")
+    .upsert({ key: PIN_LOCK_KEY, value: JSON.stringify(lock) }, { onConflict: "key" });
+}
+
 // ── Jamie's login log ─────────────────────────────────────────────────────────
 // Record one row each time Jamie logs in, and read back the count + recent times
 // for the admin-only Activity screen.

@@ -2,11 +2,17 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import crypto from "node:crypto";
 
-// ── Two-password gate ─────────────────────────────────────────────────────────
-// Jamie logs in with JAMIE_PASSWORD to VIEW the app. Chris logs in with
-// ADMIN_PASSWORD to view AND edit. Each password maps to an HMAC token kept in a
-// cookie — no user table, no stored passwords. Jamie's logins are recorded so
-// Chris can see how often he checks in.
+// ── The gate ──────────────────────────────────────────────────────────────────
+// Chris logs in with ADMIN_PASSWORD to view AND edit. Jamie taps a four-digit
+// PIN to VIEW — the PIN lives in the app's own settings, so Chris can set it
+// from his phone rather than editing Vercel and redeploying.
+//
+// Either way the answer is an HMAC token kept in a cookie — no user table, no
+// stored passwords. Jamie's logins are recorded so Chris can see how often he
+// checks in.
+//
+// Nothing here expires. Jamie taps the link once, types the PIN once, and the
+// app stays open on his home screen from then on.
 
 export const AUTH_COOKIE = "jm_admin"; // kept the same name so old sessions survive
 export type Role = "admin" | "viewer";
@@ -20,7 +26,17 @@ export function adminToken(): string | null {
   return pw ? hmac(pw, "jamie-admin-v1") : null;
 }
 
+// Seeded from Chris's password rather than Jamie's PIN: the PIN is a thing
+// Chris changes from his phone, and changing it shouldn't sign Jamie out of a
+// phone that's already trusted. Rotating ADMIN_PASSWORD still clears everyone.
 export function viewerToken(): string | null {
+  const pw = process.env.ADMIN_PASSWORD;
+  return pw ? hmac(pw, "jamie-viewer-v2") : null;
+}
+
+// The old JAMIE_PASSWORD token, still honoured so a session opened before the
+// PIN existed survives. Only live while that variable is set.
+function legacyViewerToken(): string | null {
   const pw = process.env.JAMIE_PASSWORD;
   return pw ? hmac(pw, "jamie-viewer-v1") : null;
 }
@@ -29,8 +45,10 @@ export function adminConfigured(): boolean {
   return Boolean(process.env.ADMIN_PASSWORD);
 }
 
+// Jamie's side is ready as soon as Chris's password exists — his PIN is set
+// in the app, not here, so it's never a deploy-time question.
 export function viewerConfigured(): boolean {
-  return Boolean(process.env.JAMIE_PASSWORD);
+  return Boolean(process.env.ADMIN_PASSWORD);
 }
 
 function eq(a: string, b: string): boolean {
@@ -53,6 +71,8 @@ export const getRole = cache(async function getRole(): Promise<Role | null> {
   if (at && eq(value, at)) return "admin";
   const vt = viewerToken();
   if (vt && eq(value, vt)) return "viewer";
+  const lt = legacyViewerToken();
+  if (lt && eq(value, lt)) return "viewer";
   return null;
 });
 
@@ -62,6 +82,49 @@ export async function isAdmin(): Promise<boolean> {
 
 export async function isLoggedIn(): Promise<boolean> {
   return (await getRole()) !== null;
+}
+
+// ── How long a session lasts ──────────────────────────────────────────────────
+// Ten years, which is "never" as far as a phone is concerned. The point of the
+// PIN is that Jamie opens the app from his home screen and it's just there —
+// meeting a login screen every month is the thing that makes him stop looking.
+export const SESSION_DAYS = 3650;
+
+export function sessionCookie() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 60 * 60 * 24 * SESSION_DAYS,
+  };
+}
+
+// ── Jamie's PIN ───────────────────────────────────────────────────────────────
+// Four digits, because it's typed on a phone by someone who shouldn't have to
+// remember a password. What's stored is an HMAC of it, keyed with Chris's
+// password — so the settings row on its own gives nothing away, and nobody,
+// Chris included, can read the PIN back out later. Forgotten means "set a new
+// one", not "recover the old one".
+//
+// Four digits is only 10,000 guesses, so the login action counts wrong tries
+// and shuts the door for a while — see PIN_TRIES in store.ts. Without that this
+// would be a weekend's work to walk through.
+
+export const PIN_LENGTH = 4;
+
+export function isPin(value: string): boolean {
+  return new RegExp(`^[0-9]{${PIN_LENGTH}}$`).test(value);
+}
+
+export function pinHash(pin: string): string | null {
+  const secret = process.env.ADMIN_PASSWORD;
+  return secret ? hmac(secret, `jamie-pin-v1:${pin}`) : null;
+}
+
+export function pinMatches(pin: string, stored: string | null): boolean {
+  const h = pinHash(pin);
+  return Boolean(h && stored && eq(h, stored));
 }
 
 // ── The login link ────────────────────────────────────────────────────────────
@@ -129,9 +192,13 @@ export async function isViewingAsJamie(): Promise<boolean> {
 export const VAULT_COOKIE = "jm_vault";
 export const VAULT_MINUTES = 15;
 
+// Both roles hang off ADMIN_PASSWORD now — Jamie's half of the lock is his
+// PIN, which lives in the database, so there's no env var of his to key on.
+// Different salts keep the two tokens unrelated.
 export function vaultToken(role: Role): string | null {
-  const pw = role === "admin" ? process.env.ADMIN_PASSWORD : process.env.JAMIE_PASSWORD;
-  return pw ? hmac(pw, `jamie-vault-${role}-v1`) : null;
+  const pw = process.env.ADMIN_PASSWORD;
+  if (!pw) return null;
+  return hmac(pw, role === "admin" ? "jamie-vault-admin-v1" : "jamie-vault-viewer-v2");
 }
 
 // Is the person looking right now allowed to see actual passwords? Both locks
