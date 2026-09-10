@@ -17,6 +17,7 @@ import {
   CreditCard,
   Dumbbell,
   FileText,
+  HandCoins,
   HeartHandshake,
   Home,
   KeyRound,
@@ -42,6 +43,7 @@ export type PageKey =
   | "gym-story"
   | "gym-lease"
   | "big-picture"
+  | "money-story"
   | "story"
   | "divorce"
   | "married-vs-divorce";
@@ -214,6 +216,15 @@ export const PAGES: AppPage[] = [
       "The whole household: all our debt, the monthly gap, and how much credit is left.",
   },
   {
+    key: "money-story",
+    href: "/money-story",
+    label: "Our Money Story",
+    Icon: HandCoins,
+    slots: ["history"],
+    blurb:
+      "Where the joint debt came from, who's been paying it, and how the monthly cash actually moves. Tap any number for the details behind it.",
+  },
+  {
     key: "story",
     href: "/story",
     label: "The Debt Story",
@@ -263,7 +274,7 @@ export const SLOT_ORDER: Record<Slot, PageKey[]> = {
     "gym-story",
     "gym-lease",
   ],
-  history: ["big-picture", "story", "divorce", "married-vs-divorce"],
+  history: ["big-picture", "money-story", "story", "divorce", "married-vs-divorce"],
 };
 
 const BY_KEY = new Map(PAGES.map((p) => [p.key, p]));
