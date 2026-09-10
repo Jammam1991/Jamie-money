@@ -204,9 +204,17 @@ function FactBlock({ fact, accent }: { fact: MoneyStoryFact; accent: string }) {
             <div className="mt-2 px-1">
               <ul className="space-y-1.5">
                 {fact.breakdown.map((l) => (
-                  <li key={l.label} className="flex items-baseline justify-between gap-3 text-[13px]">
-                    <span className="min-w-0">{l.label}</span>
-                    {!allBare && <span className="shrink-0 font-medium">{money(l.amount)}</span>}
+                  <li key={l.label}>
+                    <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                      <span className="min-w-0">{l.label}</span>
+                      {!allBare && <span className="shrink-0 font-medium">{money(l.amount)}</span>}
+                    </div>
+                    {l.interest !== undefined && l.everythingElse !== undefined && (
+                      <div className="mt-0.5 text-[11px] text-muted">
+                        Interest {money(l.interest)} · Everything else{" "}
+                        {money(l.everythingElse)}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
