@@ -14,7 +14,10 @@
 // The business half of the story — Boxing RX — already has its own live,
 // drillable page at /gym-story, reading real numbers straight from Money
 // App. Rebuilding that here would duplicate it and drift, so this page ends
-// with a link across instead of a second copy.
+// with a link across instead of a second copy. The one business figure it
+// does carry (`businessChapters`) isn't a gym number at all — it's the slice
+// of Chris and Jamie's PERSONAL debt that the gym caused, which Money App
+// has no way to know about.
 
 export type MoneyStoryBasis = "measured" | "estimated" | "tbd";
 
@@ -61,7 +64,15 @@ export type CashFlowStep = {
 };
 
 export type MoneyStory = {
+  /** The personal chapters — personal money only, no business in them. */
   chapters: MoneyStoryChapter[];
+  /**
+   * The business chapters, kept in their own array rather than mixed into
+   * `chapters`, so a personal figure never quietly includes gym money. Split
+   * out on 2026-09-09: the $440,000 for 2023–now used to carry the Boxing RX
+   * line inside it, which made the personal spending read worse than it was.
+   */
+  businessChapters: MoneyStoryChapter[];
   cashFlow: CashFlowStep[];
   asOf: string;
 };
@@ -97,21 +108,22 @@ export function getMoneyStory(): MoneyStory {
         era: "2023 – now",
         title: "A different pattern",
         tone: "amber",
-        paragraphs: ["Something shifted. This sits on top of the $212,000 from 2017–2022."],
+        paragraphs: [
+          "Something shifted. This sits on top of the $212,000 from 2017–2022.",
+          "Personal money only. What went into Boxing RX happened in these same years, but it's counted on its own further down.",
+        ],
         fact: {
-          label: "Added in new debt",
-          amount: 440000,
+          label: "Added in new personal debt",
+          amount: 325000,
           basis: "estimated",
           note: "Chris's own reconstruction from bank statements.",
           breakdown: [
             { label: "Rolexes, trips, and many purchases", amount: 0 },
             { label: "Almost a year of rent (~$40,000)", amount: 0 },
             { label: "Jamie borrowed more than he earned from massage", amount: 0 },
-            {
-              label: "Investing in Boxing RX, and covering owner draws beyond what the business could support",
-              amount: 0,
-            },
           ],
+          breakdownNote:
+            "This used to read $440,000, with Boxing RX inside it. The gym's $115,000 now has its own section below — same total, told straight.",
         },
       },
       {
@@ -119,15 +131,16 @@ export function getMoneyStory(): MoneyStory {
         era: "Today",
         title: "The debt, added up",
         tone: "rose",
-        paragraphs: ["The two periods above, added together."],
+        paragraphs: ["Everything above, plus the gym section below, added together."],
         fact: {
           label: "Total debt today",
           amount: 650000,
           basis: "estimated",
-          note: "Sum of the two periods above.",
+          note: "Personal and business together, rounded.",
           breakdown: [
-            { label: "2017–2022", amount: 212000 },
-            { label: "2023–now", amount: 440000 },
+            { label: "2017–2022 — building a life", amount: 212000 },
+            { label: "2023–now — personal", amount: 325000 },
+            { label: "2025–2027 — the gym (below)", amount: 115000 },
           ],
         },
       },
@@ -228,6 +241,30 @@ export function getMoneyStory(): MoneyStory {
             { label: "Cash gift", amount: 200 },
           ],
           breakdownNote: "A few examples — not a full list.",
+        },
+      },
+    ],
+    businessChapters: [
+      {
+        id: "business-debt",
+        era: "2025 – 2027",
+        title: "The gym's share of the debt",
+        tone: "gold",
+        paragraphs: [
+          "This part isn't personal spending at all — it's Boxing RX. It used to be folded into the personal number above, which made the personal side look worse than it was.",
+          "Not counted here: the family security Chris put up for the lease — over $200,000 of liability that only turns into real money owed if the gym fails.",
+        ],
+        fact: {
+          label: "Personal debt taken on for the business",
+          amount: 115000,
+          basis: "estimated",
+          note: "Taken out of the 2023–now figure above, not added on top.",
+          breakdown: [
+            { label: "Personal loans Chris took to buy into the gym", amount: 56000 },
+            { label: "Jamie's owner draws, beyond what the gym could afford", amount: 58539 },
+          ],
+          breakdownNote:
+            "The buy-in loans came in November 2024, right before these years — Chris put them at $50,000–$60,000. The draws figure is measured. Together, rounded to $115,000.",
         },
       },
     ],

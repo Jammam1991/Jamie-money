@@ -65,7 +65,15 @@ export default function MoneyStoryClient({ story }: { story: MoneyStory }) {
 
       <CashFlowCard steps={story.cashFlow} />
 
-      <PartTwoLink />
+      <PartLabel>Part two — Business</PartLabel>
+
+      {/* Numbering runs straight on from the personal chapters — this is one
+          story in two parts, not two lists that both start at 1. */}
+      {story.businessChapters.map((chapter, i) => (
+        <Chapter key={chapter.id} chapter={chapter} index={story.chapters.length + i} />
+      ))}
+
+      <GymStoryLink />
 
       <Link
         href="/"
@@ -271,7 +279,7 @@ function CashFlowRow({ step, isLast }: { step: CashFlowStep; isLast: boolean }) 
   );
 }
 
-function PartTwoLink() {
+function GymStoryLink() {
   return (
     <Link href="/gym-story">
       <Card className="gym-fade-in flex items-center gap-3 border-l-4" style={{ borderLeftColor: "#b9740c" }}>
@@ -283,7 +291,7 @@ function PartTwoLink() {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[11px] font-medium uppercase tracking-[0.15em] text-faint">
-            Part two — Business
+            The whole business story
           </span>
           <span className="block text-[15px] font-medium">Continue with the Gym Story →</span>
         </span>
