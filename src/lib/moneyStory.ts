@@ -181,7 +181,7 @@ export function getMoneyStory(): MoneyStory {
         title: "What Chris has paid, over the years",
         tone: "teal",
         paragraphs: [
-          "7 years, 8 months. Cash out of Chris's personal accounts — a floor figure, not the full picture; the real total is likely somewhat higher. Jamie paid nothing toward this, except some of his own credit cards, tracked separately.",
+          "7 years, 8 months. Cash out of Chris's personal accounts, not counting the TD Bank account — a floor figure, not the full picture; the real total is likely somewhat higher. Jamie paid nothing toward this, except some of his own credit cards, tracked separately.",
         ],
         fact: {
           label: "Total paid toward debt",
@@ -199,7 +199,7 @@ export function getMoneyStory(): MoneyStory {
             { label: "2026 (to Sep 4)", amount: 58554, interest: 14687, everythingElse: 43867 },
           ],
           breakdownNote:
-            "$56,266 of interest, $814,033 of everything else. \"Everything else\" is not the same as principal — it's whatever wasn't booked as interest, so it still holds interest that was never labelled. That's why 2019–2023 look almost interest-free and 2024 onward doesn't. 2026 is a part year, nine months.",
+            "No TD Bank account in any of these rows. $56,266 of interest, $814,033 of everything else. \"Everything else\" is not the same as principal — it's whatever wasn't booked as interest, so it still holds interest that was never labelled. That's why 2019–2023 look almost interest-free and 2024 onward doesn't. 2026 is a part year, nine months.",
         },
       },
     ],
