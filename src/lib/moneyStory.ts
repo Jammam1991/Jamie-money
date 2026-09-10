@@ -21,7 +21,17 @@
 
 export type MoneyStoryBasis = "measured" | "estimated" | "tbd";
 
-export type MoneyStoryLine = { label: string; amount: number };
+export type MoneyStoryLine = {
+  label: string;
+  amount: number;
+  /**
+   * How this line's total splits, for rows where the split is the point —
+   * the year-by-year payment history. Both together or neither: half a split
+   * would invite the reader to work out the other half and be wrong.
+   */
+  interest?: number;
+  everythingElse?: number;
+};
 
 export type MoneyStoryFact = {
   /** What the headline figure means, e.g. "Added in debt". */
@@ -167,80 +177,29 @@ export function getMoneyStory(): MoneyStory {
       },
       {
         id: "total-paid",
-        era: "2020 – Sept 2026",
+        era: "2019 – Sept 2026",
         title: "What Chris has paid, over the years",
         tone: "teal",
         paragraphs: [
-          "6 years, 8 months. Cash out of Chris's personal accounts — a floor figure, not the full picture; the real total is likely somewhat higher. Jamie paid nothing toward this, except some of his own credit cards, tracked separately.",
+          "7 years, 8 months. Cash out of Chris's personal accounts — a floor figure, not the full picture; the real total is likely somewhat higher. Jamie paid nothing toward this, except some of his own credit cards, tracked separately.",
         ],
         fact: {
           label: "Total paid toward debt",
-          amount: 910000,
+          amount: 870299,
           basis: "measured",
-          note: "From bank statements and the ledger. Floor figure.",
+          note: "The eight years below, added up — not a rounded guess.",
           breakdown: [
-            { label: "Principal", amount: 802000 },
-            { label: "Interest — about 12% of every dollar paid", amount: 108000 },
+            { label: "2019", amount: 39275, interest: 484, everythingElse: 38791 },
+            { label: "2020", amount: 118965, interest: 702, everythingElse: 118263 },
+            { label: "2021", amount: 85150, interest: 87, everythingElse: 85063 },
+            { label: "2022", amount: 128266, interest: 298, everythingElse: 127968 },
+            { label: "2023", amount: 109417, interest: 702, everythingElse: 108715 },
+            { label: "2024", amount: 115730, interest: 12853, everythingElse: 102877 },
+            { label: "2025", amount: 214942, interest: 26453, everythingElse: 188489 },
+            { label: "2026 (to Sep 4)", amount: 58554, interest: 14687, everythingElse: 43867 },
           ],
           breakdownNote:
-            "The interest split for 2020–2022 is estimated ($20k–45k range) — only 2023–2026 ($78k) is measured from statements.",
-        },
-      },
-      {
-        id: "net-worth",
-        era: "Today",
-        title: "Where that leaves us",
-        tone: "rose",
-        paragraphs: [],
-        fact: {
-          label: "Net worth",
-          amount: -350000,
-          basis: "estimated",
-          note: "Assets ~$300,000 (incl. $75,000 Comerica severance + $25,000 medical lawsuit) minus debt of $650,000.",
-        },
-      },
-      {
-        id: "chris-covered",
-        era: "2026",
-        title: "What Chris covered for Jamie",
-        tone: "gold",
-        paragraphs: [],
-        fact: {
-          label: "Total for 2026",
-          amount: 27600,
-          basis: "estimated",
-          note: "Net of a few thousand in PT-cash payments that came back the other way.",
-          breakdown: [
-            { label: "Earnest Homes payments (5 charges)", amount: 16817 },
-            { label: "Paris trip charges", amount: 2204 },
-            { label: "Glendale apartment (application + deposit)", amount: 1045 },
-            { label: "Car insurance (2 payments)", amount: 946 },
-            { label: "Notetaker for Jamie", amount: 849 },
-            { label: "Revolut transfers", amount: 845 },
-          ],
-          breakdownNote: "A few examples, 2026 — not a full list.",
-        },
-      },
-      {
-        id: "gifts",
-        era: "2026",
-        title: "Gifts",
-        tone: "sky",
-        paragraphs: [],
-        fact: {
-          label: "Total for 2026",
-          amount: 2541,
-          basis: "measured",
-          note: "From the 2026 books, unverified against statements.",
-          breakdown: [
-            { label: "Amazon — Garmin watch", amount: 281 },
-            { label: "Amazon — massage tables (net of refund)", amount: 258 },
-            { label: "Moncler USA", amount: 241 },
-            { label: "Alo Yoga", amount: 210 },
-            { label: "Amazon — EV charger", amount: 210 },
-            { label: "Cash gift", amount: 200 },
-          ],
-          breakdownNote: "A few examples — not a full list.",
+            "$56,266 of interest, $814,033 of everything else. \"Everything else\" is not the same as principal — it's whatever wasn't booked as interest, so it still holds interest that was never labelled. That's why 2019–2023 look almost interest-free and 2024 onward doesn't. 2026 is a part year, nine months.",
         },
       },
     ],
@@ -305,7 +264,8 @@ export function getMoneyStory(): MoneyStory {
         amount: 2500,
         basis: "estimated",
         kind: "out",
-        explain: "The 2026 totals above (~$27,600 covered + $2,541 gifts) spread over 12 months.",
+        explain:
+          "Roughly $27,600 Chris covered for Jamie in 2026, plus $2,541 in gifts, spread over 12 months.",
       },
       {
         label: "Covers the business",
