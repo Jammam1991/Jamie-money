@@ -72,8 +72,9 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
   const r = useMemo(() => runPlan(inputs, base.asOf), [inputs, base.asOf]);
   const age = base.settings.retireAge;
   const extra = r.fromChrisAtRetire - r.totalLoanPaid;
-  const savingsLine =
-    sv.contribMode === "dollars" ? `${money(sv.contribMonthly)} a month` : `${sv.contribPct}% of your pay`;
+  const totalExtra = r.withSavingsAtRetire - r.totalLoanPaid;
+  const savingsGrown = r.withSavingsAtRetire - r.fromChrisAtRetire;
+  const savingNow = sv.contribMode === "dollars" ? sv.contribMonthly : (sv.yearlyPay * sv.contribPct) / 100 / 12;
 
   return (
     <div className="space-y-4">
@@ -88,31 +89,41 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
         />
       </div>
 
-      <div className="rounded-2xl border px-4 py-4 space-y-2" style={{ borderColor: "var(--good)", background: "var(--good-bg)" }}>
+      {/* Every number you can change moves at least one of these three — your
+          own savings included. They used to feed only a grey line underneath,
+          so changing a % looked like it did nothing. */}
+      <div className="rounded-2xl border px-4 py-4 space-y-3" style={{ borderColor: "var(--good)", background: "var(--good-bg)" }}>
         <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted">When you turn {age}</p>
-        {r.totalLoanPaid === 0 ? (
-          <p className="text-base">Nothing to pay back, so the 401k is all yours: {money(r.fromChrisAtRetire)}.</p>
-        ) : extra >= 0 ? (
-          <p className="text-base">
-            The 401k money from Chris grows to <b className="text-pos">{money(r.fromChrisAtRetire)}</b>. You will have paid Chris{" "}
-            <b>{money(r.totalLoanPaid)}</b> in all. So every payment comes back to you —{" "}
-            <b className="text-pos">plus {money(extra)}</b>. Think of each payment as going into your own savings.
-          </p>
-        ) : (
-          <p className="text-base">
-            The 401k money from Chris grows to <b className="text-pos">{money(r.fromChrisAtRetire)}</b> — that gives back{" "}
-            <b>{Math.round(r.coverage * 100)}%</b> of the {money(r.totalLoanPaid)} you pay Chris.
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Big label="You paid Chris in all" value={money(r.totalLoanPaid)} sub={`${money(inputs.monthlyPayment)} a month`} tone="neg" />
+          <Big
+            label="Your 401k"
+            value={money(r.withSavingsAtRetire)}
+            sub={`${money(r.fromChrisAtRetire)} from Chris's share + ${money(savingsGrown)} from your savings`}
+            tone="pos"
+          />
+          <Big label="Could pay you for life" value={`${money(r.monthlyIncomeWithSavings)}/mo`} sub="Taking out 4% a year" tone="plain" />
+        </div>
+        <p className="text-base">
+          {r.totalLoanPaid === 0 ? (
+            "Nothing to pay back, so the 401k is all yours."
+          ) : totalExtra >= 0 ? (
+            <>
+              Every payment you make comes back to you in your 401k — <b className="text-pos">plus {money(totalExtra)}</b>.
+              Think of each payment as going into your own savings.
+            </>
+          ) : (
+            <>
+              Your 401k gives back <b>{Math.round((r.withSavingsAtRetire / r.totalLoanPaid) * 100)}%</b> of what you pay Chris.
+            </>
+          )}
+        </p>
+        {r.totalLoanPaid > 0 && (
+          <p className="text-sm text-muted">
+            Chris&apos;s share alone grows to {money(r.fromChrisAtRetire)}
+            {extra >= 0 ? ` — more than all you pay him, by ${money(extra)}` : ` — ${Math.round(r.coverage * 100)}% of what you pay him`}.
           </p>
         )}
-        <p className="text-sm text-muted">
-          That could pay you about <b className="text-foreground">{money(r.monthlyIncomeFromChris)} a month</b> for life —
-          compared with the {money(inputs.monthlyPayment)} a month you pay now.
-        </p>
-        <p className="text-sm text-muted">
-          If you also save {savingsLine}
-          {sv.raisePct > 0 ? `, going up ${sv.raisePct}% a year` : ""}, you get to{" "}
-          <b className="text-foreground">{money(r.withSavingsAtRetire)}</b> — about {money(r.monthlyIncomeWithSavings)} a month.
-        </p>
       </div>
 
       <Card>
@@ -150,8 +161,8 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
           onChange={(v) => set("raisePct", v)}
         />
         <p className="text-xs text-muted">
-          You put in {money(r.contributedTotal)} of your own by {age}. With growth it turns into{" "}
-          {money(r.withSavingsAtRetire - r.fromChrisAtRetire)}.
+          That&apos;s <b className="text-foreground">{money(savingNow)} a month</b> now. You put in {money(r.contributedTotal)} of your
+          own by {age}; with growth it turns into {money(savingsGrown)}.
         </p>
         <button type="button" onClick={() => setSv(start)} className="text-xs text-accent">
           Back to the starting numbers
@@ -189,6 +200,17 @@ function Tile({ label, value, sub, tone }: { label: string; value: string; sub: 
       <p className={`mt-1 text-2xl font-semibold ${color}`}>{value}</p>
       <p className="mt-1 text-xs text-muted">{sub}</p>
     </Card>
+  );
+}
+
+function Big({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: "pos" | "neg" | "plain" }) {
+  const color = tone === "pos" ? "text-pos" : tone === "neg" ? "text-neg" : "text-foreground";
+  return (
+    <div>
+      <p className="text-xs text-muted">{label}</p>
+      <p className={`text-2xl font-semibold ${color}`}>{value}</p>
+      <p className="mt-0.5 text-[11px] text-muted">{sub}</p>
+    </div>
   );
 }
 

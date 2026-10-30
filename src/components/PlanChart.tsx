@@ -15,7 +15,7 @@ const SERIES = [
 ] as const
 
 const short = (n: number) =>
-  n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${Math.round(n / 1000)}k`
+  n === 0 ? '$0' : n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M` : `$${Math.round(n / 1000)}k`
 
 export default function PlanChart({ points }: { points: YearPoint[] }) {
   if (points.length < 2) return null
