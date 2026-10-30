@@ -22,6 +22,7 @@ import {
   Home,
   KeyRound,
   Landmark,
+  PiggyBank,
   Receipt,
   Scale,
   type LucideIcon,
@@ -46,6 +47,7 @@ export type PageKey =
   | "money-story"
   | "story"
   | "divorce"
+  | "retirement"
   | "married-vs-divorce";
 
 // The three places a link can sit. "history" is the collapsible group inside the
@@ -241,6 +243,15 @@ export const PAGES: AppPage[] = [
     blurb: "Support, the split, benefits, key dates.",
   },
   {
+    key: "retirement",
+    href: "/retirement",
+    label: "401k Plan",
+    Icon: PiggyBank,
+    slots: ["history"],
+    blurb:
+      "What's owed each way, and how the 401k share from Chris grows to pay back every monthly payment by 60.",
+  },
+  {
     key: "married-vs-divorce",
     href: "/married-vs-divorce",
     label: "Married vs Divorce",
@@ -274,7 +285,7 @@ export const SLOT_ORDER: Record<Slot, PageKey[]> = {
     "gym-story",
     "gym-lease",
   ],
-  history: ["big-picture", "money-story", "story", "divorce", "married-vs-divorce"],
+  history: ["big-picture", "money-story", "story", "divorce", "retirement", "married-vs-divorce"],
 };
 
 const BY_KEY = new Map(PAGES.map((p) => [p.key, p]));
