@@ -67,12 +67,15 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
 
   const set = (patch: Partial<Savings>) => setSv((p) => ({ ...p, ...patch }));
 
-  const inputs = useMemo(() => resolveInputs({ ...base.settings, ...sv }, base.live), [base, sv]);
+  const inputs = useMemo(() => resolveInputs({ ...base.settings, ...sv }, base.live, base.asOf), [base, sv]);
   const r = useMemo(() => runPlan(inputs, base.asOf), [inputs, base.asOf]);
   const age = base.settings.retireAge;
   const ratio = r.totalLoanPaid > 0 ? r.withSavingsAtRetire / r.totalLoanPaid : 0;
   const savingNow = sv.contribMode === "dollars" ? sv.contribMonthly : (sv.yearlyPay * sv.contribPct) / 100 / 12;
   const barMax = Math.max(r.totalLoanPaid, r.withSavingsAtRetire);
+  const startLabel = monthFromNow(base.asOf, inputs.deferMonths + 1);
+  const endLabel = r.payoffMonths === null ? null : monthFromNow(base.asOf, r.payoffMonths);
+  const interestPaid = Math.max(0, r.totalLoanPaid - inputs.jamieOwes);
 
   return (
     <div className="space-y-4">
@@ -118,11 +121,7 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
           n={2}
           title="You pay Chris back"
           value={`${money(inputs.monthlyPayment)}/mo`}
-          sub={
-            r.payoffMonths === null
-              ? "Not enough to ever pay it off"
-              : `${money(inputs.jamieOwes)} in all, done ${monthFromNow(base.asOf, r.payoffMonths)}`
-          }
+          sub={endLabel === null ? "Not enough to ever pay it off" : `${startLabel} to ${endLabel}, ${money(r.totalLoanPaid)} in all`}
         />
         <Step
           n={3}
@@ -132,6 +131,24 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
           glow
         />
       </div>
+
+      {/* The deal Chris saved, in one plain line. Read-only here. */}
+      <section className="rounded-3xl border border-border bg-card p-5 space-y-1">
+        <h2 className="text-lg font-semibold">The deal</h2>
+        <p className="text-sm text-muted">
+          You owe Chris <b className="text-foreground">{money(inputs.jamieOwes)}</b>
+          {inputs.loanRatePct > 0 ? `, at ${inputs.loanRatePct}% interest a year` : ", no interest"}.
+        </p>
+        {endLabel === null ? (
+          <p className="text-sm text-muted">{money(inputs.monthlyPayment)} a month never pays it off.</p>
+        ) : (
+          <p className="text-sm text-muted">
+            You pay <b className="text-foreground">{money(inputs.monthlyPayment)} a month</b> from {startLabel} to {endLabel}
+            {inputs.deferMonths > 0 ? ` (nothing for the first ${inputs.deferMonths} ${inputs.deferMonths === 1 ? "month" : "months"})` : ""}.
+            That&apos;s {money(r.totalLoanPaid)} in all{interestPaid >= 1 ? `, ${money(interestPaid)} of it interest` : ""}.
+          </p>
+        )}
+      </section>
 
       <div className="rounded-3xl border border-border bg-card p-5">
         <PlanChart points={r.points} />
