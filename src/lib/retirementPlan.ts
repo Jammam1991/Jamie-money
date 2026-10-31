@@ -24,6 +24,10 @@ export type PlanInputs = {
   monthlyPayment: number;
   /** Interest Chris charges on the loan, % a year. 0 = none. */
   loanRatePct: number;
+  /** Months from today with no payments before the first one. 0 = starts next month. */
+  deferMonths: number;
+  /** Whether interest keeps adding up during those paused months. */
+  deferInterest: boolean;
   /** Yearly growth guess for the 401(k), %. */
   returnPct: number;
   /** Jamie's birthday, YYYY-MM-DD. */
@@ -129,9 +133,12 @@ export function runPlan(i: PlanInputs, today: string): PlanResult {
 
   // The loan can outlast retireAge, so it runs on its own clock for the total
   // paid. 100 years is "never" — a payment that doesn't cover the interest.
-  const loanMonths = Math.max(monthsToRetire, 1200);
+  const loanMonths = Math.max(monthsToRetire, 1200 + i.deferMonths);
   for (let m = 1; m <= loanMonths; m++) {
-    if (loanLeft > 0) {
+    if (loanLeft > 0 && m <= i.deferMonths) {
+      // Paused: nothing paid, and interest only if the deal says so.
+      if (i.deferInterest) loanLeft += loanLeft * loanRate;
+    } else if (loanLeft > 0) {
       loanLeft += loanLeft * loanRate;
       const pay = Math.min(payment, loanLeft);
       loanLeft -= pay;
@@ -177,6 +184,13 @@ export function runPlan(i: PlanInputs, today: string): PlanResult {
   };
 }
 
+/** Months from today's month to a YYYY-MM month (next month = 1). */
+export function monthsUntil(today: string, month: string): number {
+  const [ty, tm] = today.split("-").map(Number);
+  const [y, m] = month.split("-").map(Number);
+  return y * 12 + m - (ty * 12 + tm);
+}
+
 /** The monthly payment that clears `owed` in `years` at `ratePct` a year. */
 export function paymentForYears(owed: number, years: number, ratePct: number): number {
   const n = Math.max(1, Math.round(years * 12));
@@ -210,6 +224,11 @@ export type PlanSettings = {
   monthlyPayment: number | null;
   payoffYears: number;
   loanRatePct: number;
+  /** Month of the first payment, YYYY-MM. null = next month. Optional so an
+   *  older saved deal (or an older Money App feeding jamie-money) still reads. */
+  firstPayment?: string | null;
+  /** Whether interest adds up while payments haven't started. Default yes. */
+  deferInterest?: boolean;
   returnPct: number;
   birthDate: string;
   retireAge: number;
@@ -239,6 +258,8 @@ export type PlanBase = {
   asOf: string;
   live: PlanLive;
   settings: PlanSettings;
+  /** When Chris last saved the deal, or null if it's still the starting numbers. */
+  savedAt?: string | null;
 };
 
 /** The whole 401(k): what's invested plus what's out on loan to Chris and coming back. */
@@ -254,15 +275,22 @@ export function owesFromSource(source: OwesSource, live: PlanLive): number {
 }
 
 /** Turn the knobs plus the live figures into the numbers runPlan needs. */
-export function resolveInputs(s: PlanSettings, live: PlanLive): PlanInputs {
+export function resolveInputs(s: PlanSettings, live: PlanLive, today: string): PlanInputs {
   const jamieOwes = s.jamieOwesOverride ?? owesFromSource(s.jamieOwesSource, live);
   const fromChris = s.splitOverride ?? (k401Total(live) * s.splitPct) / 100;
-  const monthlyPayment = s.monthlyPayment ?? paymentForYears(jamieOwes, s.payoffYears, s.loanRatePct);
+  const deferMonths = s.firstPayment ? Math.max(0, monthsUntil(today, s.firstPayment) - 1) : 0;
+  const deferInterest = s.deferInterest ?? true;
+  // Spread over the years from the first payment, on what's owed by then.
+  const owedAtStart =
+    deferInterest && s.loanRatePct > 0 ? jamieOwes * Math.pow(1 + s.loanRatePct / 100 / 12, deferMonths) : jamieOwes;
+  const monthlyPayment = s.monthlyPayment ?? paymentForYears(owedAtStart, s.payoffYears, s.loanRatePct);
   return {
     jamieOwes,
     fromChris,
     monthlyPayment,
     loanRatePct: s.loanRatePct,
+    deferMonths,
+    deferInterest,
     returnPct: s.returnPct,
     birthDate: s.birthDate,
     retireAge: s.retireAge,
