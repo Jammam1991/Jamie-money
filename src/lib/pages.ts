@@ -17,6 +17,7 @@ import {
   CreditCard,
   Dumbbell,
   FileText,
+  FolderKanban,
   HandCoins,
   HeartHandshake,
   Home,
@@ -48,7 +49,8 @@ export type PageKey =
   | "story"
   | "divorce"
   | "retirement"
-  | "married-vs-divorce";
+  | "married-vs-divorce"
+  | "projects";
 
 // The three places a link can sit. "history" is the collapsible group inside the
 // menu — still the menu, one level down.
@@ -127,6 +129,15 @@ export const PAGES: AppPage[] = [
     slots: [],
     homeCard: true,
     blurb: "The short pay comparison, opened from the home screen card.",
+  },
+  {
+    key: "projects",
+    href: "/projects",
+    label: "Projects",
+    Icon: FolderKanban,
+    slots: ["menu"],
+    blurb:
+      "Everything Jamie's working on — Career, the divorce, the roaches, the rent help — with the steps, people, money and paperwork for each.",
   },
   {
     key: "job-vs-business",
@@ -274,6 +285,7 @@ export const PAGES: AppPage[] = [
 export const SLOT_ORDER: Record<Slot, PageKey[]> = {
   nav: ["home", "bills", "debt", "owes"],
   menu: [
+    "projects",
     "job-vs-business",
     "career",
     "debt",

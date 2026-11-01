@@ -21,6 +21,7 @@ import { isDebtType, type DebtType, type ReportSnapshot } from "./creditReport";
 import { parsePlacements, type Placements } from "./navLayout";
 import { DEFAULT_HOME_BUYING, type HomeBuyingInputs } from "./homeBuying";
 import { DEFAULT_CAR_INFO, type CarInfo, type CarHistoryEntry } from "./carInfo";
+import { STARTER_PROJECTS, parseProjects, type Project } from "./projects";
 import { billMonthRange } from "./billMonth";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
@@ -657,6 +658,29 @@ export async function getCarHistory(): Promise<CarHistoryEntry[]> {
     }));
   } catch {
     return [];
+  }
+}
+
+// The Projects list — one JSON row, see projects.ts. No row yet means nothing's
+// been saved, so the six starters show. Null means the row couldn't be read
+// right now, which the page says rather than showing the starters as if they
+// were his.
+export const PROJECTS_KEY = "projects";
+
+export async function getProjects(): Promise<Project[] | null> {
+  const c = client();
+  if (!c) return STARTER_PROJECTS;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", PROJECTS_KEY)
+    .maybeSingle();
+  if (error) return null;
+  if (!data?.value) return STARTER_PROJECTS;
+  try {
+    return parseProjects(JSON.parse(String(data.value)));
+  } catch {
+    return null;
   }
 }
 
