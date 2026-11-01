@@ -7,8 +7,8 @@ import { Card, PageTitle } from "@/components/ui";
 // nothing is happening.
 //
 // It mirrors the real layout (the new-debt card with its switch, the total
-// with its four buckets, then a row apiece for the folded detail) so the page
-// doesn't jump around when the figures land.
+// that opens onto its buckets, then a row apiece for the folded detail) so the
+// page doesn't jump around when the figures land.
 export default function Loading() {
   return (
     <div>
@@ -27,17 +27,8 @@ export default function Loading() {
         </div>
 
         <Card>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="h-9 rounded bg-tint" />
-            <div className="h-9 rounded bg-tint" />
-          </div>
-          <div className="mt-3 h-3 w-full rounded-full bg-tint" />
-          <div className="mt-3 space-y-2">
-            <div className="h-14 w-full rounded-xl bg-tint" />
-            <div className="h-14 w-full rounded-xl bg-tint" />
-            <div className="h-14 w-full rounded-xl bg-tint" />
-            <div className="h-14 w-full rounded-xl bg-tint" />
-          </div>
+          <div className="h-3 w-24 rounded bg-tint" />
+          <div className="mt-2 h-8 w-40 rounded bg-tint" />
         </Card>
 
         <div className="h-3 w-24 rounded bg-tint" />
