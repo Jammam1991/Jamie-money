@@ -100,7 +100,7 @@ export async function getExtraPayments(): Promise<ExtraPayment[]> {
   return [
     {
       id: SETTLEMENT_ROW_ID,
-      name: "Divorce Settlement Loan",
+      name: "Divorce Proposal",
       balance: settlement.balance,
       monthly: settlement.monthly,
     },

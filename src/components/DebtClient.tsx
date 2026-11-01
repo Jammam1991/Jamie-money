@@ -203,7 +203,7 @@ function settlementLoan(supportMonthly: number, terms: SettlementTerms): Debt {
   const balance = terms.total ?? supportMonthly * months;
   return {
     id: "__divorce_settlement__",
-    name: "Divorce Settlement Loan",
+    name: "Divorce Proposal",
     balance,
     monthly: monthlyPayment(balance, apr, months),
     paidPct: 0,
@@ -1073,7 +1073,7 @@ export default function DebtClient({
       {settlement.balance > 0 && (
         <Fold
           icon={<span className="text-[15px] leading-none">📄</span>}
-          title="Divorce settlement"
+          title="Divorce Proposal"
           summary={money(settlement.balance)}
         >
           {settlementPanel()}
@@ -1086,7 +1086,7 @@ export default function DebtClient({
               <span>{money(carryingTotal)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted">+ Deferred settlement</span>
+              <span className="text-muted">+ Divorce Proposal</span>
               <span>{money(settlement.balance)}</span>
             </div>
             <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
@@ -1094,7 +1094,7 @@ export default function DebtClient({
               <span>{money(owedIncludingSettlement)}</span>
             </div>
             <p className="pt-1 text-[11px] text-muted">
-              With the settlement it would be{" "}
+              With the proposal it would be{" "}
               {money(monthlyIncludingSettlement)} a month rather than{" "}
               {money(monthlyTotal)}.
             </p>
@@ -1110,9 +1110,6 @@ export default function DebtClient({
         monthlyAfter={monthlyAfter}
         offsets={OFFSETS}
         lump={lump}
-        deposit={SECURITY_DEPOSIT}
-        depositShare={SECURITY_DEPOSIT * (splitPct / 100)}
-        splitPct={splitPct}
       />
 
       {/* Which debts cost the most to carry, in interest alone. */}
@@ -1379,10 +1376,8 @@ function CarryCost({
 // highest-interest debts first and only a debt cleared outright stops costing
 // anything — paying half a card off doesn't halve its minimum.
 //
-// The security deposit is listed but greyed and marked as already counted: it
-// came off what went into the gym, so it has already shrunk Jamie's share
-// further up the page. Listing it plainly would subtract it twice; leaving it
-// out would leave "where did the deposit go?" unanswered.
+// The gym's security deposit isn't listed here: it already came off what went
+// into the gym, further up the page, so listing it would subtract it twice.
 function AfterChangesCard({
   balanceNow,
   balanceAfter,
@@ -1390,9 +1385,6 @@ function AfterChangesCard({
   monthlyAfter,
   offsets,
   lump,
-  deposit,
-  depositShare,
-  splitPct,
 }: {
   balanceNow: number;
   balanceAfter: number;
@@ -1400,9 +1392,6 @@ function AfterChangesCard({
   monthlyAfter: number;
   offsets: Offset[];
   lump: LumpSum;
-  deposit: number;
-  depositShare: number;
-  splitPct: number;
 }) {
   const total = offsets.reduce((sum, o) => sum + o.amount, 0);
   if (total <= 0) return null;
@@ -1414,7 +1403,7 @@ function AfterChangesCard({
   return (
     <Fold
       icon={<span className="text-[15px] leading-none">⌚</span>}
-      title="After the watch sells"
+      title="After Updates"
       summary={<span style={{ color: GREEN }}>{money(balanceAfter)}</span>}
     >
       <div className="grid grid-cols-2 gap-6">
@@ -1465,22 +1454,6 @@ function AfterChangesCard({
           </div>
         ))}
 
-        {/* Already counted further up — greyed, and it says where it went. */}
-        <div className="flex items-start gap-2.5 rounded-xl bg-tint p-2.5">
-          <span className="text-[17px] opacity-60">🔑</span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[14px] font-medium text-muted">
-              Security deposit coming back
-            </span>
-            <span className="block text-[11px] text-muted">
-              already taken off what went into the gym — {money(depositShare)}{" "}
-              of it is Jamie&apos;s, being his {splitPct}% share
-            </span>
-          </span>
-          <span className="shrink-0 text-[15px] font-bold text-muted">
-            −{money(deposit)}
-          </span>
-        </div>
       </div>
 
       <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
@@ -2164,7 +2137,7 @@ function SettlementForm({
 
   return (
     <div className="space-y-2 rounded-xl bg-tint p-3">
-      <p className="text-[13px] font-medium">Divorce Settlement Loan</p>
+      <p className="text-[13px] font-medium">Divorce Proposal</p>
       <div className="grid grid-cols-3 gap-2">
         <label className="block">
           <span className="mb-1 block text-[11px] text-muted">Owed $</span>
