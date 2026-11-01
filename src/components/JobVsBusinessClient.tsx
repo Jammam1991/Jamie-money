@@ -134,7 +134,7 @@ export default function JobVsBusinessClient({
       }
       setProblem(
         res.status === 503
-          ? "Not saved — this page isn't hooked up to the database yet. Chris needs to finish the setup."
+          ? "Not saved — this page isn't hooked up to the database yet. Admin needs to finish the setup."
           : "Not saved — that didn't go through. Give it another go."
       );
     } catch {

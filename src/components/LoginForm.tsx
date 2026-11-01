@@ -84,7 +84,7 @@ export default function LoginForm({
       ) : (
         <div className="space-y-4">
           <p className="text-center text-[13px] text-muted">
-            {pinReady ? "Enter your PIN" : "No PIN set yet — ask Chris for one"}
+            {pinReady ? "Enter your PIN" : "No PIN set yet — ask Admin for one"}
           </p>
 
           {/* One dot per digit: enough feedback to know a tap landed, without
@@ -130,7 +130,7 @@ export default function LoginForm({
               }}
               className="text-[13px] text-muted underline underline-offset-2"
             >
-              I&apos;m Chris — use a password
+              I&apos;m Admin — use a password
             </button>
           </div>
         </div>

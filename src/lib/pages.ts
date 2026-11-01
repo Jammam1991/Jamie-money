@@ -119,7 +119,7 @@ export const PAGES: AppPage[] = [
     Icon: AlertCircle,
     slots: ["nav"],
     blurb:
-      "Money owed to Chris. The tab only appears when something is actually late.",
+      "Money owed to Admin. The tab only appears when something is actually late.",
   },
   {
     key: "compare",
@@ -260,7 +260,7 @@ export const PAGES: AppPage[] = [
     Icon: PiggyBank,
     slots: ["history"],
     blurb:
-      "What's owed each way, and how the 401k share from Chris grows to pay back every monthly payment by 60.",
+      "What's owed each way, and how the 401k share from Admin grows to pay back every monthly payment by 60.",
   },
   {
     key: "married-vs-divorce",

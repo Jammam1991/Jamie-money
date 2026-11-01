@@ -133,7 +133,7 @@ export const OPEN_ITEMS: { emoji: string; title: string; detail: string }[] = [
     emoji: "🕳️",
     title: "The $89,360 gap",
     detail:
-      "The HELOC was $212,000. The itemised list only accounts for $122,640 over the same years. Either it also rolled in Chris's own pre-Jamie debt, or ~$89k of real spending was never written down.",
+      "The HELOC was $212,000. The itemised list only accounts for $122,640 over the same years. Either it also rolled in Admin's own pre-Jamie debt, or ~$89k of real spending was never written down.",
   },
   {
     emoji: "📈",
@@ -151,7 +151,7 @@ export const OPEN_ITEMS: { emoji: string; title: string; detail: string }[] = [
     emoji: "🧮",
     title: "$15,046 of duplicates already pulled out",
     detail:
-      "The Affirm loans, Vegas table, Bloomingdales and CIS payment were each entered twice; four more items were on both the Chris Loan tab and the bank export. Worth knowing before anyone re-adds the original sheet.",
+      "The Affirm loans, Vegas table, Bloomingdales and CIS payment were each entered twice; four more items were on both the Admin Loan tab and the bank export. Worth knowing before anyone re-adds the original sheet.",
   },
 ];
 

@@ -103,7 +103,7 @@ export function getMoneyStory(): MoneyStory {
           label: "Added in debt over these years",
           amount: 212000,
           basis: "estimated",
-          note: "Chris's own reconstruction from bank statements.",
+          note: "Admin's own reconstruction from bank statements.",
           breakdown: [
             { label: "Immigration costs (marriage, etc.)", amount: 0 },
             { label: "Relocation to LA", amount: 0 },
@@ -126,7 +126,7 @@ export function getMoneyStory(): MoneyStory {
           label: "Added in new personal debt",
           amount: 325000,
           basis: "estimated",
-          note: "Chris's own reconstruction from bank statements.",
+          note: "Admin's own reconstruction from bank statements.",
           breakdown: [
             { label: "Rolexes, trips, and many purchases", amount: 0 },
             { label: "Almost a year of rent (~$40,000)", amount: 0 },
@@ -169,7 +169,7 @@ export function getMoneyStory(): MoneyStory {
           note: "Interest and principal, combined.",
         },
         secondaryFact: {
-          label: "Paid by Chris",
+          label: "Paid by Admin",
           amount: 90,
           basis: "measured",
           note: "As a percent of the $12,000/month total.",
@@ -178,10 +178,10 @@ export function getMoneyStory(): MoneyStory {
       {
         id: "total-paid",
         era: "2019 – Sept 2026",
-        title: "What Chris has paid, over the years",
+        title: "What Admin has paid, over the years",
         tone: "teal",
         paragraphs: [
-          "7 years, 8 months. Cash out of Chris's personal accounts, not counting the TD Bank account — a floor figure, not the full picture; the real total is likely somewhat higher. Jamie paid nothing toward this, except some of his own credit cards, tracked separately.",
+          "7 years, 8 months. Cash out of Admin's personal accounts, not counting the TD Bank account — a floor figure, not the full picture; the real total is likely somewhat higher. Jamie paid nothing toward this, except some of his own credit cards, tracked separately.",
         ],
         fact: {
           label: "Total paid toward debt",
@@ -211,7 +211,7 @@ export function getMoneyStory(): MoneyStory {
         tone: "gold",
         paragraphs: [
           "This part isn't personal spending at all — it's Boxing RX. It used to be folded into the personal number above, which made the personal side look worse than it was.",
-          "Not counted here: the family security Chris put up for the lease — over $200,000 of liability that only turns into real money owed if the gym fails.",
+          "Not counted here: the family security Admin put up for the lease — over $200,000 of liability that only turns into real money owed if the gym fails.",
         ],
         fact: {
           label: "Personal debt taken on for the business",
@@ -219,17 +219,17 @@ export function getMoneyStory(): MoneyStory {
           basis: "estimated",
           note: "Taken out of the 2023–now figure above, not added on top.",
           breakdown: [
-            { label: "Personal loans Chris took to buy into the gym", amount: 56000 },
+            { label: "Personal loans Admin took to buy into the gym", amount: 56000 },
             { label: "Jamie's owner draws, beyond what the gym could afford", amount: 58539 },
           ],
           breakdownNote:
-            "The buy-in loans came in November 2024, right before these years — Chris put them at $50,000–$60,000. The draws figure is measured. Together, rounded to $115,000.",
+            "The buy-in loans came in November 2024, right before these years — Admin put them at $50,000–$60,000. The draws figure is measured. Together, rounded to $115,000.",
         },
       },
     ],
     cashFlow: [
       {
-        label: "Chris earns",
+        label: "Admin earns",
         sub: "Rental + salary",
         amount: 17400,
         basis: "measured",
@@ -242,7 +242,7 @@ export function getMoneyStory(): MoneyStory {
         amount: null,
         basis: "tbd",
         kind: "out",
-        explain: "Not broken out yet — needs a real monthly total from Chris.",
+        explain: "Not broken out yet — needs a real monthly total from Admin.",
       },
       {
         label: "Personal loan payments & cards",
@@ -256,7 +256,7 @@ export function getMoneyStory(): MoneyStory {
         amount: null,
         basis: "tbd",
         kind: "out",
-        explain: "Not broken out yet — needs a real monthly amount from Chris.",
+        explain: "Not broken out yet — needs a real monthly amount from Admin.",
       },
       {
         label: "Jamie's private loans & gifts",
@@ -265,7 +265,7 @@ export function getMoneyStory(): MoneyStory {
         basis: "estimated",
         kind: "out",
         explain:
-          "Roughly $27,600 Chris covered for Jamie in 2026, plus $2,541 in gifts, spread over 12 months.",
+          "Roughly $27,600 Admin covered for Jamie in 2026, plus $2,541 in gifts, spread over 12 months.",
       },
       {
         label: "Covers the business",
@@ -281,7 +281,7 @@ export function getMoneyStory(): MoneyStory {
         basis: "measured",
         kind: "result",
         explain:
-          "Negative — it rolls into more personal debt. That's why Chris had to borrow from his dad, and why he can't do that again.",
+          "Negative — it rolls into more personal debt. That's why Admin had to borrow from his dad, and why he can't do that again.",
       },
     ],
   };

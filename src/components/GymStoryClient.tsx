@@ -219,7 +219,7 @@ function FactBlock({ fact, accent }: { fact: FinancialFact; accent: string }) {
             ))}
           </ul>
           <p className="mt-2 text-[11px] text-muted">
-            Individual transactions Chris flagged himself in Money App — not a
+            Individual transactions Admin flagged himself in Money App — not a
             category total.
           </p>
         </Drill>
