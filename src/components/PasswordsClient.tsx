@@ -81,7 +81,7 @@ export default function PasswordsClient({ entries }: { entries: PasswordEntry[] 
     return (
       <Card>
         <p className="text-[15px] text-muted">
-          No logins saved yet. Chris adds them on the Settings screen.
+          No logins saved yet. Admin adds them on the Settings screen.
         </p>
       </Card>
     );

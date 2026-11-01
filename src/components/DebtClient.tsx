@@ -419,7 +419,7 @@ export default function DebtClient({
       key: "due-to-chris",
       emoji: "💰",
       color: ROSE,
-      label: "Business Debt — owed to Chris",
+      label: "Business Debt — owed to Admin",
       // The balance is Jamie's cut, not Chris's whole carry — the $153,000
       // Chris personally put in only becomes Jamie's debt after the split and
       // after netting out what Jamie already carries in his own name
@@ -731,7 +731,7 @@ export default function DebtClient({
     return (
       <div>
         <div className="flex items-center justify-between font-medium">
-          <span>Split {splitPct}/{otherPct} with Chris</span>
+          <span>Split {splitPct}/{otherPct} with Admin</span>
           {admin && (
             <button
               aria-label="Edit the split"
@@ -751,7 +751,7 @@ export default function DebtClient({
             <span>{money(businessTotal)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted">+ Personal money Chris put in</span>
+            <span className="text-muted">+ Personal money Admin put in</span>
             <span>{money(dueToChrisTotal)}</span>
           </div>
           <div className="space-y-1 border-l pl-2.5" style={{ borderColor: `${TEAL}33` }}>
@@ -786,7 +786,7 @@ export default function DebtClient({
             className="flex items-center justify-between border-t border-border pt-1.5 font-semibold"
             style={{ color: TEAL }}
           >
-            <span>= What you still owe Chris</span>
+            <span>= What you still owe Admin</span>
             <span>{money(jamieOwesChris)}</span>
           </div>
         </div>
@@ -804,7 +804,7 @@ export default function DebtClient({
         <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
           <AlertCircle size={13} className="mt-0.5 shrink-0" />
           This is your {splitPct}% of what&apos;s gone into the gym, minus the{" "}
-          {money(businessTotal)} in loans already in your own name. Chris is
+          {money(businessTotal)} in loans already in your own name. Admin is
           still personally carrying the other {money(chrisRemainingShare)} of
           the {money(dueToChrisTotal)} above.
         </p>
@@ -975,7 +975,7 @@ export default function DebtClient({
                 >
                   <span className="text-[18px]">{b.emoji}</span>
                   {/* Wrapping rather than truncating: "Business Debt — owed to
-                      Chris" is the whole point of that row, and cutting it to
+                      Admin" is the whole point of that row, and cutting it to
                       "Business Debt — ow…" on a phone loses which one it is. */}
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px] font-medium">
@@ -1275,7 +1275,7 @@ function CarryCost({
       <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
         <AlertCircle size={13} className="mt-0.5 shrink-0" />
         {carry.problem ??
-          "None of Chris's accounts matched this money, so what it costs to carry each month isn't known."}
+          "None of Admin's accounts matched this money, so what it costs to carry each month isn't known."}
       </p>
     );
   }
@@ -1330,7 +1330,7 @@ function CarryCost({
 
           <div className="mt-2 space-y-1 border-t border-border pt-2 text-[12px]">
             <div className="flex items-center justify-between">
-              <span className="text-muted">Chris pays each month</span>
+              <span className="text-muted">Admin pays each month</span>
               <span>{money(carry.monthly)}</span>
             </div>
             <div className="flex items-center justify-between">
@@ -1343,13 +1343,13 @@ function CarryCost({
 
           <p className="mt-2 text-[10px] text-muted">
             Your share here is the same fraction as the balance — you owe{" "}
-            {Math.round(share * 1000) / 10}% of what Chris is carrying, so you
+            {Math.round(share * 1000) / 10}% of what Admin is carrying, so you
             owe that much of what it costs him to carry it.
             {carry.uncoveredBalance > 0 && (
               <>
                 {" "}
                 It doesn&apos;t cover {money(carry.uncoveredBalance)} of the
-                total: income Chris didn&apos;t take and other personal debt have
+                total: income Admin didn&apos;t take and other personal debt have
                 no lender and no monthly payment behind them.
               </>
             )}
@@ -1605,8 +1605,8 @@ function NewDebtCard({
       emoji: "🤝",
       color: VIOLET,
       tint: "#f1ecfd",
-      label: "Chris lent you privately",
-      note: "money Chris put in directly",
+      label: "Admin lent you privately",
+      note: "money Admin put in directly",
       amount: lent,
       count: loans.length,
     },
@@ -1792,7 +1792,7 @@ function NewDebtCard({
 
           {parts.length === 2 && (
             <p className="pt-1 text-[11px] text-muted">
-              Both halves are borrowed money: Chris either handed it over or
+              Both halves are borrowed money: Admin either handed it over or
               covered the shortfall out of the gym. Together they come to{" "}
               {money(Math.abs(total))}.
             </p>
@@ -2075,7 +2075,7 @@ function OverdrawnDetail({ months }: { months: PayMonth[] }) {
               <span className="block pl-4 text-[10px] text-muted">
                 earned {money(m.earned)} · took {money(m.took)} ·{" "}
                 {over
-                  ? "Chris put in the difference"
+                  ? "Admin put in the difference"
                   : "took less than the work was worth"}
               </span>
               {/* A month still running has only part of its earnings in, while

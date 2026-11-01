@@ -393,12 +393,13 @@ type ExportLoan = {
 // like one of his. Saying so is the difference between a list he can audit and
 // a list of unfamiliar account names.
 //
-// The check for a name that already says Chris keeps a re-sync from stacking up
-// "Chris's Chris's Personal 5788".
+// The check for a name that already says Chris or Admin keeps a re-sync from stacking up
+// "Admin's Admin's Personal 5788". Rows are upserted by Money App id, so ones
+// saved as "Chris's …" before the switch to "Admin" get renamed on the next sync.
 function lenderAccount(account: string | null | undefined): string {
   const name = account?.trim();
   if (!name) return "Private loan";
-  return /^chris/i.test(name) ? name : `Chris's ${name}`;
+  return /^(chris|admin)/i.test(name) ? name : `Admin's ${name}`;
 }
 
 async function mirrorPrivateLoans(

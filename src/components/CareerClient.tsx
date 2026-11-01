@@ -991,7 +991,7 @@ function JobFinder({
       <Card>
         <div className="text-[15px] font-medium">🔍 Find jobs</div>
         <p className="mt-1 text-[14px] leading-snug text-muted">
-          Searching isn&apos;t switched on yet — Chris needs to add the search
+          Searching isn&apos;t switched on yet — Admin needs to add the search
           keys. You can still add jobs by hand below, or paste a link and let
           the app fill it in.
         </p>
