@@ -266,7 +266,7 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
       title: "The Beginning",
       tone: "gold",
       paragraphs: [
-        "Jamie was unemployed and struggling to find work. Admin started looking for a way to help — and for an investment opportunity of his own.",
+        "Jamie was unemployed and struggling to find work. Chris started looking for a way to help — and for an investment opportunity of his own.",
       ],
     },
     {
@@ -276,19 +276,19 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
       title: "Finding the Gym",
       tone: "gold",
       paragraphs: [
-        "Admin found the gym through an ad. What followed was six months of intense negotiation with the previous owner before a deal came together.",
+        "Chris found the gym through an ad. What followed was six months of intense negotiation with the previous owner before a deal came together.",
       ],
     },
     {
       id: "investment",
       era: "November 2024",
       emoji: "💰",
-      title: "Admin's Investment",
+      title: "Chris's Investment",
       tone: "amber",
       paragraphs: [
-        "Admin took out $50,000–$60,000 in personal loans and put up family security for the lease — over $200,000 of personal risk and liability.",
-        "Jamie put in zero financial risk: no job to lose, no money down. The deal was simple — Jamie gave Admin 6 to 12 months of full control to get it running.",
-        "These figures are Admin's own personal loans and liability, not gym transactions, so there's no Money App ledger to drill into here.",
+        "Chris took out $50,000–$60,000 in personal loans and put up family security for the lease — over $200,000 of personal risk and liability.",
+        "Jamie put in zero financial risk: no job to lose, no money down. The deal was simple — Jamie gave Chris 6 to 12 months of full control to get it running.",
+        "These figures are Chris's own personal loans and liability, not gym transactions, so there's no Money App ledger to drill into here.",
       ],
     },
     {
@@ -327,8 +327,8 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
         "About six months in, the cuts started — coaches, expenses, anything not earning its keep, gradually pared back.",
         "It wasn't a clean turnaround. Real spending mistakes kept happening while everyone was still learning what running a gym actually costs.",
         cuttingMistakes.length > 0
-          ? `Money App has ${cuttingMistakes.length} transaction${cuttingMistakes.length === 1 ? "" : "s"} Admin flagged as mistakes across these two months — real line items, not estimates. See them below.`
-          : "Admin hasn't flagged any specific transactions as mistakes in Money App for these two months, so this chapter shows the category totals instead.",
+          ? `Money App has ${cuttingMistakes.length} transaction${cuttingMistakes.length === 1 ? "" : "s"} Chris flagged as mistakes across these two months — real line items, not estimates. See them below.`
+          : "Chris hasn't flagged any specific transactions as mistakes in Money App for these two months, so this chapter shows the category totals instead.",
       ],
       fact: {
         ...afterCutsFact,
@@ -350,8 +350,8 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
       tone: "amber",
       paragraphs: [
         "Jamie took on managing the finances. He was also training clients off the books and keeping that cash — in his mind, it was his paycheck. The gym couldn't actually afford to pay him, but he took the money anyway, plus additional funds on top of it.",
-        "Admin had to keep funding the business more and more to cover the gap. That's a real part of how the debt piled up.",
-        "Jamie later secured a $50,000 business loan to help pay some of that back to Admin. Admin put the $25,000 grant from the Setbacks chapter toward paying down some of his own personal credit cards. Jamie also took out a $6,000 US Bank credit card and a $5,000 Pace business loan.",
+        "Chris had to keep funding the business more and more to cover the gap. That's a real part of how the debt piled up.",
+        "Jamie later secured a $50,000 business loan to help pay some of that back to Chris. Chris put the $25,000 grant from the Setbacks chapter toward paying down some of his own personal credit cards. Jamie also took out a $6,000 US Bank credit card and a $5,000 Pace business loan.",
         "These are business debts, and the gym's actual balances on them — paid down or not — live on the Debt page, not here.",
       ],
       link: { href: "/debt", label: "See the Business Debt section on the Debt page" },
@@ -374,9 +374,9 @@ export async function getGymStory(): Promise<{ story: GymStory | null; error: st
       title: "The Renovation Mistake",
       tone: "rose",
       paragraphs: [
-        "Admin renovated the gym, thinking it would give Jamie more of a sense of ownership. In hindsight, it was a complete waste of money.",
+        "Chris renovated the gym, thinking it would give Jamie more of a sense of ownership. In hindsight, it was a complete waste of money.",
         renoMistakeHits.length > 0
-          ? `Money App has ${renoMistakeHits.length} transaction${renoMistakeHits.length === 1 ? "" : "s"} matching the renovation, flagged by Admin himself — real line items below.`
+          ? `Money App has ${renoMistakeHits.length} transaction${renoMistakeHits.length === 1 ? "" : "s"} matching the renovation, flagged by Chris himself — real line items below.`
           : renoLineHits.length > 0
             ? "Money App has a category matching the renovation for this month — shown below."
             : "Money App doesn't break the renovation out as its own line for this month, so the figure below is total spending for January 2026, not the renovation alone.",

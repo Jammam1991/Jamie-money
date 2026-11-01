@@ -62,7 +62,7 @@ export default function HouseholdIncomeAdmin({
       <Card>
         <div className="space-y-4">
           <Field
-            label="Admin's take-home, per month"
+            label="Chris's take-home, per month"
             value={chris}
             onChange={setChris}
             placeholder="e.g. 8000"

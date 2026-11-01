@@ -364,7 +364,7 @@ export default function DebtByYear({
           <p className="text-2xl font-medium">{money(Math.abs(totalGap))}</p>
           <p className="mt-1 text-[13px]">
             {totalGap > 0
-              ? "Admin put in the difference to cover it."
+              ? "Chris put in the difference to cover it."
               : "You took less out than the work was worth."}
           </p>
         </div>
@@ -377,7 +377,7 @@ export default function DebtByYear({
 
       <p className="mt-1 text-xs text-muted">
         Tap a year to see the months, then a month to see every transaction —
-        what Admin lent you and what the business paid, with the account each
+        what Chris lent you and what the business paid, with the account each
         came out of so you can check it against a statement.
       </p>
 
@@ -488,7 +488,7 @@ export default function DebtByYear({
                   >
                     <Gift size={12} className="shrink-0" style={{ color: "var(--accent)" }} />
                     <span className="flex-1">
-                      Admin spent{" "}
+                      Chris spent{" "}
                       <span className="font-medium">{money(r.spent)}</span> not
                       assigned as a loan
                     </span>
@@ -552,7 +552,7 @@ export default function DebtByYear({
                         {monthOpen && (
                           <div className="pb-2 pl-5">
                           <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">
-                            Admin lent you
+                            Chris lent you
                           </p>
                           <ul className="space-y-2">
                             {m.items.map((t) => (

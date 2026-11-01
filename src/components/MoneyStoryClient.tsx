@@ -93,7 +93,7 @@ function Hero({ asOf }: { asOf: string }) {
       style={{ background: "linear-gradient(135deg, #14201f 0%, #1f3a3d 100%)" }}
     >
       <p className="text-[11px] font-medium uppercase tracking-[0.3em] text-white/50">
-        Admin &amp; Jamie
+        Chris &amp; Jamie
       </p>
       <p className="mt-1 text-3xl font-black tracking-tight text-white">Our Money Story</p>
       <p className="mx-auto mt-2 max-w-xs text-[13px] text-white/60">

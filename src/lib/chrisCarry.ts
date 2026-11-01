@@ -100,17 +100,17 @@ export async function getChrisCarry(): Promise<ChrisCarry> {
       },
     );
     if (!res.ok) {
-      return { ...EMPTY, problem: `Money App returned ${res.status} for Admin's accounts.` };
+      return { ...EMPTY, problem: `Money App returned ${res.status} for Chris's accounts.` };
     }
     const body = await res.json();
     accounts = Array.isArray(body?.debts) ? (body.debts as ExportAccount[]) : [];
   } catch {
-    return { ...EMPTY, problem: "Couldn't reach Money App for Admin's accounts." };
+    return { ...EMPTY, problem: "Couldn't reach Money App for Chris's accounts." };
   }
 
   const live = accounts.filter((a) => Number(a.balance) > 0);
   if (live.length === 0) {
-    return { ...EMPTY, problem: "Money App has no open accounts for Admin." };
+    return { ...EMPTY, problem: "Money App has no open accounts for Chris." };
   }
 
   // An account can only belong to one category. Claimed in list order, so the
@@ -160,7 +160,7 @@ export async function getChrisCarry(): Promise<ChrisCarry> {
     uncoveredBalance,
     problem:
       coveredBalance === 0
-        ? "None of Admin's accounts matched the money lent to the gym, so the monthly cost isn't known."
+        ? "None of Chris's accounts matched the money lent to the gym, so the monthly cost isn't known."
         : null,
   };
 }
