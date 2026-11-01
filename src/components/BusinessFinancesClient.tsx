@@ -267,7 +267,7 @@ export default function BusinessFinancesClient({
         <Card>
           <SectionTitle>Set aside to ask about</SectionTitle>
           <p className="mt-1 text-[13px] text-muted">
-            Admin marked these to go over with the accountant.
+            Chris marked these to go over with the accountant.
           </p>
           <ul className="mt-3 space-y-2">
             {data.flagged.map((t) => (
@@ -1367,7 +1367,7 @@ function TimeSpan({
         (Number(to.slice(5, 7)) - Number(from.slice(5, 7))) +
         1
       : null;
-  if (!from || !to) return <>Everything Admin has shared</>;
+  if (!from || !to) return <>Everything Chris has shared</>;
   return (
     <>
       {shortDate(from)} to {shortDate(to)}

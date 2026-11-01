@@ -101,7 +101,7 @@ export const VIEW_MODES: ViewMode[] = [
     // two names for one answer.
     id: "cpa",
     label: "For the tax return",
-    blurb: "Sorted into the boxes on the tax return, minus what Admin tagged FED.",
+    blurb: "Sorted into the boxes on the tax return, minus what Chris tagged FED.",
     blurbFedHidden: "Sorted into the boxes on the tax return.",
     profitTitle: "The tax return starts from",
     lossTitle: "The tax return starts from a loss of",
@@ -268,13 +268,13 @@ const BUCKETS: Array<{
   {
     key: "removedFromPl",
     label: "One-off spending",
-    blurb: "Things Admin marked as not carrying over to a new owner.",
+    blurb: "Things Chris marked as not carrying over to a new owner.",
     droppedBy: "slim",
   },
   {
     key: "fed",
     label: "FED-tagged items",
-    blurb: "Everything carrying Admin's FED tag.",
+    blurb: "Everything carrying Chris's FED tag.",
     droppedBy: "noFed",
   },
 ];

@@ -266,7 +266,7 @@ function realScope(scope: Scope, name: string): Scope {
 
 /** Possessive — reads as part of a sentence ("Chris's · $12,900 used of…"). */
 export const SCOPE_LABEL: Record<Scope, string> = {
-  chris: "Admin's",
+  chris: "Chris's",
   jamie: "Jamie's",
   joint: "Both of ours",
   lennon: "The rental's",
@@ -282,7 +282,7 @@ export const SCOPE_LABEL: Record<Scope, string> = {
  *  hers, so reading either as "everything they owe" undersells the real
  *  number. */
 export const SCOPE_NAME: Record<Scope, string> = {
-  chris: "Admin (Secured)",
+  chris: "Chris (Secured)",
   jamie: "Jamie (Bank Secured)",
   joint: "Joint",
   lennon: "Rental Property",
@@ -734,7 +734,7 @@ export async function getHouseholdPicture(): Promise<{
     const key = tx.txDate.slice(0, 7);
     if (!drawByMonth.has(key)) continue;
     drawByMonth.set(key, (drawByMonth.get(key) ?? 0) + tx.amount);
-    const source = tx.source ?? "Admin";
+    const source = tx.source ?? "Chris";
     sourceTotals.set(source, (sourceTotals.get(source) ?? 0) + tx.amount);
   }
 
@@ -975,7 +975,7 @@ function buildFlow(input: {
   const incomeParts: FlowPart[] = [
     {
       key: "chris",
-      label: "Admin's pay",
+      label: "Chris's pay",
       amount: chrisIncome ?? 0,
       detail: ledger.chris.detail,
       detailNote:
@@ -1019,7 +1019,7 @@ function buildFlow(input: {
       amount: living?.total ?? 0,
       detail: living?.lines ?? [],
       note: "Planned monthly budget from Money App, not what actually got spent.",
-      detailNote: "Every budgeted category across Admin, Jamie and Joint, biggest first.",
+      detailNote: "Every budgeted category across Chris, Jamie and Joint, biggest first.",
     },
     {
       key: "gym",

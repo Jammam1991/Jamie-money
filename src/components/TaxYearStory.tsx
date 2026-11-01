@@ -119,7 +119,7 @@ function IncomeSection({ breakdown }: { breakdown: TaxBreakdown }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
         <Key color={JAMIE} label="Jamie" value={money(income.jamieTotal)} />
-        <Key color={CHRIS} label="Admin" value={money(income.chrisTotal)} />
+        <Key color={CHRIS} label="Chris" value={money(income.chrisTotal)} />
       </div>
 
       <div className="mt-3 space-y-3">
@@ -131,7 +131,7 @@ function IncomeSection({ breakdown }: { breakdown: TaxBreakdown }) {
           total={income.jamieTotal}
         />
         <PersonLines
-          who="Admin"
+          who="Chris"
           color={CHRIS}
           bg={CHRIS_BG}
           lines={income.chris}
@@ -267,7 +267,7 @@ function TaxSection({
 
       <div className="mt-3 space-y-1 border-t border-border pt-2">
         <Row label="Total tax for the year" amount={tax.total} strong />
-        <Row label="Admin paid through the year at the bank" amount={paidIn} />
+        <Row label="Chris paid through the year at the bank" amount={paidIn} />
       </div>
 
       {taxesPaid != null && (
@@ -434,8 +434,8 @@ function SourceFootnote({ breakdown, year }: { breakdown: TaxBreakdown; year: nu
   return (
     <p className="px-1 text-[11px] text-faint">
       {breakdown.source === "baseline"
-        ? `The breakdown above is rebuilt from the numbers Admin saved in the Money App for ${year}.`
-        : `The breakdown above is worked out from Admin's ${year} books.`}
+        ? `The breakdown above is rebuilt from the numbers Chris saved in the Money App for ${year}.`
+        : `The breakdown above is worked out from Chris's ${year} books.`}
       {" It isn't copied line by line off the filed return, so treat it as the shape of the year rather than exact figures. The refund and the tax actually paid are the real numbers."}
     </p>
   );

@@ -21,7 +21,7 @@ export const CASH_KINDS: Record<
   { emoji: string; label: string; doneLabel: string; direction: 1 | -1 }
 > = {
   massage: { emoji: "💆", label: "I did a massage", doneLabel: "Massage", direction: 1 },
-  to_chris: { emoji: "🤝", label: "Gave cash to Admin", doneLabel: "Gave to Admin", direction: -1 },
+  to_chris: { emoji: "🤝", label: "Gave cash to Chris", doneLabel: "Gave to Chris", direction: -1 },
   deposit: { emoji: "🏦", label: "Put cash in the bank", doneLabel: "Put in bank", direction: -1 },
   spent: { emoji: "🛒", label: "Spent some cash", doneLabel: "Spent", direction: -1 },
 };

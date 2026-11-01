@@ -69,7 +69,7 @@ export default function SpendingHistory() {
       {/* The total, immediately qualified. The caveat is part of the headline
           on purpose — a bare number here would be misleading. */}
       <div className="rounded-2xl bg-tint p-5 text-center">
-        <p className="text-[13px] text-muted">Money Admin put out, all in</p>
+        <p className="text-[13px] text-muted">Money Chris put out, all in</p>
         <p className="mt-1 text-5xl font-bold">{money(periodTotal)}</p>
         <p className="mt-2 text-[13px] text-muted">
           A claim, not a settled balance. Roughly a third of it has a receipt.
