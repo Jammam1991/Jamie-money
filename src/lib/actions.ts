@@ -23,6 +23,7 @@ import {
   SETTLEMENT_TOTAL_KEY,
   CAR_INFO_KEY,
   CAR_HISTORY_KEY,
+  PROJECTS_KEY,
   PIN_LOCK_MINUTES,
   PIN_TRIES,
   getJamiePinHash,
@@ -65,6 +66,13 @@ import { isReachable, slotsFor } from "./navLayout";
 import { MARRIAGE_BENEFITS_KEY, type MarriageBenefits } from "./marriage";
 import type { HomeBuyingInputs } from "./homeBuying";
 import type { CarInfo, CarHistoryEntry } from "./carInfo";
+import {
+  MAX_PROJECTS,
+  STARTER_PROJECTS,
+  cleanProject,
+  parseProjects,
+  type Project,
+} from "./projects";
 import type { BillDocument, BillPayment, CashKind } from "./data";
 import { anyFeedConfigured, searchJobFeeds } from "./jobFeeds";
 import { readJobLink } from "./jobLink";
@@ -1906,6 +1914,87 @@ export async function previewJobLink(
   return result.ok
     ? { ok: true, preview: result.preview }
     : { ok: false, error: result.error };
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+// Jamie's own list, so a login is enough. The list is one `settings` row, but
+// each save sends just the one project being changed and the server slots it
+// into the latest list. Jamie ticking a step on one project and Chris adding a
+// note to another can then only collide if both land in the same split second.
+
+const PROJECTS_PATH = "/projects";
+
+// The latest saved list, for changing. Unlike the page's reader this never
+// falls back to the starters when the read fails — saving one project on top of
+// a list that didn't load would write the starters over everything else.
+async function projectsForWrite(
+  c: NonNullable<ReturnType<typeof client>>
+): Promise<{ list: Project[] } | { error: string }> {
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", PROJECTS_KEY)
+    .maybeSingle();
+  if (error) return { error: "Not saved — couldn't reach the database. Try again." };
+  if (!data?.value) return { list: STARTER_PROJECTS };
+  try {
+    return { list: parseProjects(JSON.parse(String(data.value))) };
+  } catch {
+    return { error: "Not saved — the saved projects couldn't be read." };
+  }
+}
+
+async function writeProjects(
+  c: NonNullable<ReturnType<typeof client>>,
+  list: Project[]
+): Promise<ActionResult> {
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: PROJECTS_KEY, value: JSON.stringify(list) }, { onConflict: "key" });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(PROJECTS_PATH);
+  return { ok: true };
+}
+
+export async function saveProject(input: Project): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+
+  const cleaned = cleanProject(input);
+  if (!cleaned) return { ok: false, error: "Not saved — that project didn't come through." };
+  const project = { ...cleaned, updatedAt: new Date().toISOString() };
+
+  const current = await projectsForWrite(c);
+  if ("error" in current) return { ok: false, error: current.error };
+  const at = current.list.findIndex((p) => p.id === project.id);
+  if (at === -1 && current.list.length >= MAX_PROJECTS) {
+    return { ok: false, error: `That's ${MAX_PROJECTS} projects — delete a finished one first.` };
+  }
+  // A new one goes on top, where he'll look for it.
+  const next =
+    at === -1
+      ? [project, ...current.list]
+      : current.list.map((p) => (p.id === project.id ? project : p));
+
+  const res = await writeProjects(c, next);
+  if (!res.ok) return res;
+  revalidatePath(`${PROJECTS_PATH}/${project.id}`);
+  return { ok: true, id: project.id };
+}
+
+export async function deleteProject(id: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const current = await projectsForWrite(c);
+  if ("error" in current) return { ok: false, error: current.error };
+  return writeProjects(
+    c,
+    current.list.filter((p) => p.id !== id)
+  );
 }
 
 // ── The order of the slide-out menu ──────────────────────────────────────────
