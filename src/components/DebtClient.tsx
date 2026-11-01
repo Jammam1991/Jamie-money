@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Plus,
@@ -266,7 +266,7 @@ export default function DebtClient({
   // Which of the four buckets is open. One at a time — the point of folding
   // them away is that the page fits on a screen.
   const [openBucket, setOpenBucket] = useState<string | null>(null);
-  const [openTools, setOpenTools] = useState(false);
+  const [owedOpen, setOwedOpen] = useState(false);
   const [, startTransition] = useTransition();
   const tempId = useRef(-1);
 
@@ -813,82 +813,8 @@ export default function DebtClient({
     );
   }
 
-  // Debt Growth Chart Scene — Shows historical balance trend from snapshots
-  function debtGrowthScene() {
-    if (snapshots.length < 2) return null;
-
-    // Group snapshots by month, getting the latest snapshot per month
-    const monthMap = new Map<string, DebtSnapshotRow>();
-    for (const snap of snapshots) {
-      const month = snap.date.substring(0, 7); // YYYY-MM
-      const existing = monthMap.get(month);
-      if (!existing || snap.date > existing.date) {
-        monthMap.set(month, snap);
-      }
-    }
-
-    const monthlyData = Array.from(monthMap.values())
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(-24); // Last 24 months
-
-    if (monthlyData.length < 2) return null;
-
-    // Calculate totals per month (all snapshots rolled up)
-    const balancesByMonth: { month: string; balance: number; label: string }[] = [];
-    for (const snap of monthlyData) {
-      const month = snap.date.substring(0, 7);
-      const idx = balancesByMonth.findIndex((m) => m.month === month);
-      if (idx >= 0) {
-        balancesByMonth[idx].balance += snap.balance;
-      } else {
-        const date = new Date(snap.date);
-        const label = date.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
-        balancesByMonth.push({ month, balance: snap.balance, label });
-      }
-    }
-
-    const maxBalance = Math.max(...balancesByMonth.map((m) => m.balance));
-    const minBalance = Math.min(...balancesByMonth.map((m) => m.balance));
-    const range = maxBalance - minBalance || maxBalance || 1;
-    const chartHeight = 120;
-    const chartWidth = 100;
-
-    // Simplified chart: just bars for each month
-    return (
-      <Card>
-        <p className="text-[13px] font-medium">Debt balance over the last two years</p>
-        <div className="mt-3 flex h-32 items-end justify-between gap-1 rounded-lg bg-tint p-3">
-          {balancesByMonth.map((m, i) => {
-            const normalized = (m.balance - minBalance) / range;
-            const height = Math.max(4, normalized * chartHeight);
-            return (
-              <div
-                key={m.month}
-                className="flex flex-1 flex-col items-center gap-1"
-                title={`${m.label}: ${money(m.balance)}`}
-              >
-                <div
-                  style={{
-                    height: `${height}px`,
-                    background: m.balance > total * 1.05 ? ROSE : GREEN,
-                  }}
-                  className="w-full rounded-t-sm"
-                />
-                {i % 3 === 0 && (
-                  <span className="text-[9px] text-muted">{m.label}</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-2 text-[11px] text-muted">
-          Updated {snapshots[0]?.date || "recently"}
-        </p>
-      </Card>
-    );
-  }
-
-  // Interest Burden Scene — Shows which debts cost the most per month
+  // Which debts cost the most to carry, in interest alone. Folded to one row
+  // with the monthly total showing, since that one figure is the point.
   function interestBurdenScene() {
     const debtsByInterest = personalDebts
       .map((d) => ({ debt: d, monthly: financeCharge(d) }))
@@ -898,11 +824,15 @@ export default function DebtClient({
     if (debtsByInterest.length === 0) return null;
 
     const maxInterest = debtsByInterest[0]?.monthly || 1;
+    const interestTotal = debtsByInterest.reduce((sum, d) => sum + d.monthly, 0);
 
     return (
-      <Card>
-        <p className="text-[13px] font-medium">Which debts cost the most each month?</p>
-        <div className="mt-3 space-y-2.5">
+      <Fold
+        icon={<span className="text-[15px] leading-none">💸</span>}
+        title="Interest each month"
+        summary={`${money(interestTotal)}/mo`}
+      >
+        <div className="space-y-2.5">
           {debtsByInterest.map((item) => {
             const pct = (item.monthly / maxInterest) * 100;
             const typeEmoji = item.debt.debtType === "auto_loan" ? "🚗" : "💳";
@@ -931,39 +861,9 @@ export default function DebtClient({
           })}
         </div>
         <p className="mt-2 text-[11px] text-muted">
-          This is pure interest — paying these minimums doesn't reduce the balances.
+          This is pure interest — paying these minimums doesn&apos;t reduce the balances.
         </p>
-      </Card>
-    );
-  }
-
-  // Detailed Accounts Scene — All individual debts listed with edit/delete controls
-  function detailedAccountsScene() {
-    return (
-      <Card>
-        <p className="text-[13px] font-medium mb-3">All your accounts</p>
-        <div className="space-y-3">
-          {personalDebts.length > 0 ? (
-            personalDebts.map(row)
-          ) : (
-            <p className="text-xs text-muted">No personal debts yet.</p>
-          )}
-        </div>
-        {admin && !adding && (
-          <button
-            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-            onClick={() => setAdding(true)}
-          >
-            <Plus size={16} />
-            Add a debt
-          </button>
-        )}
-        {admin && adding && (
-          <div className="mt-3">
-            <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
-          </div>
-        )}
-      </Card>
+      </Fold>
     );
   }
 
@@ -994,52 +894,66 @@ export default function DebtClient({
           The monthly figure beside it is the point of the card: borrowing is
           not a one-off cost. Every dollar added here turns into a payment that
           comes back every month afterwards, and that's the half a plain
-          "+$2,474" never said. */}
-      <NewDebtCard
-        big
-        label={`${monthName(currentMonth)} New Debt`}
-        loans={periods.month.loans}
-        pay={periods.month.pay}
+          "+$2,474" never said.
+
+          This month, last month and the year so far share the one card, with
+          a switch between them. They used to be three cards stacked, which was
+          a lot of figures before the page had said what's owed. The switch
+          already says which stretch it is, so the heading is just "New debt". */}
+      <NewDebtPanel
+        periods={[
+          {
+            key: "month",
+            tab: monthName(currentMonth),
+            label: "New debt",
+            ...periods.month,
+          },
+          {
+            key: "last",
+            tab: monthName(lastMonth),
+            label: "New debt",
+            ...periods.last,
+          },
+          {
+            key: "year",
+            tab: `${currentYear} so far`,
+            label: "New debt",
+            ...periods.year,
+          },
+        ]}
         debts={debts}
       />
 
-      <div className="grid grid-cols-2 gap-3">
-        <NewDebtCard
-          label={`${monthName(lastMonth)}'s New Debt`}
-          loans={periods.last.loans}
-          pay={periods.last.pay}
-          debts={debts}
-        />
-        <NewDebtCard
-          label={`New debt in ${currentYear} so far`}
-          loans={periods.year.loans}
-          pay={periods.year.pay}
-          debts={debts}
-        />
-      </div>
-
-      {/* The same total split by whose it is and what's behind it. These add up
-          to the figure above exactly — nothing counted twice, nothing left out.
-          Every account used to be listed on the page at once; now a row opens
-          to show the accounts it was added up from. */}
+      {/* What's owed: one number until it's tapped. Open, it shows the
+          monthly payment and the same total split by whose it is and what's
+          behind it. Those add up to the figure exactly — nothing counted
+          twice, nothing left out — and each bucket opens onto the accounts it
+          was added up from. */}
       <Card>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted">
-              Total balance
-            </p>
-            <p className="text-[30px] font-black leading-none">
+        <button
+          className="flex w-full items-start justify-between gap-3 text-left"
+          onClick={() => setOwedOpen((o) => !o)}
+          aria-expanded={owedOpen}
+        >
+          <span>
+            <span className="block text-[11px] uppercase tracking-wide text-muted">
+              What you owe
+            </span>
+            <span className="mt-1 block text-[30px] font-black leading-none">
               {money(carryingTotal)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-wide text-muted">
-              Total monthly payment
-            </p>
-            <p className="text-[30px] font-black leading-none">
-              {money(monthlyTotal)}/mo
-            </p>
-          </div>
+            </span>
+          </span>
+          <ChevronDown
+            size={16}
+            className={`mt-0.5 shrink-0 text-muted transition-transform ${owedOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {owedOpen && (
+        <>
+        <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-border pt-3">
+          <span className="text-[13px] text-muted">Monthly payment</span>
+          <span className="text-[18px] font-bold">{money(monthlyTotal)}/mo</span>
         </div>
 
         {/* One bar, one colour per bucket: the shape of the pile at a glance. */}
@@ -1073,23 +987,13 @@ export default function DebtClient({
                   {/* Wrapping rather than truncating: "Business Debt — owed to
                       Admin" is the whole point of that row, and cutting it to
                       "Business Debt — ow…" on a phone loses which one it is. */}
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-medium">
-                      {b.label}
-                    </span>
-                    {b.note && (
-                      <span className="block text-[11px] text-muted">
-                        {b.note}
-                      </span>
-                    )}
+                  {/* Just the name and the amount on the row; the monthly
+                      and the note wait inside, with everything else. */}
+                  <span className="min-w-0 flex-1 text-[15px] font-medium">
+                    {b.label}
                   </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-[16px] font-bold leading-tight">
-                      {money(b.balance)}
-                    </span>
-                    <span className="block text-[11px] text-muted">
-                      {money(b.monthly)}/mo
-                    </span>
+                  <span className="shrink-0 text-[16px] font-bold leading-tight">
+                    {money(b.balance)}
                   </span>
                   <ChevronDown
                     size={15}
@@ -1103,6 +1007,10 @@ export default function DebtClient({
                     className="space-y-3 border-t p-3"
                     style={{ borderColor: `${b.color}33` }}
                   >
+                    <p className="text-[12px] text-muted">
+                      {money(b.monthly)} a month
+                      {b.note ? ` · ${b.note}` : ""}
+                    </p>
                     {b.key === "divorce" ? (
                       settlementPanel()
                     ) : b.key === "due-to-chris" ? (
@@ -1141,39 +1049,60 @@ export default function DebtClient({
             );
           })}
         </div>
-
-        {admin &&
-          (adding ? (
-            <div className="mt-3">
-              <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
-            </div>
-          ) : (
-            <button
-              className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
-              onClick={() => setAdding(true)}
-            >
-              <Plus size={16} />
-              Add a debt
-            </button>
-          ))}
+        </>
+        )}
       </Card>
 
-      {/* Scene 2: Debt Growth Chart — Historical balance trend */}
-      {debtGrowthScene()}
+      {/* ── Everything else, one line each ────────────────────────────────────
+          The two cards above answer what's owed and whether it's growing.
+          The rest is detail behind those answers, so it's folded down to a
+          row apiece and opens where it sits. All of it used to lie open at
+          once, which made the page a long scroll of figures to get through.
 
-      {/* Scene 3: Interest Burden — Which debts cost the most per month */}
-      {interestBurdenScene()}
+          Two cards went rather than folded: the list of every account, which
+          the buckets above already open onto, and a monthly balance chart
+          that drew one account per month rather than the total. The year
+          chart inside "Debt by year" shows the same trend correctly. */}
+      <p className="px-1 pt-2 text-[11px] uppercase tracking-wide text-muted">
+        More detail
+      </p>
 
-      {/* Scene 5: Payoff Calculator — What-if scenarios */}
-      {payoffCalculatorScene()}
+      {/* ── The settlement, on its own ───────────────────────────────────────
+          Out of the headline because it's deferred, and in a row of its own
+          rather than deleted because it's still money owed. */}
+      {settlement.balance > 0 && (
+        <Fold
+          icon={<span className="text-[15px] leading-none">📄</span>}
+          title="Divorce settlement"
+          summary={money(settlement.balance)}
+        >
+          {settlementPanel()}
 
-      {/* Scene 6: Detailed Accounts — All individual debts */}
-      {detailedAccountsScene()}
+          {/* What the two come to together, so the money taken out of the
+              headline is still added back somewhere on the page. */}
+          <div className="mt-3 space-y-1 border-t border-border pt-2.5 text-[13px]">
+            <div className="flex items-center justify-between">
+              <span className="text-muted">Carrying now</span>
+              <span>{money(carryingTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted">+ Deferred settlement</span>
+              <span>{money(settlement.balance)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+              <span>= Owed in total</span>
+              <span>{money(owedIncludingSettlement)}</span>
+            </div>
+            <p className="pt-1 text-[11px] text-muted">
+              With the settlement it would be{" "}
+              {money(monthlyIncludingSettlement)} a month rather than{" "}
+              {money(monthlyTotal)}.
+            </p>
+          </div>
+        </Fold>
+      )}
 
-      {/* Additional context: What comes off the pile. The same two figures as
-          they'd read once the money coming in lands. Directly under today's, in
-          green, so the pair reads as "now" and "after" without a word of
-          explanation needed. */}
+      {/* What comes off the pile once the money coming in lands. */}
       <AfterChangesCard
         balanceNow={carryingTotal}
         balanceAfter={netTotal}
@@ -1186,100 +1115,11 @@ export default function DebtClient({
         splitPct={splitPct}
       />
 
-      {/* ── The settlement, on its own ───────────────────────────────────────
-          Out of the headline because it's deferred, and in a card of its own
-          rather than deleted because it's still money owed. Kept visually
-          apart from the rows above: those are bills arriving this month, this
-          one isn't, and the whole point of moving it was to stop the two
-          reading as the same kind of thing. */}
-      {settlement.balance > 0 && (
-        <Card>
-          {/* Title and badge on their own line, figures underneath. Side by
-              side, the long title and "$900/mo when it starts" fight for the
-              same 375px and both wrap raggedly. */}
-          <button
-            className="w-full text-left"
-            onClick={() =>
-              setOpenBucket(openBucket === "divorce" ? null : "divorce")
-            }
-            aria-expanded={openBucket === "divorce"}
-          >
-            <span className="flex items-start gap-2.5">
-              <span className="text-[18px]">📄</span>
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                  <span className="text-[15px] font-medium">
-                    Divorce Settlement Debt
-                  </span>
-                  <span className="rounded bg-tint px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
-                    Deferred
-                  </span>
-                </span>
-              </span>
-              <ChevronDown
-                size={15}
-                className="mt-1 shrink-0 text-muted transition-transform"
-                style={{
-                  transform:
-                    openBucket === "divorce" ? "rotate(0deg)" : "rotate(-90deg)",
-                }}
-              />
-            </span>
+      {/* Which debts cost the most to carry, in interest alone. */}
+      {interestBurdenScene()}
 
-            <span className="mt-2.5 grid grid-cols-2 gap-3 border-t border-border pt-2.5">
-              <span className="block">
-                <span className="block text-[20px] font-black leading-none">
-                  {money(settlement.balance)}
-                </span>
-                <span className="mt-1 block text-[11px] text-muted">
-                  owed in total
-                </span>
-              </span>
-              <span className="block">
-                <span className="block text-[20px] font-black leading-none">
-                  {money(settlement.minPayment)}
-                  <span className="text-[13px] font-bold">/mo</span>
-                </span>
-                <span className="mt-1 block text-[11px] text-muted">
-                  when it starts
-                </span>
-              </span>
-            </span>
-          </button>
-
-          {openBucket === "divorce" && (
-            <div className="mt-3 border-t border-border pt-3">
-              {settlementPanel()}
-
-              {/* What the two cards come to together, so the money taken out
-                  of the headline is still added back somewhere on the page. */}
-              <div className="mt-3 space-y-1 border-t border-border pt-2.5 text-[13px]">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">Carrying now</span>
-                  <span>{money(carryingTotal)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted">+ Deferred settlement</span>
-                  <span>{money(settlement.balance)}</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
-                  <span>= Owed in total</span>
-                  <span>{money(owedIncludingSettlement)}</span>
-                </div>
-                <p className="pt-1 text-[11px] text-muted">
-                  With the settlement it would be{" "}
-                  {money(monthlyIncludingSettlement)} a month rather than{" "}
-                  {money(monthlyTotal)}.
-                </p>
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
-
-
-      {/* Credit score, last pulled from Money App */}
-      {fico && <FicoCard score={fico.score} date={fico.date} />}
+      {/* What-ifs: paying more each month. */}
+      {payoffCalculatorScene()}
 
       {/* Year by year: what got added, what it costs each month, and — once a
           year is opened — the months and transactions behind it. Folded away by
@@ -1297,9 +1137,14 @@ export default function DebtClient({
         onDelete={handleDeleteTransaction}
       />
 
-      {/* Pull debts straight from the bank or Money App (primary), with
-          paste-a-report as backup. Admin plumbing, so it sits folded at the
-          bottom rather than taking up four cards of the page. */}
+      {/* Credit score, last pulled from Money App */}
+      {fico && <FicoCard score={fico.score} />}
+
+      {/* Adding a debt by hand, and pulling them straight from the bank or
+          Money App (primary), with paste-a-report as backup. Admin plumbing,
+          so it sits folded at the bottom. "Add a debt" used to be a full-width
+          button in the headline card as well, which put a tool Jamie can't
+          use in the middle of the numbers he reads. */}
       {admin &&
         (importing ? (
           <ImportPanel
@@ -1307,37 +1152,31 @@ export default function DebtClient({
             onImport={handleImport}
           />
         ) : (
-          <Card>
-            <button
-              className="flex w-full items-center justify-between"
-              onClick={() => setOpenTools((o) => !o)}
-              aria-expanded={openTools}
-            >
-              <span className="flex items-center gap-1.5 text-[13px] text-muted">
-                <Settings size={15} />
-                Where these numbers come from
-              </span>
-              <ChevronDown
-                size={16}
-                className={`text-muted transition-transform ${openTools ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {openTools && (
-              <div className="mt-3 space-y-2">
-                <PlaidConnect hasBank={hasBank} />
-                <MoneyAppConnect />
-                <DuplicateCleanup />
+          <Fold icon={<Settings size={15} />} title="Add or sync debts">
+            <div className="space-y-2">
+              {adding ? (
+                <DebtForm onCancel={() => setAdding(false)} onSave={handleAdd} />
+              ) : (
                 <button
-                  className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
-                  onClick={() => setImporting(true)}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-sm text-muted"
+                  onClick={() => setAdding(true)}
                 >
-                  <Upload size={13} />
-                  or paste a credit report instead
+                  <Plus size={16} />
+                  Add a debt
                 </button>
-              </div>
-            )}
-          </Card>
+              )}
+              <PlaidConnect hasBank={hasBank} />
+              <MoneyAppConnect />
+              <DuplicateCleanup />
+              <button
+                className="flex w-full items-center justify-center gap-1.5 py-1 text-xs text-muted"
+                onClick={() => setImporting(true)}
+              >
+                <Upload size={13} />
+                or paste a credit report instead
+              </button>
+            </div>
+          </Fold>
         ))}
     </div>
   );
@@ -1565,170 +1404,150 @@ function AfterChangesCard({
   depositShare: number;
   splitPct: number;
 }) {
-  const [open, setOpen] = useState(false);
   const total = offsets.reduce((sum, o) => sum + o.amount, 0);
   if (total <= 0) return null;
   const monthlySaved = monthlyNow - monthlyAfter;
 
+  // Folded to one row like the rest of the detail. The two big green figures
+  // used to show even while it was shut, which put a second headline right
+  // under the real one; the balance after is enough to say what's inside.
   return (
-    <Card>
-      <button
-        className="w-full text-left"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-      >
-        <span className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-[11px] uppercase tracking-wide" style={{ color: GREEN }}>
-            After the changes
-          </span>
-          <ChevronDown
-            size={15}
-            className="shrink-0 transition-transform"
-            style={{
-              color: GREEN,
-              transform: open ? "rotate(180deg)" : "rotate(0deg)",
-            }}
-          />
-        </span>
-        <span className="grid grid-cols-2 gap-6">
-          <span className="block">
-            <span
-              className="block text-[30px] font-black leading-none"
-              style={{ color: GREEN }}
-            >
-              {money(balanceAfter)}
-            </span>
-            <span className="mt-1 block text-[11px] text-muted">
-              balance · was {money(balanceNow)}
-            </span>
-          </span>
-          <span className="block">
-            <span
-              className="block text-[30px] font-black leading-none"
-              style={{ color: GREEN }}
-            >
-              {money(monthlyAfter)}/mo
-            </span>
-            <span className="mt-1 block text-[11px] text-muted">
-              {monthlySaved > 0
-                ? `monthly · ${money(monthlySaved)} less`
-                : "monthly · unchanged"}
-            </span>
-          </span>
-        </span>
-        <span className="mt-2 block text-[12px] text-muted">
-          once the watch sells and the payment lands · tap for the detail
-        </span>
-      </button>
+    <Fold
+      icon={<span className="text-[15px] leading-none">⌚</span>}
+      title="After the watch sells"
+      summary={<span style={{ color: GREEN }}>{money(balanceAfter)}</span>}
+    >
+      <div className="grid grid-cols-2 gap-6">
+        <div>
+          <p
+            className="text-[26px] font-black leading-none"
+            style={{ color: GREEN }}
+          >
+            {money(balanceAfter)}
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            balance · was {money(balanceNow)}
+          </p>
+        </div>
+        <div>
+          <p
+            className="text-[26px] font-black leading-none"
+            style={{ color: GREEN }}
+          >
+            {money(monthlyAfter)}/mo
+          </p>
+          <p className="mt-1 text-[11px] text-muted">
+            {monthlySaved > 0
+              ? `monthly · ${money(monthlySaved)} less`
+              : "monthly · unchanged"}
+          </p>
+        </div>
+      </div>
 
-      {open && (
-        <>
-          <div className="mt-3 space-y-2">
-            {offsets.map((o) => (
-              <div
-                key={o.key}
-                className="flex items-start gap-2.5 rounded-xl p-2.5"
-                style={{ background: "var(--good-bg)" }}
-              >
-                <span className="text-[17px]">{o.emoji}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-medium">{o.label}</span>
-                  <span className="block text-[11px] text-muted">{o.note}</span>
+      <div className="mt-3 space-y-2">
+        {offsets.map((o) => (
+          <div
+            key={o.key}
+            className="flex items-start gap-2.5 rounded-xl p-2.5"
+            style={{ background: "var(--good-bg)" }}
+          >
+            <span className="text-[17px]">{o.emoji}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] font-medium">{o.label}</span>
+              <span className="block text-[11px] text-muted">{o.note}</span>
+            </span>
+            <span
+              className="shrink-0 text-[15px] font-bold"
+              style={{ color: GREEN }}
+            >
+              −{money(o.amount)}
+            </span>
+          </div>
+        ))}
+
+        {/* Already counted further up — greyed, and it says where it went. */}
+        <div className="flex items-start gap-2.5 rounded-xl bg-tint p-2.5">
+          <span className="text-[17px] opacity-60">🔑</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] font-medium text-muted">
+              Security deposit coming back
+            </span>
+            <span className="block text-[11px] text-muted">
+              already taken off what went into the gym — {money(depositShare)}{" "}
+              of it is Jamie&apos;s, being his {splitPct}% share
+            </span>
+          </span>
+          <span className="shrink-0 text-[15px] font-bold text-muted">
+            −{money(deposit)}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
+        <div className="flex items-center justify-between">
+          <span className="text-muted">Balance today</span>
+          <span>{money(balanceNow)}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted">− Assets and money coming</span>
+          <span style={{ color: GREEN }}>−{money(total)}</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+          <span>= Balance after</span>
+          <span style={{ color: GREEN }}>{money(balanceAfter)}</span>
+        </div>
+      </div>
+
+      {/* What the monthly does, and why. A balance falling doesn't move the
+          payment on its own — a debt has to be gone. */}
+      <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
+        <p className="text-[11px] uppercase tracking-wide text-muted">
+          What the payment does
+        </p>
+        {lump.cleared.length > 0 ? (
+          <>
+            <p className="text-[12px] text-muted">
+              Put at your highest-interest debts first, {money(total)} clears
+              these outright:
+            </p>
+            {lump.cleared.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate text-muted">
+                  {d.name} · {d.apr}%
                 </span>
-                <span
-                  className="shrink-0 text-[15px] font-bold"
-                  style={{ color: GREEN }}
-                >
-                  −{money(o.amount)}
+                <span className="shrink-0" style={{ color: GREEN }}>
+                  −{money(d.minPayment)}/mo
                 </span>
               </div>
             ))}
-
-            {/* Already counted further up — greyed, and it says where it went. */}
-            <div className="flex items-start gap-2.5 rounded-xl bg-tint p-2.5">
-              <span className="text-[17px] opacity-60">🔑</span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-medium text-muted">
-                  Security deposit coming back
-                </span>
-                <span className="block text-[11px] text-muted">
-                  already taken off what went into the gym — {money(depositShare)}{" "}
-                  of it is Jamie&apos;s, being his {splitPct}% share
-                </span>
-              </span>
-              <span className="shrink-0 text-[15px] font-bold text-muted">
-                −{money(deposit)}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
-            <div className="flex items-center justify-between">
-              <span className="text-muted">Balance today</span>
-              <span>{money(balanceNow)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted">− Assets and money coming</span>
-              <span style={{ color: GREEN }}>−{money(total)}</span>
-            </div>
-            <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
-              <span>= Balance after</span>
-              <span style={{ color: GREEN }}>{money(balanceAfter)}</span>
-            </div>
-          </div>
-
-          {/* What the monthly does, and why. A balance falling doesn't move the
-              payment on its own — a debt has to be gone. */}
-          <div className="mt-3 space-y-1 border-t border-border pt-3 text-[13px]">
-            <p className="text-[11px] uppercase tracking-wide text-muted">
-              What the payment does
-            </p>
-            {lump.cleared.length > 0 ? (
-              <>
-                <p className="text-[12px] text-muted">
-                  Put at your highest-interest debts first, {money(total)} clears
-                  these outright:
-                </p>
-                {lump.cleared.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-muted">
-                      {d.name} · {d.apr}%
-                    </span>
-                    <span className="shrink-0" style={{ color: GREEN }}>
-                      −{money(d.minPayment)}/mo
-                    </span>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <p className="text-[12px] text-muted">
-                It isn&apos;t enough to clear any one debt outright, so no payment
-                stops yet.
-              </p>
-            )}
-            {lump.partial && (
-              <p className="text-[12px] text-muted">
-                The remaining {money(lump.partial.paid)} comes off{" "}
-                {lump.partial.debt.name} without clearing it, so its{" "}
-                {money(lump.partial.debt.minPayment)}/mo carries on.
-              </p>
-            )}
-            <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
-              <span>= Monthly after</span>
-              <span style={{ color: GREEN }}>{money(monthlyAfter)}/mo</span>
-            </div>
-          </div>
-
-          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
-            <AlertCircle size={13} className="mt-0.5 shrink-0" />
-            None of this has happened yet — the watch has to sell and the payment
-            has to arrive. Only a debt paid off completely stops costing
-            anything each month, so the saving above is the careful figure, not
-            the best case.
+          </>
+        ) : (
+          <p className="text-[12px] text-muted">
+            It isn&apos;t enough to clear any one debt outright, so no payment
+            stops yet.
           </p>
-        </>
-      )}
-    </Card>
+        )}
+        {lump.partial && (
+          <p className="text-[12px] text-muted">
+            The remaining {money(lump.partial.paid)} comes off{" "}
+            {lump.partial.debt.name} without clearing it, so its{" "}
+            {money(lump.partial.debt.minPayment)}/mo carries on.
+          </p>
+        )}
+        <div className="flex items-center justify-between border-t border-border pt-1.5 font-semibold">
+          <span>= Monthly after</span>
+          <span style={{ color: GREEN }}>{money(monthlyAfter)}/mo</span>
+        </div>
+      </div>
+
+      <p className="mt-2 flex items-start gap-1.5 text-xs text-muted">
+        <AlertCircle size={13} className="mt-0.5 shrink-0" />
+        None of this has happened yet — the watch has to sell and the payment
+        has to arrive. Only a debt paid off completely stops costing
+        anything each month, so the saving above is the careful figure, not
+        the best case.
+      </p>
+    </Fold>
   );
 }
 
@@ -1754,11 +1573,15 @@ function NewDebtCard({
   pay,
   big = false,
   debts,
+  switcher,
 }: {
   label: string;
   loans: DebtTransaction[];
   pay: PayMonth[];
   big?: boolean;
+  // Sits at the top of the card, outside the button, so its own taps don't
+  // open and shut the detail. Only the panel below passes one.
+  switcher?: ReactNode;
   // Only the lead card passes these, and only to work out what the new
   // borrowing costs each month from here on. Left off, the card is exactly
   // what it was.
@@ -1807,9 +1630,6 @@ function NewDebtCard({
 
   const nothing = parts.length === 0;
 
-  // Only the lead card has the width to put the two figures in a row.
-  const sideBySide = monthlyCost !== null && big;
-
   return (
     <div
       className="rounded-2xl border"
@@ -1820,97 +1640,60 @@ function NewDebtCard({
         borderColor: big ? "#f3d9d0" : "var(--border)",
       }}
     >
+      {switcher && <div className="px-4 pt-4">{switcher}</div>}
       <button
         type="button"
-        className="w-full p-4 text-left disabled:cursor-default"
+        className={`w-full p-4 text-left disabled:cursor-default ${switcher ? "pt-3" : ""}`}
         onClick={() => setOpen((o) => !o)}
         disabled={nothing}
         aria-expanded={nothing ? undefined : open}
       >
-        <span
-          className={`block text-muted ${big ? "text-[12px] font-medium uppercase tracking-[0.18em]" : "text-[11px]"}`}
-        >
-          {label}
-        </span>
-
-        {/* The amount borrowed and what it costs from here on. One is what
-            happened over the period; the other is what it keeps costing — and
-            the second is the one that never got said.
-
-            Side by side only on the lead card, which has the full width for
-            it. The two small cards are half a phone wide already, so splitting
-            them again leaves about 75px a column and neither figure fits. */}
-        <span
-          className={
-            sideBySide ? "mt-1 grid grid-cols-2 items-start gap-3" : "mt-1 block"
-          }
-        >
-          <span className="block min-w-0">
-            <span
-              className={`block font-black leading-none tracking-tight ${
-                // Sharing the row with the /mo figure halves the room, and
-                // "+$35,893" at 40px does not fit half a phone. It keeps the
-                // full size whenever it has the width to itself.
-                big ? (sideBySide ? "text-[30px]" : "text-[40px]") : "text-[24px]"
-              }`}
-              style={{ color: nothing ? "var(--muted)" : tone }}
-            >
-              {grew ? "+" : ""}
-              {money(Math.abs(total))}
-            </span>
-            <span
-              className={`mt-1.5 block text-muted ${big ? "text-[12px]" : "text-[11px]"}`}
-            >
-              {nothing ? "nothing borrowed" : grew ? "borrowed" : "paid off"}
-            </span>
+        <span className="flex items-center justify-between gap-2">
+          <span
+            className={`block text-muted ${big ? "text-[12px] font-medium uppercase tracking-[0.18em]" : "text-[11px]"}`}
+          >
+            {label}
           </span>
-
-          {sideBySide && (
-            <span className="block min-w-0">
-              <span className="block text-[22px] font-black leading-none tracking-tight">
-                {grew ? "+" : "−"}
-                {money(monthlyCost)}
-                <span className="text-[13px] font-bold">/mo</span>
-              </span>
-              <span className="mt-1.5 block text-[12px] text-muted">
-                {grew ? "added to" : "off"} the monthly payment
-              </span>
-            </span>
+          {!nothing && (
+            <ChevronDown
+              size={16}
+              className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+            />
           )}
         </span>
 
-        {/* On the small cards the same figure runs on one wrapping line —
-            the number carries the weight, the words stay quiet. */}
-        {monthlyCost !== null && !sideBySide && (
-          <span className="mt-1.5 block text-[11px]">
-            <span className="text-[13px] font-bold">
-              {grew ? "+" : "−"}
-              {money(monthlyCost)}/mo
-            </span>{" "}
-            <span className="text-muted">
-              {grew ? "added to the payment" : "off the payment"}
-            </span>
-          </span>
-        )}
-
-        {/* The way in, on its own line so it never competes with the figures
-            above it for room. */}
-        {!nothing && (
-          <span
-            className={`mt-2 flex items-center gap-1 text-muted ${big ? "text-[12px]" : "text-[11px]"}`}
-          >
-            tap for the detail
-            <ChevronDown
-              size={12}
-              className="transition-transform"
-              style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-            />
-          </span>
-        )}
+        {/* Shut, the card is the one number: what the stretch added (or, in
+            green with a minus, what it paid off). The words, the monthly cost
+            and where it came from are all one tap away. */}
+        <span
+          className={`mt-1 block font-black leading-none tracking-tight ${
+            big ? "text-[40px]" : "text-[24px]"
+          }`}
+          style={{ color: nothing ? "var(--muted)" : tone }}
+        >
+          {grew ? "+" : total < 0 ? "−" : ""}
+          {money(Math.abs(total))}
+        </span>
       </button>
 
       {open && !nothing && (
         <div className="space-y-1.5 px-4 pb-4">
+          {/* What the borrowing keeps costing from here on — the half a bare
+              "+$2,474" never said. */}
+          <div className="flex items-baseline justify-between gap-3 px-1 pb-1 text-[13px]">
+            <span className="text-muted">{grew ? "Borrowed" : "Paid off"}</span>
+            {monthlyCost !== null && (
+              <span>
+                <span className="font-bold">
+                  {grew ? "+" : "−"}
+                  {money(monthlyCost)}/mo
+                </span>{" "}
+                <span className="text-muted">
+                  {grew ? "added to the payment" : "off the payment"}
+                </span>
+              </span>
+            )}
+          </div>
           {parts.map((part) => {
             const partOpen = openPart === part.key;
             const back = part.amount < 0;
@@ -1994,6 +1777,113 @@ function NewDebtCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ── This month, last month, the year so far — in one card ────────────────────
+// The three periods used to be three cards: a big one for this month and two
+// half-width ones under it. Six figures before the page had said what's owed.
+// Now it's one card and a switch, opening on this month. Each period is still
+// the same NewDebtCard, so the figures are worked out exactly as before.
+type NewDebtPeriod = {
+  key: string;
+  tab: string;
+  label: string;
+  loans: DebtTransaction[];
+  pay: PayMonth[];
+};
+
+function NewDebtPanel({
+  periods,
+  debts,
+}: {
+  periods: NewDebtPeriod[];
+  debts: Debt[];
+}) {
+  const [active, setActive] = useState(periods[0]?.key);
+  const period = periods.find((p) => p.key === active) ?? periods[0];
+  if (!period) return null;
+
+  const switcher = (
+    <div
+      className="grid gap-1 rounded-full p-1"
+      style={{
+        gridTemplateColumns: `repeat(${periods.length}, minmax(0, 1fr))`,
+        background: "rgba(255,255,255,0.55)",
+      }}
+      role="tablist"
+    >
+      {periods.map((p) => {
+        const on = p.key === period.key;
+        return (
+          <button
+            key={p.key}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            className={`truncate rounded-full px-2 py-1.5 text-[12px] ${
+              on ? "bg-card font-semibold shadow-sm" : "text-muted"
+            }`}
+            onClick={() => setActive(p.key)}
+          >
+            {p.tab}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  // Keyed by period so switching starts the new one folded, rather than
+  // carrying over whichever part was open on the last.
+  return (
+    <NewDebtCard
+      key={period.key}
+      big
+      label={period.label}
+      loans={period.loans}
+      pay={period.pay}
+      debts={debts}
+      switcher={switcher}
+    />
+  );
+}
+
+// ── A section folded down to one line ────────────────────────────────────────
+// Everything under the headline opens the same way: one slim row saying what
+// it is and, where there is one, the figure it comes to. The rest is a tap away.
+function Fold({
+  icon,
+  title,
+  summary,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  summary?: ReactNode;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card>
+      <button
+        className="flex w-full items-center gap-2 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-muted">
+          <span className="shrink-0">{icon}</span>
+          <span className="min-w-0">{title}</span>
+        </span>
+        {summary !== undefined && (
+          <span className="shrink-0 text-[14px] font-semibold">{summary}</span>
+        )}
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && <div className="mt-3">{children}</div>}
+    </Card>
   );
 }
 
@@ -2180,52 +2070,36 @@ function OverdrawnDetail({ months }: { months: PayMonth[] }) {
     </div>
   );
 }
+
 // ── Credit score ─────────────────────────────────────────────────────────────
-// The number, what it means in words, and where it sits on the 300–850 scale —
-// so a score reads as a position rather than as three digits on their own.
+// The number and what it means in words, on one row like the folds above it.
 //
-// The whole card is a link to the Credit Report page. The score is the summary
+// The whole row is a link to the Credit Report page. The score is the summary
 // of what's on that page, so tapping it is the obvious next question: which
-// accounts made it this number?
-function FicoCard({ score, date }: { score: number; date: string }) {
+// accounts made it this number? The 300–850 scale lives there too.
+function FicoCard({ score }: { score: number }) {
   const color =
     score >= 740 ? GREEN : score >= 670 ? SKY : score >= 580 ? AMBER : "#a1a1a1";
-  const pct = Math.max(0, Math.min(100, ((score - 300) / 550) * 100));
 
   return (
     <Link href="/credit-report" className="block">
       <Card>
-        <div className="flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-[13px] text-muted">
-            <Gauge size={15} />
+        <div className="flex items-center gap-2">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-muted">
+            <Gauge size={15} className="shrink-0" />
             Credit score
-          </p>
+          </span>
+          <span className="shrink-0 text-[14px] font-semibold" style={{ color }}>
+            {score}
+          </span>
           <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
+            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium text-white"
             style={{ background: color }}
           >
             {ficoLabel(score)}
           </span>
+          <ChevronRight size={16} className="shrink-0 text-muted" />
         </div>
-        <p className="mt-1 text-[34px] font-black leading-none" style={{ color }}>
-          {score}
-        </p>
-        <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-tint">
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${pct}%`, background: color }}
-          />
-        </div>
-        <div className="mt-1 flex justify-between text-[10px] text-muted">
-          <span>300</span>
-          <span>850</span>
-        </div>
-        <p className="mt-1 flex items-center justify-end gap-2 text-xs text-muted">
-          <span className="flex shrink-0 items-center gap-0.5" style={{ color }}>
-            See the full report
-            <ChevronRight size={13} />
-          </span>
-        </p>
       </Card>
     </Link>
   );
@@ -2452,7 +2326,7 @@ function PayoffCalculator({
       >
         <span className="flex items-center gap-1.5 text-[13px] text-muted">
           <TrendingDown size={15} />
-          What if you pay extra?
+          Pay extra
         </span>
         <ChevronDown
           size={16}

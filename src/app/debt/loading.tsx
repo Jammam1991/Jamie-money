@@ -6,33 +6,37 @@ import { Card, PageTitle } from "@/components/ui";
 // a moment because they come from Money App and the gym dashboard, not because
 // nothing is happening.
 //
-// It mirrors the real layout (brown headline tile, then the year-by-year card)
-// so the page doesn't jump around when the figures land.
+// It mirrors the real layout (the new-debt card with its switch, the total
+// that opens onto its buckets, then a row apiece for the folded detail) so the
+// page doesn't jump around when the figures land.
 export default function Loading() {
   return (
     <div>
       <PageTitle>Debt</PageTitle>
-      <div className="animate-pulse space-y-4">
+      <div className="animate-pulse space-y-3">
         <div
-          className="rounded-2xl p-4"
-          style={{ background: "linear-gradient(135deg, #a56814 0%, #7d4a0b 100%)" }}
+          className="rounded-2xl border p-4"
+          style={{
+            background: "linear-gradient(150deg, #fff6f2 0%, #ffeae4 55%, #f6ecfb 100%)",
+            borderColor: "#f3d9d0",
+          }}
         >
-          <div className="h-3 w-40 rounded bg-white/30" />
-          <div className="mt-2 h-8 w-32 rounded bg-white/40" />
-          <div className="mt-4 h-3 w-full rounded bg-white/20" />
+          <div className="h-8 w-full rounded-full bg-white/60" />
+          <div className="mt-4 h-3 w-36 rounded bg-black/10" />
+          <div className="mt-2 h-8 w-32 rounded bg-black/10" />
         </div>
 
         <Card>
           <div className="h-3 w-24 rounded bg-tint" />
-          <div className="mt-3 h-4 w-3/4 rounded bg-tint" />
-          <div className="mt-2 h-4 w-1/2 rounded bg-tint" />
-          <div className="mt-4 h-20 w-full rounded-xl bg-tint" />
-          <div className="mt-4 space-y-2">
-            <div className="h-12 w-full rounded-xl bg-tint" />
-            <div className="h-12 w-full rounded-xl bg-tint" />
-            <div className="h-12 w-full rounded-xl bg-tint" />
-          </div>
+          <div className="mt-2 h-8 w-40 rounded bg-tint" />
         </Card>
+
+        <div className="h-3 w-24 rounded bg-tint" />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Card key={i}>
+            <div className="h-4 w-2/3 rounded bg-tint" />
+          </Card>
+        ))}
       </div>
     </div>
   );
