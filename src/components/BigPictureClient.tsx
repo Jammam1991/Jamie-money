@@ -70,7 +70,7 @@ function money(n: number): string {
 // account's Notes field over there, that becomes the better source and this
 // list can go.
 const ACCOUNT_NOTES: { match: RegExp; note: string }[] = [
-  { match: /beacon|b[ei]rkshire/i, note: "Chris/Jamie Debt" },
+  { match: /beacon|b[ei]rkshire/i, note: "Admin/Jamie Debt" },
 ];
 
 function accountNote(name: string): string | null {
@@ -213,7 +213,7 @@ function Hero({ picture }: { picture: HouseholdPicture }) {
           </ul>
           {expanded === "jamie" && (
             <p className="mt-2.5 border-t border-white/10 pt-2.5 text-[11px] text-white/50">
-              Only what&apos;s in Jamie&apos;s name at the banks. What Chris has lent her
+              Only what&apos;s in Jamie&apos;s name at the banks. What Admin has lent her
               personally isn&apos;t counted here — that&apos;s scene 3, below.
             </p>
           )}
@@ -239,7 +239,7 @@ function Scene1Owed({ picture, index }: { picture: HouseholdPicture; index: numb
   const bands = [
     { key: "gym", color: AMBER, label: "🏋️ The gym's debt", amount: picture.businessDebt },
     { key: "personal", color: VIOLET, label: "🏠 Our personal debt", amount: picture.personalDebt },
-    { key: "rental", color: SKY, label: "🏘️ Chris's rental property", amount: picture.rentalDebt },
+    { key: "rental", color: SKY, label: "🏘️ Admin's rental property", amount: picture.rentalDebt },
   ].filter((b) => b.amount > 0);
 
   return (
@@ -302,10 +302,10 @@ function SceneInvestment({ investment, index }: { investment: Investment; index:
   return (
     <Scene index={index} emoji="🌱" title="What we've put in" accent={VIOLET}>
       <div className="mt-3 space-y-2">
-        <KeyRow color={VIOLET} label="Chris's initial investment" amount={initialInvestment} />
+        <KeyRow color={VIOLET} label="Admin's initial investment" amount={initialInvestment} />
         <KeyRow
           color={AMBER}
-          label="Owed to Chris (covers Jamie's pay too)"
+          label="Owed to Admin (covers Jamie's pay too)"
           amount={dueToChris}
         />
       </div>
@@ -384,7 +384,7 @@ function SceneSpending({ flow, index }: { flow: MoneyFlow; index: number }) {
         {flow.unattributedPay && (
           <div className="mt-3 rounded-lg bg-warn-bg p-2.5">
             <div className="flex items-baseline justify-between gap-3 text-[12px]">
-              <span className="font-medium text-warn">Pay not counted as Chris&apos;s</span>
+              <span className="font-medium text-warn">Pay not counted as Admin&apos;s</span>
               <span className="font-medium text-warn">
                 {money(flow.unattributedPay.monthly)}
               </span>
@@ -660,13 +660,13 @@ function SceneGap({ picture, index }: { picture: HouseholdPicture; index: number
     <Scene index={index} emoji="🕳️" title="Who fills the gap" accent={AMBER}>
       <Flow
         steps={[
-          { emoji: "💳", label: "Chris's credit" },
+          { emoji: "💳", label: "Admin's credit" },
           { emoji: "💵", label: "Borrowed" },
           { emoji: "🧾", label: "Jamie's bills" },
         ]}
       />
       <p className="mt-3 text-center text-[13px] text-muted">
-        There&apos;s no spare money to cover it. Chris borrows it.
+        There&apos;s no spare money to cover it. Admin borrows it.
       </p>
 
       {anyDraws ? (
@@ -731,7 +731,7 @@ function SceneGym({ picture, index }: { picture: HouseholdPicture; index: number
             <>
               <Flow
                 steps={[
-                  { emoji: "💳", label: "Chris's credit" },
+                  { emoji: "💳", label: "Admin's credit" },
                   { emoji: "🏋️", label: "The gym" },
                   { emoji: "🧑", label: "Jamie's pay" },
                 ]}

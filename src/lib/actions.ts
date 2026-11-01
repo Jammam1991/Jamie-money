@@ -156,7 +156,7 @@ export async function login(
 
     const stored = await getJamiePinHash();
     if (!stored) {
-      return { ok: false, error: "No PIN has been set yet — ask Chris to set one." };
+      return { ok: false, error: "No PIN has been set yet — ask Admin to set one." };
     }
 
     if (pinMatches(entered, stored)) {
@@ -1519,7 +1519,7 @@ function careerError(message: string): ActionResult {
   return {
     ok: false,
     error: missing
-      ? "Not saved — the Career page isn't set up in the database yet. Chris needs to run supabase/career.sql."
+      ? "Not saved — the Career page isn't set up in the database yet. Admin needs to run supabase/career.sql."
       : message,
   };
 }
@@ -1890,7 +1890,7 @@ export async function searchJobs(input: {
     return {
       ok: false,
       error:
-        "Job search isn't switched on yet — Chris needs to add the search keys.",
+        "Job search isn't switched on yet — Admin needs to add the search keys.",
     };
   }
   const what = input.what.trim();

@@ -29,7 +29,7 @@ export default function OwesChrisClient({
   monthStart,
 }: {
   initialCharges: OwesCharge[];
-  givenEntries: CashEntry[]; // "Gave cash to Chris" taps from the home screen
+  givenEntries: CashEntry[]; // "Gave cash to Admin" taps from the home screen
   admin: boolean;
   monthStart: string; // "YYYY-MM-01" — anything older that's unpaid is late
 }) {
@@ -127,7 +127,7 @@ export default function OwesChrisClient({
         <p className="mt-1 text-sm text-muted">
           {pastDue.thisMonth > 0
             ? `You're all caught up. ${money(pastDue.thisMonth)} from this month isn't late yet.`
-            : "You're all caught up with Chris."}
+            : "You're all caught up with Admin."}
         </p>
       </Card>
     );
@@ -152,14 +152,14 @@ export default function OwesChrisClient({
             🚨 Emergency Mode
           </div>
           <p className="mt-1 text-sm text-muted">
-            This has gone too far. Talk to Chris today.
+            This has gone too far. Talk to Admin today.
           </p>
         </Card>
       )}
 
       <Card className="mb-4">
         <div className="flex items-baseline justify-between text-[15px]">
-          <span className="text-muted">What Chris covered</span>
+          <span className="text-muted">What Admin covered</span>
           <span>{money(pastDue.chargesTotal)}</span>
         </div>
         <div className="flex items-baseline justify-between text-[15px]">
@@ -185,7 +185,7 @@ export default function OwesChrisClient({
       {/* The hand-overs logged on the home screen — proof the balance moved. */}
       {givenEntries.length > 0 && (
         <Card className="mb-4">
-          <p className="mb-1 text-[13px] text-muted">🤝 Cash you gave Chris</p>
+          <p className="mb-1 text-[13px] text-muted">🤝 Cash you gave Admin</p>
           {givenEntries.slice(0, 5).map((e) => (
             <div
               key={e.id}

@@ -202,7 +202,7 @@ function CarCard({ saving }: { saving: number | null }) {
     >
       {saving == null ? (
         <Missing>
-          Chris hasn&apos;t put the number in yet — it&apos;s the difference
+          Admin hasn&apos;t put the number in yet — it&apos;s the difference
           between what the policy costs now and what two separate ones would.
         </Missing>
       ) : (
@@ -232,7 +232,7 @@ function LifeCard({ low, high }: { low: number | null; high: number | null }) {
     <Benefit
       Icon={ShieldCheck}
       title="Life insurance"
-      plain="If something happens to Chris, this is what comes to Jamie. A spouse is covered by it; an ex-spouse isn't."
+      plain="If something happens to Admin, this is what comes to Jamie. A spouse is covered by it; an ex-spouse isn't."
     >
       {range == null ? (
         <Missing>The cover amount isn&apos;t filled in yet.</Missing>
@@ -264,8 +264,8 @@ function HealthCard({ benefits }: { benefits: MarriageBenefits }) {
       title="Health insurance through Comerica"
       plain={
         pct == null
-          ? "Chris's employer pays most of the cost of covering Jamie. A spouse can be on that plan. An ex-spouse can't — the whole premium becomes Jamie's to pay."
-          : `Chris's employer pays ${pct}% of the cost of covering Jamie. A spouse can be on that plan. An ex-spouse can't — the whole premium becomes Jamie's to pay.`
+          ? "Admin's employer pays most of the cost of covering Jamie. A spouse can be on that plan. An ex-spouse can't — the whole premium becomes Jamie's to pay."
+          : `Admin's employer pays ${pct}% of the cost of covering Jamie. A spouse can be on that plan. An ex-spouse can't — the whole premium becomes Jamie's to pay.`
       }
     >
       {yearly == null || premium == null ? (
@@ -372,8 +372,8 @@ function TiedTogether() {
 
       <Reason
         n={2}
-        claim="Chris guarantees my apartment and my car, so he's tied to my money."
-        answer="Also true — and this is the one that actually ties the money together. But a guarantee is a signature on a lease and on a car loan. It isn't a marriage. Getting divorced tomorrow would not remove Chris's name from either one; the lease and the loan would sit there exactly as they are."
+        claim="Admin guarantees my apartment and my car, so he's tied to my money."
+        answer="Also true — and this is the one that actually ties the money together. But a guarantee is a signature on a lease and on a car loan. It isn't a marriage. Getting divorced tomorrow would not remove Admin's name from either one; the lease and the loan would sit there exactly as they are."
       />
 
       <Card>

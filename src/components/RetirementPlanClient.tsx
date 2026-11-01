@@ -91,14 +91,14 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
               <h2 className="text-3xl font-bold leading-tight tracking-tight">Nothing to pay back. The 401k is all yours.</h2>
             ) : (
               <h2 className="text-3xl font-bold leading-tight tracking-tight">
-                Every $1 you pay Chris comes back to you as{" "}
+                Every $1 you pay Admin comes back to you as{" "}
                 <span className={ratio >= 1 ? "text-pos" : "text-foreground"}>${ratio.toFixed(2)}</span>
               </h2>
             )}
             {r.totalLoanPaid > 0 && (
               <p className="text-sm text-muted">
                 {ratio >= 1
-                  ? `Paying Chris back is like saving for yourself, with ${money(r.withSavingsAtRetire - r.totalLoanPaid)} on top.`
+                  ? `Paying Admin back is like saving for yourself, with ${money(r.withSavingsAtRetire - r.totalLoanPaid)} on top.`
                   : `Your 401k gets back ${Math.round(ratio * 100)}% of what you pay. Saving a little each month closes the gap.`}
               </p>
             )}
@@ -108,7 +108,7 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
 
         {r.totalLoanPaid > 0 && (
           <div className="mt-6 space-y-3">
-            <Bar label="You pay Chris" value={r.totalLoanPaid} max={barMax} color="var(--neg)" />
+            <Bar label="You pay Admin" value={r.totalLoanPaid} max={barMax} color="var(--neg)" />
             <Bar label={`Your 401k at ${age}`} value={r.withSavingsAtRetire} max={barMax} color="var(--pos)" />
           </div>
         )}
@@ -116,10 +116,10 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
 
       {/* The deal as three steps. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Step n={1} title="Chris gives you" value={money(inputs.fromChris)} sub="Part of his 401k, into your own" />
+        <Step n={1} title="Admin gives you" value={money(inputs.fromChris)} sub="Part of his 401k, into your own" />
         <Step
           n={2}
-          title="You pay Chris back"
+          title="You pay Admin back"
           value={`${money(inputs.monthlyPayment)}/mo`}
           sub={endLabel === null ? "Not enough to ever pay it off" : `${startLabel} to ${endLabel}, ${money(r.totalLoanPaid)} in all`}
         />
@@ -136,7 +136,7 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
       <section className="rounded-3xl border border-border bg-card p-5 space-y-1">
         <h2 className="text-lg font-semibold">The deal</h2>
         <p className="text-sm text-muted">
-          You owe Chris <b className="text-foreground">{money(inputs.jamieOwes)}</b>
+          You owe Admin <b className="text-foreground">{money(inputs.jamieOwes)}</b>
           {inputs.loanRatePct > 0 ? `, at ${inputs.loanRatePct}% interest a year` : ", no interest"}.
         </p>
         {endLabel === null ? (

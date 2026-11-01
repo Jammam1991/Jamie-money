@@ -44,10 +44,10 @@ export default function PlanChart({ points }: { points: YearPoint[] }) {
         </span>
         <span className="inline-flex items-center gap-1.5">
           <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: 'var(--neg)' }} />
-          Paid to Chris so far
+          Paid to Admin so far
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Your 401k vs what you have paid Chris, by age">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Your 401k vs what you have paid Admin, by age">
         <defs>
           <linearGradient id="plan-hill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--pos)" stopOpacity="0.35" />
