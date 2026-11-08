@@ -6,14 +6,13 @@ import {
   BedDouble,
   ChevronDown,
   ExternalLink,
-  Images,
   Loader2,
   Ruler,
   Search,
   Settings2,
   Sparkles,
 } from "lucide-react";
-import { analyzeHomeSituation, findHomes, getHomePhotos } from "@/lib/actions";
+import { analyzeHomeSituation, findHomes } from "@/lib/actions";
 import { money } from "@/lib/data";
 import { homeBuyingMath, paymentForPrice, taxRateFor, type HomeBuyingInputs } from "@/lib/homeBuying";
 import { fitFor, type Fit, type HomeAnalysis, type HomePlan, type HomeProfile } from "@/lib/homePlan";
@@ -468,16 +467,8 @@ function ListingCard({
   downPct: number;
 }) {
   const [open, setOpen] = useState(false);
-  const [photos, setPhotos] = useState<string[]>(listing.photos);
-  const [loadingPhotos, startPhotos] = useTransition();
+  const photos = listing.photos;
   const style = FIT_STYLE[fit];
-
-  function morePhotos() {
-    startPhotos(async () => {
-      const got = await getHomePhotos(listing.zpid);
-      if (got.length) setPhotos(got);
-    });
-  }
 
   return (
     <article className="overflow-hidden rounded-3xl border border-border bg-card">
@@ -546,24 +537,13 @@ function ListingCard({
               <Row label="Every month" value={money(pay.monthlyTotal)} bold />
             </dl>
             <p className="text-[11px] text-muted">Closing costs (often 2–5% of the price) are on top of the down payment.</p>
-            {photos.length > 1 ? (
+            {photos.length > 1 && (
               <div className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1">
                 {photos.map((src) => (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img key={src} src={src} alt="" loading="lazy" className="h-28 w-40 shrink-0 snap-start rounded-xl object-cover" />
                 ))}
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={morePhotos}
-                disabled={loadingPhotos}
-                className="flex items-center gap-1.5 text-[13px] font-medium disabled:opacity-50"
-                style={{ color: "var(--reg)" }}
-              >
-                {loadingPhotos ? <Loader2 size={14} className="animate-spin" /> : <Images size={14} />}
-                More photos
-              </button>
             )}
           </div>
         )}
