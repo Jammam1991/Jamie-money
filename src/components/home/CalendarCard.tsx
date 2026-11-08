@@ -55,6 +55,38 @@ export function CalendarSkeleton() {
   );
 }
 
+// What the card looks like before he's connected anything: a made-up few days
+// so he can see what he's getting, clearly marked as an example.
+function laInstant(daysAhead: number, hour: number, minute = 0): string {
+  const key = dayKey(new Date(Date.now() + daysAhead * 86_400_000).toISOString());
+  const [y, m, d] = key.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hour, minute);
+  // How far Pacific time is behind UTC on that day (7 or 8 hours).
+  const shown = new Date(guess).toLocaleString("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" });
+  const offset = (24 + hour - Number(shown)) % 24;
+  return new Date(guess + offset * 3_600_000).toISOString();
+}
+
+function sampleEvents(): CalEvent[] {
+  const e = (id: string, title: string, days: number, h: number, mi: number, location = "", allDay = false): CalEvent => ({
+    id,
+    title,
+    start: allDay ? laInstant(days, 0) : laInstant(days, h, mi),
+    end: null,
+    allDay,
+    location,
+  });
+  return [
+    e("s1", "Massage — Sarah K.", 0, 10, 0, "BoxingRX"),
+    e("s2", "Challenge check-ins", 0, 14, 0, "BoxingRX"),
+    e("s3", "Dinner with friends", 0, 18, 30),
+    e("s4", "Call with the lawyer", 1, 9, 0, "Phone"),
+    e("s5", "Massage — David R.", 1, 12, 0, "BoxingRX"),
+    e("s6", "Car registration due", 2, 0, 0, "", true),
+    e("s7", "Dentist", 2, 11, 0, "Glendale"),
+  ];
+}
+
 export default function CalendarCard({ result }: { result: CalendarResult }) {
   const [connecting, setConnecting] = useState(false);
   const connected = result.state !== "none";
@@ -71,10 +103,31 @@ export default function CalendarCard({ result }: { result: CalendarResult }) {
             Change
           </button>
         )}
+        {!connected && !connecting && (
+          <span className="rounded-full bg-tint px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">
+            Example
+          </span>
+        )}
       </Head>
 
-      {connecting || !connected ? (
+      {connecting ? (
         <ConnectForm connected={connected} onDone={() => setConnecting(false)} />
+      ) : !connected ? (
+        <>
+          <div className="pointer-events-none select-none opacity-70" aria-hidden="true">
+            <Events events={sampleEvents()} />
+          </div>
+          <button
+            type="button"
+            onClick={() => setConnecting(true)}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[15px] font-semibold text-white"
+            style={{ background: "#0e6f8a" }}
+          >
+            <CalendarDays size={17} />
+            Connect your Google Calendar
+          </button>
+          <p className="mt-2 text-center text-[12px] text-muted">This is a made-up example. Yours shows here once it&apos;s connected.</p>
+        </>
       ) : result.state === "error" ? (
         <p className="mt-4 rounded-2xl bg-warn-bg px-4 py-3 text-[14px] text-warn">{result.message}</p>
       ) : (
@@ -195,11 +248,11 @@ function ConnectForm({ connected, onDone }: { connected: boolean; onDone: () => 
         </button>
       </form>
       {error && <p className="text-[13px] text-warn">{error}</p>}
-      {connected && (
-        <div className="flex items-center justify-between pt-1">
-          <button type="button" onClick={onDone} className="text-[13px] text-muted">
-            Cancel
-          </button>
+      <div className="flex items-center justify-between pt-1">
+        <button type="button" onClick={onDone} className="text-[13px] text-muted">
+          Cancel
+        </button>
+        {connected && (
           <button
             type="button"
             onClick={() => save("")}
@@ -209,8 +262,8 @@ function ConnectForm({ connected, onDone }: { connected: boolean; onDone: () => 
             <Unplug size={13} />
             Disconnect
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
