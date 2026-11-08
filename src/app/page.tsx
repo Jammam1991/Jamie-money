@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import CalendarCard, { CalendarSkeleton } from "@/components/home/CalendarCard";
 import TodoCard from "@/components/home/TodoCard";
+import { FicoChip, Ticker, TickerSkeleton, TopNews, TopNewsSkeleton, WeatherChip } from "@/components/home/TopStrip";
 import {
   getBills,
   getCalendarLink,
@@ -22,6 +23,7 @@ import {
   getCashLog,
   getDebts,
   getDivorce,
+  getFicoHistory,
   getPaidBillIdsBetween,
   getProjects,
   getSettlementTerms,
@@ -93,6 +95,7 @@ export default async function HomePage() {
     projects,
     jobs,
     calendarLink,
+    ficoHistory,
   ] = await Promise.all([
     jamiePageState(),
     getBills(),
@@ -106,6 +109,7 @@ export default async function HomePage() {
     getProjects(),
     getJobApplications(),
     getCalendarLink(),
+    getFicoHistory(),
   ]);
 
   // A page Admin has taken off Jamie's screen loses its tile too — and one
@@ -155,6 +159,11 @@ export default async function HomePage() {
   const openLegal = (projects ?? []).filter((p) => p.area === "legal" && p.status !== "Done").length;
   const legalSub = live("legal") && openLegal ? `${openLegal} open matter${openLegal === 1 ? "" : "s"}` : "Cases and law firms";
 
+  // His credit score, and how far it moved since the one before (oldest first).
+  const ficoNow = ficoHistory.at(-1) ?? null;
+  const ficoBefore = ficoHistory.at(-2) ?? null;
+  const ficoChange = ficoNow && ficoBefore ? ficoNow.score - ficoBefore.score : null;
+
   const openTodos = (todos ?? []).filter((t) => !t.done).length;
   const dateLabel = new Date().toLocaleDateString("en-US", {
     timeZone: HOME_TZ,
@@ -175,6 +184,11 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-4">
+      {/* ── Markets ── */}
+      <Suspense fallback={<TickerSkeleton />}>
+        <Ticker />
+      </Suspense>
+
       {/* ── Hello ── */}
       <section
         className="relative overflow-hidden rounded-3xl p-5 text-white shadow-sm"
@@ -185,15 +199,34 @@ export default async function HomePage() {
           className="absolute -right-10 -top-12 h-40 w-40 rounded-full opacity-25"
           style={{ background: "radial-gradient(circle, #ffffff 0%, transparent 70%)" }}
         />
-        <p className="text-[12px] font-medium uppercase tracking-wider text-white/70">{dateLabel}</p>
-        <h1 className="mt-1 text-[26px] font-semibold leading-tight">{greeting()}, Jamie</h1>
-        <div className="mt-4 flex flex-wrap gap-2 text-[13px]">
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium uppercase tracking-wider text-white/70">{dateLabel}</p>
+            <h1 className="mt-1 text-[26px] font-semibold leading-tight">{greeting()}, Jamie</h1>
+          </div>
+          <Suspense fallback={null}>
+            <WeatherChip />
+          </Suspense>
+        </div>
+        <div className="relative mt-4 flex flex-wrap gap-2 text-[13px]">
+          {ficoNow && (
+            <FicoChip
+              score={ficoNow.score}
+              change={ficoChange}
+              href={shows("credit-report") ? "/credit-report" : undefined}
+            />
+          )}
           <HeroChip href="#todo">{openTodos === 0 ? "List is clear ✨" : `${openTodos} to do`}</HeroChip>
           {live("bills") && billsTotal > 0 && (
             <HeroChip href="/bills">{billsLeft > 0 ? `${money(billsLeft)} of bills left` : "Bills all paid ✓"}</HeroChip>
           )}
         </div>
       </section>
+
+      {/* ── Headlines ── */}
+      <Suspense fallback={<TopNewsSkeleton />}>
+        <TopNews />
+      </Suspense>
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* ── Calendar ── */}
