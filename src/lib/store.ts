@@ -24,6 +24,7 @@ import { DEFAULT_CAR_INFO, type CarInfo, type CarHistoryEntry } from "./carInfo"
 import { STARTER_PROJECTS, parseProjects, type Project } from "./projects";
 import { billMonthRange } from "./billMonth";
 import { parseTodos, type Todo } from "./todos";
+import { parseHomePlan, EMPTY_PROFILE, type HomePlan } from "./homePlan";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
@@ -704,6 +705,26 @@ export async function getTodos(): Promise<Todo[] | null> {
     return parseTodos(JSON.parse(String(data.value)));
   } catch {
     return null;
+  }
+}
+
+// Jamie's situation and Claude's read on it — see homePlan.ts.
+export const HOME_PLAN_KEY = "home_plan";
+
+export async function getHomePlan(): Promise<HomePlan> {
+  const empty: HomePlan = { profile: EMPTY_PROFILE, analysis: null, analyzedAt: null };
+  const c = client();
+  if (!c) return empty;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", HOME_PLAN_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return empty;
+  try {
+    return parseHomePlan(JSON.parse(String(data.value)));
+  } catch {
+    return empty;
   }
 }
 

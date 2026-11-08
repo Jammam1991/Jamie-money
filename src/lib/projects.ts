@@ -90,6 +90,8 @@ export type Project = {
   money: ProjectMoney[];
   details: ProjectDetail[];
   links: ProjectLink[];
+  /** "legal" files it under Legal instead of Projects — a case, a lawyer, a dispute. */
+  area: "legal" | null;
   /** Stamped by the server on every save. Null on a starter nobody's touched. */
   updatedAt: string | null;
 };
@@ -122,6 +124,7 @@ function starter(id: string, name: string, emoji: string, pageHref: string | nul
     money: [],
     details: [],
     links: [],
+    area: null,
     updatedAt: null,
   };
 }
@@ -137,6 +140,41 @@ export const STARTER_PROJECTS: Project[] = [
 
 export function blankProject(name: string, emoji: string): Project {
   return { ...starter(newId(), name, emoji), status: "Not started" };
+}
+
+// The facts every legal matter gets asked for, ready to fill in — and the
+// lawyer as the first person on it, if he knows who that is yet.
+export const LEGAL_DETAIL_LABELS = [
+  "Law firm",
+  "Case number",
+  "Court",
+  "Other side",
+  "Retainer / fee deal",
+];
+
+export function blankLegalMatter(name: string, firm: string, lawyer: string): Project {
+  const p = blankProject(name, "⚖️");
+  return {
+    ...p,
+    area: "legal",
+    status: "Working on it",
+    details: LEGAL_DETAIL_LABELS.map((label) => ({
+      id: newId(),
+      label,
+      value: label === "Law firm" ? firm.trim() : "",
+    })),
+    people: lawyer.trim()
+      ? [{ id: newId(), name: lawyer.trim(), role: firm.trim() ? `Attorney, ${firm.trim()}` : "Attorney", phone: "", email: "", notes: "" }]
+      : [],
+  };
+}
+
+export function isLegal(p: Project): boolean {
+  return p.area === "legal";
+}
+
+export function detailValue(p: Project, label: string): string {
+  return p.details.find((d) => d.label.toLowerCase() === label.toLowerCase())?.value ?? "";
 }
 
 export function newId(): string {
@@ -242,6 +280,7 @@ export function cleanProject(raw: unknown): Project | null {
       const url = cleanUrl(l.url);
       return url ? { id: idOf(l.id), label: str(l.label, 200) || url, url } : null;
     }),
+    area: p.area === "legal" ? "legal" : null,
     updatedAt: typeof p.updatedAt === "string" ? p.updatedAt.slice(0, 40) : null,
   };
 }

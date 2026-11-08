@@ -5,6 +5,7 @@ import {
   Briefcase,
   ChevronRight,
   FolderKanban,
+  Gavel,
   Home as HomeIcon,
   KeyRound,
   Receipt,
@@ -137,6 +138,9 @@ export default async function HomePage() {
         .slice(0, 5)
     : [];
 
+  const openLegal = (projects ?? []).filter((p) => p.area === "legal" && p.status !== "Done").length;
+  const legalSub = live("legal") && openLegal ? `${openLegal} open matter${openLegal === 1 ? "" : "s"}` : "Cases and law firms";
+
   const openTodos = (todos ?? []).filter((t) => !t.done).length;
   const dateLabel = new Date().toLocaleDateString("en-US", {
     timeZone: HOME_TZ,
@@ -151,6 +155,7 @@ export default async function HomePage() {
     { key: "career", href: "/career", label: "Career", sub: live("career") && activeJobs ? `${activeJobs} job${activeJobs === 1 ? "" : "s"} in play` : "Paths, jobs, resumes", Icon: Briefcase, tone: "#0e6f8a" },
     { key: "home-buying", href: "/home-buying", label: "Mortgage", sub: "What you could buy", Icon: HomeIcon, tone: "#9a6212" },
     { key: "projects", href: "/projects", label: "Projects", sub: "Everything in motion", Icon: FolderKanban, tone: "#6d28d9" },
+    { key: "legal", href: "/legal", label: "Legal", sub: legalSub, Icon: Gavel, tone: "#374151" },
     { key: "divorce", href: "/divorce", label: "Divorce", sub: "Dates and details", Icon: Scale, tone: "#b3261e" },
   ];
 

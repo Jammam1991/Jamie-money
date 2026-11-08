@@ -22,6 +22,7 @@ import {
   HeartHandshake,
   Home,
   LayoutGrid,
+  Gavel,
   Wallet,
   KeyRound,
   Landmark,
@@ -53,7 +54,8 @@ export type PageKey =
   | "retirement"
   | "married-vs-divorce"
   | "projects"
-  | "cash";
+  | "cash"
+  | "legal";
 
 // The three places a link can sit. "history" is the collapsible group inside the
 // menu — still the menu, one level down.
@@ -151,6 +153,16 @@ export const PAGES: AppPage[] = [
     slots: ["menu"],
     blurb:
       "Everything Jamie's working on — Career, the divorce, the roaches, the rent help — with the steps, people, money and paperwork for each.",
+  },
+  {
+    key: "legal",
+    href: "/legal",
+    label: "Legal",
+    Icon: Gavel,
+    slots: ["menu"],
+    homeCard: true,
+    blurb:
+      "Every legal matter and law firm in one place: case numbers, lawyers, court dates, what's owed to whom, and a running diary.",
   },
   {
     key: "job-vs-business",
@@ -300,6 +312,7 @@ export const SLOT_ORDER: Record<Slot, PageKey[]> = {
   menu: [
     "cash",
     "projects",
+    "legal",
     "job-vs-business",
     "career",
     "debt",

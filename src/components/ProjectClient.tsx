@@ -326,7 +326,7 @@ function EditSummary({
       setProblem(res.error ?? "That didn't delete.");
       return;
     }
-    router.push("/projects");
+    router.push(p.area === "legal" ? "/legal" : "/projects");
   };
 
   return (
