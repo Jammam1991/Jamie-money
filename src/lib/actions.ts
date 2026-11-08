@@ -1,6 +1,7 @@
 "use server";
 
 import { parseTodos, type Todo } from "./todos";
+import { ASSETS_KEY, parseAssets, type Assets } from "./assets";
 import { cleanCalendarLink, loadCalendar } from "./calendar";
 import { cleanProfile, type HomeAnalysis, type HomeProfile } from "./homePlan";
 import { analyzeHome } from "./homeAnalysis";
@@ -2181,4 +2182,18 @@ export async function findHomes(opts: {
   const maxPrice = Math.min(20_000_000, Math.max(50_000, Number(opts.maxPrice) || 0));
   const minBeds = Math.min(6, Math.max(0, Math.round(Number(opts.minBeds) || 0)));
   return searchListings({ zip, maxPrice, minBeds });
+}
+
+// One of the asset values on Financial Picture, typed in. A blank clears it.
+export async function saveAssets(values: Assets): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: ASSETS_KEY, value: JSON.stringify(parseAssets(values)) }, { onConflict: "key" });
+  if (error) return { ok: false, error: "Not saved — couldn't reach the database. Try again." };
+  revalidatePath("/debt");
+  return { ok: true };
 }

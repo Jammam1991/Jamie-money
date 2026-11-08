@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { ASSETS_KEY, DEFAULT_ASSETS, parseAssets, type Assets } from "./assets";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   bills as sampleBills,
@@ -1136,4 +1137,17 @@ export async function getDebtSnapshotRows(): Promise<DebtSnapshotRow[]> {
     missedPayment: Boolean(row.missed_payment),
     note: row.note ?? null,
   }));
+}
+
+// What Jamie owns, as typed in on Financial Picture (see assets.ts).
+export async function getAssets(): Promise<Assets> {
+  const c = client();
+  if (!c) return DEFAULT_ASSETS;
+  const { data } = await c.from("settings").select("value").eq("key", ASSETS_KEY).maybeSingle();
+  if (!data?.value) return DEFAULT_ASSETS;
+  try {
+    return parseAssets(JSON.parse(String(data.value)));
+  } catch {
+    return DEFAULT_ASSETS;
+  }
 }

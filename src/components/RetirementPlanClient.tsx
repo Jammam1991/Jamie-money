@@ -88,18 +88,18 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
           <div className="space-y-2 sm:max-w-md">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-pos">When you turn {age}</p>
             {r.totalLoanPaid === 0 ? (
-              <h2 className="text-3xl font-bold leading-tight tracking-tight">Nothing to pay back. The 401k is all yours.</h2>
+              <h2 className="text-3xl font-bold leading-tight tracking-tight">Nothing to pay back. The IRA is all yours.</h2>
             ) : (
               <h2 className="text-3xl font-bold leading-tight tracking-tight">
-                Every $1 you pay Chris comes back to you as{" "}
+                Every $1 of settlement payment comes back to you as{" "}
                 <span className={ratio >= 1 ? "text-pos" : "text-foreground"}>${ratio.toFixed(2)}</span>
               </h2>
             )}
             {r.totalLoanPaid > 0 && (
               <p className="text-sm text-muted">
                 {ratio >= 1
-                  ? `Paying Chris back is like saving for yourself, with ${money(r.withSavingsAtRetire - r.totalLoanPaid)} on top.`
-                  : `Your 401k gets back ${Math.round(ratio * 100)}% of what you pay. Saving a little each month closes the gap.`}
+                  ? `The settlement payment is like saving for yourself, with ${money(r.withSavingsAtRetire - r.totalLoanPaid)} on top.`
+                  : `Your IRA gets back ${Math.round(ratio * 100)}% of what you pay. Saving a little each month closes the gap.`}
               </p>
             )}
           </div>
@@ -108,24 +108,24 @@ export default function RetirementPlanClient({ base }: { base: PlanBase }) {
 
         {r.totalLoanPaid > 0 && (
           <div className="mt-6 space-y-3">
-            <Bar label="You pay Chris" value={r.totalLoanPaid} max={barMax} color="var(--neg)" />
-            <Bar label={`Your 401k at ${age}`} value={r.withSavingsAtRetire} max={barMax} color="var(--pos)" />
+            <Bar label="Divorce settlement payment" value={r.totalLoanPaid} max={barMax} color="var(--neg)" />
+            <Bar label={`IRA total at ${age}`} value={r.withSavingsAtRetire} max={barMax} color="var(--pos)" />
           </div>
         )}
       </section>
 
       {/* The deal as three steps. */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Step n={1} title="Chris gives you" value={money(inputs.fromChris)} sub="Part of his 401k, into your own" />
+        <Step n={1} title="Chris gives you" value={money(inputs.fromChris)} sub="Part of his 401k, into your IRA" />
         <Step
           n={2}
-          title="You pay Chris back"
+          title="Divorce settlement payment"
           value={`${money(inputs.monthlyPayment)}/mo`}
           sub={endLabel === null ? "Not enough to ever pay it off" : `${startLabel} to ${endLabel}, ${money(r.totalLoanPaid)} in all`}
         />
         <Step
           n={3}
-          title={`At ${age} you have`}
+          title={`IRA total at ${age}`}
           value={money(r.withSavingsAtRetire)}
           sub={`About ${money(r.monthlyIncomeWithSavings)} a month for life`}
           glow
