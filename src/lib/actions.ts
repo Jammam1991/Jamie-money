@@ -4,7 +4,7 @@ import { parseTodos, type Todo } from "./todos";
 import { cleanCalendarLink, loadCalendar } from "./calendar";
 import { cleanProfile, type HomeAnalysis, type HomeProfile } from "./homePlan";
 import { analyzeHome } from "./homeAnalysis";
-import { listingPhotos, searchListings, type ListingSearch } from "./listings";
+import { searchListings, type ListingSearch } from "./listings";
 import { DEFAULT_HOME_BUYING, taxRateFor } from "./homeBuying";
 import {
   getBills as readBills,
@@ -2181,9 +2181,4 @@ export async function findHomes(opts: {
   const maxPrice = Math.min(20_000_000, Math.max(50_000, Number(opts.maxPrice) || 0));
   const minBeds = Math.min(6, Math.max(0, Math.round(Number(opts.minBeds) || 0)));
   return searchListings({ zip, maxPrice, minBeds });
-}
-
-export async function getHomePhotos(zpid: string): Promise<string[]> {
-  if (!(await isLoggedIn())) return [];
-  return listingPhotos(String(zpid));
 }
