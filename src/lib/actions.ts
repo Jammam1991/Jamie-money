@@ -1,5 +1,8 @@
 "use server";
 
+import { parseTodos, type Todo } from "./todos";
+import { cleanCalendarLink, loadCalendar } from "./calendar";
+
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -24,6 +27,8 @@ import {
   CAR_INFO_KEY,
   CAR_HISTORY_KEY,
   PROJECTS_KEY,
+  TODOS_KEY,
+  CALENDAR_LINK_KEY,
   PIN_LOCK_MINUTES,
   PIN_TRIES,
   getJamiePinHash,
@@ -270,6 +275,7 @@ export async function toggleViewAsJamie(): Promise<void> {
   }
 
   revalidatePath("/");
+  revalidatePath("/cash");
 }
 
 // A sort value that keeps newly added rows in the order they were created.
@@ -1110,6 +1116,7 @@ export async function addCashEntry(input: {
     .single();
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
+  revalidatePath("/cash");
   return { ok: true, id: data?.id ? String(data.id) : undefined };
 }
 
@@ -1122,6 +1129,7 @@ export async function deleteCashEntry(id: string): Promise<ActionResult> {
   const { error } = await c.from("cash_log").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
+  revalidatePath("/cash");
   return { ok: true };
 }
 
@@ -2034,5 +2042,49 @@ export async function setMenuOrder(hrefs: string[]): Promise<ActionResult> {
   // The menu is in the layout, so every page renders it — the whole tree has to
   // be revalidated or the old order stays put on screens already visited.
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// ── Home screen: to-do list and calendar ─────────────────────────────────────
+// The whole list is saved at once — it's short, it's one person's, and it
+// means a tick, an add and a delete are all the same small write.
+export async function saveTodos(list: Todo[]): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const cleaned = parseTodos(list);
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: TODOS_KEY, value: JSON.stringify(cleaned) }, { onConflict: "key" });
+  if (error) return { ok: false, error: "Not saved — couldn't reach the database. Try again." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// Paste the calendar link in, or pass "" to disconnect.
+export async function saveCalendarLink(raw: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  let value = "";
+  if (raw.trim()) {
+    const link = cleanCalendarLink(raw);
+    if (!link) {
+      return {
+        ok: false,
+        error: "That doesn't look like a calendar link. It should start with https://calendar.google.com/calendar/ical/",
+      };
+    }
+    const check = await loadCalendar(link);
+    if (check.state === "error") return { ok: false, error: check.message };
+    value = link;
+  }
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: CALENDAR_LINK_KEY, value }, { onConflict: "key" });
+  if (error) return { ok: false, error: "Not saved — couldn't reach the database. Try again." };
+  revalidatePath("/");
   return { ok: true };
 }

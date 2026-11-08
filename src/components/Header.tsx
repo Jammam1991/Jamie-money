@@ -197,8 +197,10 @@ export default function Header({
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between">
-        <div className="text-lg font-medium"></div>
+      <div className="mb-4 flex items-center justify-between">
+        <Link href="/" className="text-[15px] font-semibold tracking-tight">
+          Jamie&apos;s Money
+        </Link>
         <button
           onClick={() => setMenuOpen(!menuOpen)}
           className="p-2 hover:bg-tint rounded-lg transition-colors"

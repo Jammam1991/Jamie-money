@@ -57,7 +57,7 @@ export async function GET(request: Request) {
         `<div style="font:16px/1.5 system-ui,-apple-system,sans-serif;max-width:34rem;margin:15vh auto;padding:0 1.5rem;text-align:center;color:#111">` +
         `<h1 style="font-size:1.125rem;margin:0 0 .5rem">Coming Soon</h1>` +
         `<p style="margin:0 0 1.5rem;color:#666">This one isn't ready yet. Check back a little later.</p>` +
-        `<p style="margin:0"><a href="/" style="color:#666;font-size:.875rem">Back to My Cash</a></p>` +
+        `<p style="margin:0"><a href="/" style="color:#666;font-size:.875rem">Back to Home</a></p>` +
         `</div>`,
       { headers: { "content-type": "text/html; charset=utf-8" } },
     );

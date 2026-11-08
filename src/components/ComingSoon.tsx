@@ -21,7 +21,7 @@ export default function ComingSoon({ title }: { title: string }) {
         className="mt-4 flex items-center justify-center gap-1 text-[14px] text-muted"
       >
         <ChevronLeft size={16} />
-        Back to My Cash
+        Back to Home
       </Link>
     </div>
   );

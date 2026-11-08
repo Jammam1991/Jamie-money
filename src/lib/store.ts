@@ -23,6 +23,7 @@ import { DEFAULT_HOME_BUYING, type HomeBuyingInputs } from "./homeBuying";
 import { DEFAULT_CAR_INFO, type CarInfo, type CarHistoryEntry } from "./carInfo";
 import { STARTER_PROJECTS, parseProjects, type Project } from "./projects";
 import { billMonthRange } from "./billMonth";
+import { parseTodos, type Todo } from "./todos";
 
 // Returns a Supabase client only if the keys are configured (in Vercel).
 // Until then, everything gracefully falls back to the sample content so the
@@ -682,6 +683,44 @@ export async function getProjects(): Promise<Project[] | null> {
   } catch {
     return null;
   }
+}
+
+// The home screen's to-do list — one JSON row, see todos.ts. Null means the row
+// couldn't be read right now, so the card can say so instead of showing an
+// empty list as if everything were done.
+export const TODOS_KEY = "todos";
+
+export async function getTodos(): Promise<Todo[] | null> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", TODOS_KEY)
+    .maybeSingle();
+  if (error) return null;
+  if (!data?.value) return [];
+  try {
+    return parseTodos(JSON.parse(String(data.value)));
+  } catch {
+    return null;
+  }
+}
+
+// Jamie's calendar feed link — see calendar.ts. Server-side only: it's a
+// private address, so pages get "connected or not", never the link itself.
+export const CALENDAR_LINK_KEY = "calendar_ics_link";
+
+export async function getCalendarLink(): Promise<string | null> {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from("settings")
+    .select("value")
+    .eq("key", CALENDAR_LINK_KEY)
+    .maybeSingle();
+  if (error || !data?.value) return null;
+  return String(data.value).trim() || null;
 }
 
 export async function getDivorce(): Promise<Divorce> {
