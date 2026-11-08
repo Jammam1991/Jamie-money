@@ -151,3 +151,22 @@ body {
     animation: none;
   }
 }
+
+/* Home's stock ticker: two copies of the row slide left by one copy's width,
+   so it loops without a jump. Pauses under a finger or the mouse; holds still
+   (and scrolls by hand instead) for anyone who has asked for less motion. */
+.ticker-track {
+  animation: tickerSlide 45s linear infinite;
+}
+.ticker:hover .ticker-track,
+.ticker:active .ticker-track {
+  animation-play-state: paused;
+}
+@keyframes tickerSlide {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ticker { overflow-x: auto; }
+  .ticker-track { animation: none; }
+}
