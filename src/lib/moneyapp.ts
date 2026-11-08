@@ -90,7 +90,7 @@ type ExportResponse = {
   creditReports?: ExportReport[];
 };
 
-function apiUrl(): string | undefined {
+export function apiUrl(): string | undefined {
   return process.env.MONEYAPP_API_URL || process.env.MONEYAPP_URL;
 }
 

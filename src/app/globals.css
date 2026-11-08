@@ -78,6 +78,58 @@ body {
   }
 }
 
+/* Which tab bar shows. A phone gets the bar along the bottom, a computer gets
+   the tabs along the top. The app added to an iPhone or iPad home screen
+   ("standalone") always gets the bottom bar, whatever its width — it's a phone
+   app there, and a thumb is what's using it (Chris, 2026-11-07). */
+.top-nav {
+  display: none;
+}
+@media (min-width: 768px) {
+  .top-nav {
+    display: block;
+  }
+  .bottom-nav {
+    display: none;
+  }
+}
+/* On a phone the "top" is the name-and-menu row, so that's what stays pinned. */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--bg);
+  margin-left: -1rem;
+  margin-right: -1rem;
+  padding: 0.5rem 1rem;
+  padding-top: calc(0.5rem + env(safe-area-inset-top));
+}
+@media (min-width: 768px) {
+  .app-header {
+    position: static;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+}
+@media (display-mode: standalone) {
+  .app-header {
+    position: sticky;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    padding: 0.5rem 1rem;
+    padding-top: calc(0.5rem + env(safe-area-inset-top));
+  }
+  .top-nav {
+    display: none;
+  }
+  .bottom-nav {
+    display: block;
+  }
+  .app-shell {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Gym Story: chapters step in one after another instead of all landing at
    once — the story reads top to bottom the way it's meant to. */
 @keyframes gymFadeInUp {

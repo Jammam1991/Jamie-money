@@ -5,6 +5,18 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, Link2, MapPin, Unplug } from "lucide-react";
 import { saveCalendarLink } from "@/lib/actions";
 import type { CalEvent, CalendarResult } from "@/lib/calendar";
+import type { GymEvent } from "@/lib/gymDay";
+import BusinessSwitch from "./BusinessSwitch";
+import { useShowBusiness } from "./businessToggle";
+
+// A gym booking rides along in the same list, marked so it reads as work.
+type Row = CalEvent & { business?: boolean };
+
+const BIZ = "#9a6212";
+
+function fromGym(e: GymEvent): Row {
+  return { id: `gym-${e.id}`, title: e.title, start: e.startsAt, end: e.endsAt, allDay: false, location: e.location ?? "", business: true };
+}
 
 const TZ = "America/Los_Angeles";
 
@@ -87,13 +99,18 @@ function sampleEvents(): CalEvent[] {
   ];
 }
 
-export default function CalendarCard({ result }: { result: CalendarResult }) {
+export default function CalendarCard({ result, business = null }: { result: CalendarResult; business?: GymEvent[] | null }) {
   const [connecting, setConnecting] = useState(false);
+  const showBusiness = useShowBusiness();
   const connected = result.state !== "none";
+  const biz: Row[] = showBusiness && business ? business.map(fromGym) : [];
+  const own: Row[] = result.state === "ok" ? result.events : [];
+  const merged = [...own, ...biz].sort((a, b) => a.start.localeCompare(b.start));
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5">
       <Head>
+        {business !== null && !connecting && <BusinessSwitch />}
         {connected && !connecting && (
           <button
             type="button"
@@ -103,7 +120,7 @@ export default function CalendarCard({ result }: { result: CalendarResult }) {
             Change
           </button>
         )}
-        {!connected && !connecting && (
+        {!connected && !connecting && biz.length === 0 && (
           <span className="rounded-full bg-tint px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">
             Example
           </span>
@@ -114,9 +131,13 @@ export default function CalendarCard({ result }: { result: CalendarResult }) {
         <ConnectForm connected={connected} onDone={() => setConnecting(false)} />
       ) : !connected ? (
         <>
-          <div className="pointer-events-none select-none opacity-70" aria-hidden="true">
-            <Events events={sampleEvents()} />
-          </div>
+          {biz.length > 0 ? (
+            <Events events={biz} />
+          ) : (
+            <div className="pointer-events-none select-none opacity-70" aria-hidden="true">
+              <Events events={sampleEvents()} />
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setConnecting(true)}
@@ -126,23 +147,30 @@ export default function CalendarCard({ result }: { result: CalendarResult }) {
             <CalendarDays size={17} />
             Connect your Google Calendar
           </button>
-          <p className="mt-2 text-center text-[12px] text-muted">This is a made-up example. Yours shows here once it&apos;s connected.</p>
+          <p className="mt-2 text-center text-[12px] text-muted">
+            {biz.length > 0
+              ? "Showing today at the gym. Connect Google to add your own plans."
+              : "This is a made-up example. Yours shows here once it's connected."}
+          </p>
         </>
       ) : result.state === "error" ? (
-        <p className="mt-4 rounded-2xl bg-warn-bg px-4 py-3 text-[14px] text-warn">{result.message}</p>
+        <>
+          <p className="mt-4 rounded-2xl bg-warn-bg px-4 py-3 text-[14px] text-warn">{result.message}</p>
+          {biz.length > 0 && <Events events={biz} />}
+        </>
       ) : (
-        <Events events={result.events} />
+        <Events events={merged} />
       )}
     </section>
   );
 }
 
-function Events({ events }: { events: CalEvent[] }) {
+function Events({ events }: { events: Row[] }) {
   if (events.length === 0) {
     return <p className="mt-4 text-center text-[14px] text-muted">Nothing on the calendar for the next two weeks. 🌴</p>;
   }
   // Grouped by day, at most the next four days that have something on.
-  const days = new Map<string, CalEvent[]>();
+  const days = new Map<string, Row[]>();
   for (const e of events) {
     const k = dayKey(e.start) < dayKey(new Date().toISOString()) ? dayKey(new Date().toISOString()) : dayKey(e.start);
     if (!days.has(k) && days.size >= 4) break;
@@ -156,9 +184,16 @@ function Events({ events }: { events: CalEvent[] }) {
           <ul className="mt-1 space-y-1.5">
             {list.map((e) => (
               <li key={e.id} className="flex gap-3 rounded-2xl bg-tint px-3 py-2.5">
-                <span className="w-1 shrink-0 rounded-full" style={{ background: "#0e6f8a" }} />
+                <span className="w-1 shrink-0 rounded-full" style={{ background: e.business ? BIZ : "#0e6f8a" }} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-medium">{e.title}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[14px] font-medium">{e.title}</span>
+                    {e.business && (
+                      <span className="shrink-0 rounded-full px-1.5 text-[10px] font-semibold uppercase" style={{ color: BIZ, background: "var(--warn-bg)" }}>
+                        Gym
+                      </span>
+                    )}
+                  </span>
                   {e.location && (
                     <span className="flex items-center gap-1 truncate text-[12px] text-muted">
                       <MapPin size={11} className="shrink-0" />
