@@ -473,11 +473,20 @@ export default function HomeBuyingClient({ initial }: { initial: HomeBuyingInput
                   </a>
                 ))}
               </div>
+              <div className="mt-3 rounded-xl bg-tint p-3 text-[13px]">
+                <div className="font-medium">Get new houses emailed to you</div>
+                <p className="mt-1 text-muted">
+                  Open Zillow or Redfin above, sign in, and tap{" "}
+                  <span className="font-medium">Save search</span>. They&apos;ll
+                  email you each new house in your area under{" "}
+                  {money(best.homeValue)} as soon as it&apos;s listed. Free, and
+                  nothing to check here.
+                </p>
+              </div>
               <p className="mt-3 text-[12px] text-muted">
                 The listings themselves aren&apos;t copied into this app — those
-                sites don&apos;t hand their for-sale data out, and a copy would be
-                out of date the day it was made. So these send you to the live
-                thing instead.
+                sites don&apos;t hand their for-sale data out. So these send you to
+                the live thing instead.
               </p>
             </Card>
           </>
