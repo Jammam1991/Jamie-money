@@ -73,7 +73,7 @@ function gymUrl(): string | undefined {
 // A control character is worse: fetch() throws outright.
 //
 // Same guard Money App uses for its own calls into the gym dashboard.
-function headerSafe(raw: string | undefined): string | null {
+export function headerSafe(raw: string | undefined): string | null {
   if (!raw) return null;
   const v = raw.trim();
   if (!v || /[^\t\x20-\x7e]/.test(v)) return null;
@@ -83,7 +83,7 @@ function headerSafe(raw: string | undefined): string | null {
 // The scheme + host of whatever was pasted in, with any path, query or trailing
 // slash dropped. A bare "gym-dashboard-v2.vercel.app" is accepted too — leaving
 // off https:// is the other easy way to get this wrong.
-function originOf(raw: string): string | null {
+export function originOf(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;

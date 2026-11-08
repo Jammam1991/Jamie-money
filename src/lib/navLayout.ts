@@ -92,7 +92,9 @@ export function buildLayout(opts: {
     if (gone.has(page.key)) continue;
     if (page.key === "owes" && !showPastDue) continue;
     const slots = slotsFor(page, placements);
-    if (slots.includes("nav")) nav.push(page.key);
+    // Past Due lives in the menu only (Chris, 2026-11-07: "hide past due"),
+    // whatever an older saved layout says.
+    if (slots.includes("nav") && page.key !== "owes") nav.push(page.key);
     if (slots.includes("menu")) menu.push(page.key);
     if (slots.includes("history")) history.push(page.key);
   }

@@ -16,7 +16,7 @@ export default function BottomNav({ tabs }: { tabs: PageKey[] }) {
   if (visible.length === 0) return null;
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card md:hidden"
+      className="bottom-nav fixed bottom-0 inset-x-0 z-50 border-t border-border bg-card"
       // The layout uses viewportFit: "cover", so the bar reaches into the home
       // indicator area. Pad it so the labels never sit under the indicator.
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

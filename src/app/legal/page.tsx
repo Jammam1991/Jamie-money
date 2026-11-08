@@ -3,6 +3,7 @@ import ComingSoon from "@/components/ComingSoon";
 import LegalClient from "@/components/LegalClient";
 import { getProjects } from "@/lib/store";
 import { pageGate } from "@/lib/visibility";
+import { importMoneyAppLegalOnce } from "@/lib/legalImport";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,8 @@ export default async function LegalPage() {
   const { comingSoon } = await pageGate("legal");
   if (comingSoon) return <ComingSoon title="Legal" />;
 
+  // The Money App's legal cases, copied in the first time (see legalImport.ts).
+  await importMoneyAppLegalOnce();
   const projects = await getProjects();
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date());
 

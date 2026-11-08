@@ -3,6 +3,7 @@ import ComingSoon from "@/components/ComingSoon";
 import ProjectsClient from "@/components/ProjectsClient";
 import { getProjects } from "@/lib/store";
 import { pageGate } from "@/lib/visibility";
+import { importMoneyAppLegalOnce } from "@/lib/legalImport";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ export default async function ProjectsPage() {
   const { comingSoon } = await pageGate("projects");
   if (comingSoon) return <ComingSoon title="Projects" />;
 
+  await importMoneyAppLegalOnce();
   const projects = await getProjects();
   const today = new Date().toISOString().slice(0, 10);
 

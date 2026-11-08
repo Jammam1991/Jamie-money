@@ -23,6 +23,7 @@ import {
   Home,
   LayoutGrid,
   Gavel,
+  Rocket,
   Wallet,
   KeyRound,
   Landmark,
@@ -55,7 +56,8 @@ export type PageKey =
   | "married-vs-divorce"
   | "projects"
   | "cash"
-  | "legal";
+  | "legal"
+  | "future-plan";
 
 // The three places a link can sit. "history" is the collapsible group inside the
 // menu — still the menu, one level down.
@@ -122,7 +124,7 @@ export const PAGES: AppPage[] = [
   {
     key: "debt",
     href: "/debt",
-    label: "My Debt",
+    label: "Financial Picture",
     Icon: CreditCard,
     slots: ["nav", "menu"],
     blurb: "Jamie's card and loan balances.",
@@ -132,9 +134,17 @@ export const PAGES: AppPage[] = [
     href: "/owes",
     label: "Past Due",
     Icon: AlertCircle,
-    slots: ["nav"],
+    slots: ["menu"],
     blurb:
       "Money owed to Chris. The tab only appears when something is actually late.",
+  },
+  {
+    key: "future-plan",
+    href: "/future-plan",
+    label: "Future Plan",
+    Icon: Rocket,
+    slots: ["nav"],
+    blurb: "Where he's headed: debt management, home buying, his IRA and career, one section each.",
   },
   {
     key: "compare",
@@ -308,9 +318,10 @@ export const PAGES: AppPage[] = [
 // order it appears in PAGES. Whoever's looking can then drag the menu into any
 // order they like on top of this; this is only where it starts.
 export const SLOT_ORDER: Record<Slot, PageKey[]> = {
-  nav: ["home", "bills", "debt", "owes"],
+  nav: ["home", "bills", "debt", "future-plan", "career"],
   menu: [
     "cash",
+    "owes",
     "projects",
     "legal",
     "job-vs-business",

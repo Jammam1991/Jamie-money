@@ -22,7 +22,7 @@ import {
   getCashLog,
   getDebts,
   getDivorce,
-  getPaidBillIdsForBillMonth,
+  getPaidBillIdsBetween,
   getProjects,
   getSettlementTerms,
   getTodos,
@@ -31,7 +31,8 @@ import { getJobApplications } from "@/lib/careerStore";
 import { loadCalendar, HOME_TZ } from "@/lib/calendar";
 import { currentCarValue } from "@/lib/carInfo";
 import { cashBalance, money } from "@/lib/data";
-import { billMonthName } from "@/lib/billMonth";
+import { getGymDay } from "@/lib/gymDay";
+import { importMoneyAppLegalOnce } from "@/lib/legalImport";
 import { jamiePageState } from "@/lib/visibility";
 import { getRole } from "@/lib/auth";
 import type { PageKey } from "@/lib/pages";
@@ -52,6 +53,16 @@ function todayInPacific(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: HOME_TZ }).format(new Date());
 }
 
+// The month we're in, as [first, first of next) day keys plus its name. The
+// home card is about now; planning for next month lives on the Bills page.
+function thisMonth(today: string): { start: string; end: string; name: string } {
+  const [y, m] = today.split("-").map(Number);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const next = m === 12 ? `${y + 1}-01-01` : `${y}-${pad(m + 1)}-01`;
+  const name = new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
+  return { start: `${y}-${pad(m)}-01`, end: next, name };
+}
+
 function greeting(): string {
   const hour = Number(
     new Intl.DateTimeFormat("en-US", { timeZone: HOME_TZ, hour: "numeric", hourCycle: "h23" }).format(new Date())
@@ -66,6 +77,9 @@ export default async function HomePage() {
   if (!role) redirect("/login");
 
   const today = todayInPacific();
+  const month = thisMonth(today);
+  // The Money App's legal cases, copied in the first time (see legalImport.ts).
+  await importMoneyAppLegalOnce();
   const [
     { removed, comingSoon },
     bills,
@@ -82,7 +96,7 @@ export default async function HomePage() {
   ] = await Promise.all([
     jamiePageState(),
     getBills(),
-    getPaidBillIdsForBillMonth(),
+    getPaidBillIdsBetween(month.start, month.end),
     getDebts(),
     getCashLog(),
     getCarInfo(),
@@ -99,7 +113,7 @@ export default async function HomePage() {
   const shows = (key: PageKey) => !removed.includes(key);
   const live = (key: PageKey) => shows(key) && !comingSoon.includes(key);
 
-  // Bills: next month's, same as the Bills page.
+  // Bills: this month's — paid, still to pay, and which are already late.
   const paid = new Set(paidIds);
   const billsTotal = bills.reduce((s, b) => s + b.amount, 0);
   const unpaid = bills.filter((b) => !paid.has(b.id));
@@ -189,13 +203,15 @@ export default async function HomePage() {
 
         {/* ── To do ── */}
         <div id="todo" className="scroll-mt-4">
-          <TodoCard initial={todos} today={today} projectSteps={projectSteps} />
+          <Suspense fallback={<TodoCard initial={todos} today={today} projectSteps={projectSteps} />}>
+            <TodoSection initial={todos} today={today} projectSteps={projectSteps} />
+          </Suspense>
         </div>
 
         {/* ── Bills ── */}
         {shows("bills") && (
           <Link href="/bills" className="group block rounded-3xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
-            <CardHead Icon={Receipt} tone="#0e6f8a" title={`Bills · ${billMonthName()}`} />
+            <CardHead Icon={Receipt} tone="#0e6f8a" title={`Bills · ${month.name}`} />
             {live("bills") ? (
               <>
                 <div className="mt-4 flex items-end justify-between">
@@ -220,7 +236,11 @@ export default async function HomePage() {
                         <span className="truncate">{b.name}</span>
                         <span className="ml-3 shrink-0 tabular-nums text-muted">
                           {money(b.amount)}
-                          {b.dueDay ? <span className="ml-2 text-[12px]">due {ordinal(b.dueDay)}</span> : null}
+                          {b.dueDay ? (
+                            <span className={`ml-2 text-[12px] ${b.dueDay < Number(today.slice(8)) ? "font-medium text-neg" : ""}`}>
+                              {b.dueDay < Number(today.slice(8)) ? "late" : `due ${ordinal(b.dueDay)}`}
+                            </span>
+                          ) : null}
                         </span>
                       </li>
                     ))}
@@ -290,8 +310,15 @@ export default async function HomePage() {
 // Streams in on its own: Google can take a moment, and the rest of the
 // dashboard shouldn't wait for it.
 async function CalendarSection({ link }: { link: string | null }) {
-  const result = await loadCalendar(link);
-  return <CalendarCard result={result} />;
+  const [result, gym] = await Promise.all([loadCalendar(link), getGymDay()]);
+  return <CalendarCard result={result} business={gym?.events ?? null} />;
+}
+
+// His gym tasks join the list once the gym dashboard answers; until then the
+// card shows his own list on its own.
+async function TodoSection(props: Omit<React.ComponentProps<typeof TodoCard>, "business">) {
+  const gym = await getGymDay();
+  return <TodoCard {...props} business={gym} />;
 }
 
 function HeroChip({ href, children }: { href: string; children: React.ReactNode }) {

@@ -90,8 +90,12 @@ export default async function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} antialiased`}>
       <body>
+        {/* Pinned to the top while the page scrolls (Chris, 2026-11-07: "the top
+            should always freeze"): the "Viewing as Jamie" strip and, on a
+            desktop, the tabs. */}
+        <div className="sticky top-0 z-40">
         {viewingAsJamie && (
-          <div className="sticky top-0 z-30 bg-blue-100 border-b-2 border-blue-300 px-4 py-2 text-center text-sm font-medium text-blue-900">
+          <div className="bg-blue-100 border-b-2 border-blue-300 px-4 py-2 text-center text-sm font-medium text-blue-900">
             👁️ Viewing as Jamie
           </div>
         )}
@@ -99,6 +103,7 @@ export default async function RootLayout({
             Below `md` this is hidden and the fixed bottom bar takes over —
             a thumb reaches the bottom of a phone, not the top. */}
         <TopNav tabs={nav.nav} />
+        </div>
         {/* `app-shell` carries the bottom padding: it has to clear the fixed
             nav and the home indicator on a phone, and neither exists on a
             desktop. It lives in CSS rather than an inline style because an

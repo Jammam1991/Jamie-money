@@ -197,7 +197,7 @@ export default function Header({
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="app-header mb-4 flex items-center justify-between">
         <Link href="/" className="text-[15px] font-semibold tracking-tight">
           Jamie&apos;s Money
         </Link>

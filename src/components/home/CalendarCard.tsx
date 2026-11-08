@@ -5,6 +5,18 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, Link2, MapPin, Unplug } from "lucide-react";
 import { saveCalendarLink } from "@/lib/actions";
 import type { CalEvent, CalendarResult } from "@/lib/calendar";
+import type { GymEvent } from "@/lib/gymDay";
+import BusinessSwitch from "./BusinessSwitch";
+import { useShowBusiness } from "./businessToggle";
+
+// A gym booking rides along in the same list, marked so it reads as work.
+type Row = CalEvent & { business?: boolean };
+
+const BIZ = "#9a6212";
+
+function fromGym(e: GymEvent): Row {
+  return { id: `gym-${e.id}`, title: e.title, start: e.startsAt, end: e.endsAt, allDay: false, location: e.location ?? "", business: true };
+}
 
 const TZ = "America/Los_Angeles";
 
@@ -55,13 +67,50 @@ export function CalendarSkeleton() {
   );
 }
 
-export default function CalendarCard({ result }: { result: CalendarResult }) {
+// What the card looks like before he's connected anything: a made-up few days
+// so he can see what he's getting, clearly marked as an example.
+function laInstant(daysAhead: number, hour: number, minute = 0): string {
+  const key = dayKey(new Date(Date.now() + daysAhead * 86_400_000).toISOString());
+  const [y, m, d] = key.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d, hour, minute);
+  // How far Pacific time is behind UTC on that day (7 or 8 hours).
+  const shown = new Date(guess).toLocaleString("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" });
+  const offset = (24 + hour - Number(shown)) % 24;
+  return new Date(guess + offset * 3_600_000).toISOString();
+}
+
+function sampleEvents(): CalEvent[] {
+  const e = (id: string, title: string, days: number, h: number, mi: number, location = "", allDay = false): CalEvent => ({
+    id,
+    title,
+    start: allDay ? laInstant(days, 0) : laInstant(days, h, mi),
+    end: null,
+    allDay,
+    location,
+  });
+  return [
+    e("s1", "Massage — Sarah K.", 0, 10, 0, "BoxingRX"),
+    e("s2", "Challenge check-ins", 0, 14, 0, "BoxingRX"),
+    e("s3", "Dinner with friends", 0, 18, 30),
+    e("s4", "Call with the lawyer", 1, 9, 0, "Phone"),
+    e("s5", "Massage — David R.", 1, 12, 0, "BoxingRX"),
+    e("s6", "Car registration due", 2, 0, 0, "", true),
+    e("s7", "Dentist", 2, 11, 0, "Glendale"),
+  ];
+}
+
+export default function CalendarCard({ result, business = null }: { result: CalendarResult; business?: GymEvent[] | null }) {
   const [connecting, setConnecting] = useState(false);
+  const showBusiness = useShowBusiness();
   const connected = result.state !== "none";
+  const biz: Row[] = showBusiness && business ? business.map(fromGym) : [];
+  const own: Row[] = result.state === "ok" ? result.events : [];
+  const merged = [...own, ...biz].sort((a, b) => a.start.localeCompare(b.start));
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5">
       <Head>
+        {business !== null && !connecting && <BusinessSwitch />}
         {connected && !connecting && (
           <button
             type="button"
@@ -71,25 +120,57 @@ export default function CalendarCard({ result }: { result: CalendarResult }) {
             Change
           </button>
         )}
+        {!connected && !connecting && biz.length === 0 && (
+          <span className="rounded-full bg-tint px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted">
+            Example
+          </span>
+        )}
       </Head>
 
-      {connecting || !connected ? (
+      {connecting ? (
         <ConnectForm connected={connected} onDone={() => setConnecting(false)} />
+      ) : !connected ? (
+        <>
+          {biz.length > 0 ? (
+            <Events events={biz} />
+          ) : (
+            <div className="pointer-events-none select-none opacity-70" aria-hidden="true">
+              <Events events={sampleEvents()} />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setConnecting(true)}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-[15px] font-semibold text-white"
+            style={{ background: "#0e6f8a" }}
+          >
+            <CalendarDays size={17} />
+            Connect your Google Calendar
+          </button>
+          <p className="mt-2 text-center text-[12px] text-muted">
+            {biz.length > 0
+              ? "Showing today at the gym. Connect Google to add your own plans."
+              : "This is a made-up example. Yours shows here once it's connected."}
+          </p>
+        </>
       ) : result.state === "error" ? (
-        <p className="mt-4 rounded-2xl bg-warn-bg px-4 py-3 text-[14px] text-warn">{result.message}</p>
+        <>
+          <p className="mt-4 rounded-2xl bg-warn-bg px-4 py-3 text-[14px] text-warn">{result.message}</p>
+          {biz.length > 0 && <Events events={biz} />}
+        </>
       ) : (
-        <Events events={result.events} />
+        <Events events={merged} />
       )}
     </section>
   );
 }
 
-function Events({ events }: { events: CalEvent[] }) {
+function Events({ events }: { events: Row[] }) {
   if (events.length === 0) {
     return <p className="mt-4 text-center text-[14px] text-muted">Nothing on the calendar for the next two weeks. 🌴</p>;
   }
   // Grouped by day, at most the next four days that have something on.
-  const days = new Map<string, CalEvent[]>();
+  const days = new Map<string, Row[]>();
   for (const e of events) {
     const k = dayKey(e.start) < dayKey(new Date().toISOString()) ? dayKey(new Date().toISOString()) : dayKey(e.start);
     if (!days.has(k) && days.size >= 4) break;
@@ -103,9 +184,16 @@ function Events({ events }: { events: CalEvent[] }) {
           <ul className="mt-1 space-y-1.5">
             {list.map((e) => (
               <li key={e.id} className="flex gap-3 rounded-2xl bg-tint px-3 py-2.5">
-                <span className="w-1 shrink-0 rounded-full" style={{ background: "#0e6f8a" }} />
+                <span className="w-1 shrink-0 rounded-full" style={{ background: e.business ? BIZ : "#0e6f8a" }} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-medium">{e.title}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[14px] font-medium">{e.title}</span>
+                    {e.business && (
+                      <span className="shrink-0 rounded-full px-1.5 text-[10px] font-semibold uppercase" style={{ color: BIZ, background: "var(--warn-bg)" }}>
+                        Gym
+                      </span>
+                    )}
+                  </span>
                   {e.location && (
                     <span className="flex items-center gap-1 truncate text-[12px] text-muted">
                       <MapPin size={11} className="shrink-0" />
@@ -195,11 +283,11 @@ function ConnectForm({ connected, onDone }: { connected: boolean; onDone: () => 
         </button>
       </form>
       {error && <p className="text-[13px] text-warn">{error}</p>}
-      {connected && (
-        <div className="flex items-center justify-between pt-1">
-          <button type="button" onClick={onDone} className="text-[13px] text-muted">
-            Cancel
-          </button>
+      <div className="flex items-center justify-between pt-1">
+        <button type="button" onClick={onDone} className="text-[13px] text-muted">
+          Cancel
+        </button>
+        {connected && (
           <button
             type="button"
             onClick={() => save("")}
@@ -209,8 +297,8 @@ function ConnectForm({ connected, onDone }: { connected: boolean; onDone: () => 
             <Unplug size={13} />
             Disconnect
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

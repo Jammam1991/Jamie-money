@@ -18,7 +18,7 @@ export default function TopNav({ tabs }: { tabs: PageKey[] }) {
   if (visible.length === 0) return null;
 
   return (
-    <nav className="hidden border-b border-border bg-card md:block">
+    <nav className="top-nav border-b border-border bg-card">
       <div className="mx-auto flex max-w-3xl items-center gap-1 px-6">
         {visible.map(({ href, label, Icon }) => {
           const active = pathname === href;

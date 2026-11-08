@@ -398,6 +398,21 @@ export async function getPaidBillIdsForBillMonth(): Promise<string[]> {
   return [...new Set(data.map((row) => String(row.bill_id)))];
 }
 
+// Which bills have a payment dated inside [start, end) — the home screen's
+// bills card uses this for the month we're in, where the Bills page itself
+// plans next month (see billMonth.ts).
+export async function getPaidBillIdsBetween(start: string, end: string): Promise<string[]> {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from("bill_payments")
+    .select("bill_id")
+    .gte("paid_date", start)
+    .lt("paid_date", end);
+  if (error || !data) return [];
+  return [...new Set(data.map((row) => String(row.bill_id)))];
+}
+
 // Bills that were NOT paid last month (and existed back then). After the 1st,
 // these roll over into the Bills page as "left over from last month" and get
 // added to the amount still owed.

@@ -5,6 +5,12 @@ import Link from "next/link";
 import { Check, ChevronDown, ListTodo, Plus, X } from "lucide-react";
 import { saveTodos } from "@/lib/actions";
 import { MAX_TODO_LENGTH, sortTodos, type Todo } from "@/lib/todos";
+import type { GymDay } from "@/lib/gymDay";
+import BusinessSwitch from "./BusinessSwitch";
+import { useShowBusiness } from "./businessToggle";
+
+const BIZ = "#9a6212";
+const BIZ_SHOWN = 5;
 
 type ProjectStepRow = {
   id: string;
@@ -34,12 +40,17 @@ export default function TodoCard({
   initial,
   today,
   projectSteps,
+  business = null,
 }: {
   // Null when the list couldn't be read — said, rather than shown as empty.
   initial: Todo[] | null;
   today: string;
   projectSteps: ProjectStepRow[];
+  // His gym tasks due by tonight. Null when the gym dashboard isn't reachable.
+  business?: Pick<GymDay, "tasks" | "taskCount" | "overdueCount" | "tasksUrl"> | null;
 }) {
+  const showBusiness = useShowBusiness();
+  const biz = showBusiness ? business : null;
   const [items, setItems] = useState<Todo[]>(initial ?? []);
   const [text, setText] = useState("");
   const [due, setDue] = useState("");
@@ -104,6 +115,7 @@ export default function TodoCard({
         </span>
         <span className="flex-1 text-[16px] font-semibold">To do</span>
         {open.length > 0 && <span className="text-[13px] text-muted">{open.length} left</span>}
+        {business !== null && <BusinessSwitch />}
       </div>
 
       {initial === null && (
@@ -146,7 +158,7 @@ export default function TodoCard({
         ))}
       </ul>
 
-      {open.length === 0 && projectSteps.length === 0 && initial !== null && (
+      {open.length === 0 && projectSteps.length === 0 && !biz?.taskCount && initial !== null && (
         <p className="mt-3 text-center text-[14px] text-muted">Nothing on your list. Nice. ✨</p>
       )}
 
@@ -170,6 +182,39 @@ export default function TodoCard({
               );
             })}
           </ul>
+        </div>
+      )}
+
+      {biz && biz.taskCount > 0 && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-medium uppercase tracking-wider" style={{ color: BIZ }}>
+              At the gym
+            </span>
+            {biz.overdueCount > 0 && (
+              <span className="text-[12px] font-medium text-neg">{biz.overdueCount} overdue</span>
+            )}
+          </div>
+          <ul className="mt-1">
+            {biz.tasks.slice(0, BIZ_SHOWN).map((t) => (
+              <li key={t.id} className="flex items-center gap-3 py-2">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: t.overdue ? "var(--neg)" : BIZ }} />
+                <span className="min-w-0 flex-1 truncate text-[14px]">{t.title}</span>
+                <span className={`shrink-0 text-[12px] ${t.overdue ? "font-medium text-neg" : "text-muted"}`}>
+                  {t.overdue ? "Overdue" : "Today"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <a
+            href={biz.tasksUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-block text-[13px] font-medium"
+            style={{ color: BIZ }}
+          >
+            {biz.taskCount > BIZ_SHOWN ? `See all ${biz.taskCount} in the gym dashboard →` : "Open in the gym dashboard →"}
+          </a>
         </div>
       )}
 
