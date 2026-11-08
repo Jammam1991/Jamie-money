@@ -93,7 +93,7 @@ export default function GymLeaseClient({
         className="flex items-center justify-center gap-1 py-2 text-[14px] text-muted"
       >
         <ChevronLeft size={16} />
-        Back to My Cash
+        Back to Home
       </Link>
     </div>
   );

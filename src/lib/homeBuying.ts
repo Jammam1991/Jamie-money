@@ -375,3 +375,55 @@ export function listingLinks(place: string, maxPrice: number): ListingLink[] {
   }
   return links;
 }
+
+// ── One real house, one real payment ─────────────────────────────────────────
+// The listings section runs every house through the same knobs as the rest of
+// this page, so the monthly figure on a listing card is the one the calculator
+// above would give for that exact price.
+
+export type HousePayment = {
+  price: number;
+  downPayment: number;
+  loan: number;
+  monthlyPI: number;
+  monthlyTax: number;
+  monthlyInsurance: number;
+  monthlyPmi: number;
+  monthlyHoa: number;
+  monthlyTotal: number;
+};
+
+export function paymentForPrice(
+  price: number,
+  input: HomeBuyingInputs,
+  taxRatePct: number,
+  opts: { downPct?: number; hoaMonthly?: number | null; taxRatePct?: number | null } = {},
+): HousePayment {
+  const downPct = clamp(opts.downPct ?? input.downPct, 0, 100);
+  const downPayment = price * (downPct / 100);
+  const loan = Math.max(0, price - downPayment);
+  const rate = opts.taxRatePct ?? taxRatePct;
+  const monthlyPI = monthlyPayment(loan, input.ratePct, Math.max(1, Math.round(input.years)) * 12);
+  const monthlyTax = (price * (clamp(rate, 0, 20) / 100)) / 12;
+  const monthlyInsurance = (price * (clamp(input.insurancePct, 0, 20) / 100)) / 12;
+  const monthlyPmi = downPct < PMI_THRESHOLD_PCT ? (loan * (clamp(input.pmiPct, 0, 10) / 100)) / 12 : 0;
+  const monthlyHoa = Math.max(0, opts.hoaMonthly ?? 0);
+  return {
+    price,
+    downPayment,
+    loan,
+    monthlyPI,
+    monthlyTax,
+    monthlyInsurance,
+    monthlyPmi,
+    monthlyHoa,
+    monthlyTotal: monthlyPI + monthlyTax + monthlyInsurance + monthlyPmi + monthlyHoa,
+  };
+}
+
+/** The property tax rate this page would use for a place. */
+export function taxRateFor(place: string, input: HomeBuyingInputs): number {
+  if (input.propertyTaxPct !== null && Number.isFinite(input.propertyTaxPct)) return input.propertyTaxPct;
+  const state = stateFromPlace(place);
+  return state ? STATE_PROPERTY_TAX_PCT[state] : NATIONAL_PROPERTY_TAX_PCT;
+}

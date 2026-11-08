@@ -1,5 +1,23 @@
 "use server";
 
+import { parseTodos, type Todo } from "./todos";
+import { cleanCalendarLink, loadCalendar } from "./calendar";
+import { cleanProfile, type HomeAnalysis, type HomeProfile } from "./homePlan";
+import { analyzeHome } from "./homeAnalysis";
+import { listingPhotos, searchListings, type ListingSearch } from "./listings";
+import { DEFAULT_HOME_BUYING, taxRateFor } from "./homeBuying";
+import {
+  getBills as readBills,
+  getDebts as readDebts,
+  getDivorce as readDivorce,
+  getHomeBuying as readHomeBuying,
+  getHomePlan as readHomePlan,
+  getMoneyAppFico as readFico,
+  getSettlementTerms as readSettlementTerms,
+  getWeeklyIncome as readWeeklyIncome,
+  HOME_PLAN_KEY,
+} from "./store";
+
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -24,6 +42,8 @@ import {
   CAR_INFO_KEY,
   CAR_HISTORY_KEY,
   PROJECTS_KEY,
+  TODOS_KEY,
+  CALENDAR_LINK_KEY,
   PIN_LOCK_MINUTES,
   PIN_TRIES,
   getJamiePinHash,
@@ -270,6 +290,7 @@ export async function toggleViewAsJamie(): Promise<void> {
   }
 
   revalidatePath("/");
+  revalidatePath("/cash");
 }
 
 // A sort value that keeps newly added rows in the order they were created.
@@ -1110,6 +1131,7 @@ export async function addCashEntry(input: {
     .single();
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
+  revalidatePath("/cash");
   return { ok: true, id: data?.id ? String(data.id) : undefined };
 }
 
@@ -1122,6 +1144,7 @@ export async function deleteCashEntry(id: string): Promise<ActionResult> {
   const { error } = await c.from("cash_log").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
+  revalidatePath("/cash");
   return { ok: true };
 }
 
@@ -1953,6 +1976,8 @@ async function writeProjects(
     .upsert({ key: PROJECTS_KEY, value: JSON.stringify(list) }, { onConflict: "key" });
   if (error) return { ok: false, error: error.message };
   revalidatePath(PROJECTS_PATH);
+  revalidatePath("/legal");
+  revalidatePath("/");
   return { ok: true };
 }
 
@@ -2035,4 +2060,130 @@ export async function setMenuOrder(hrefs: string[]): Promise<ActionResult> {
   // be revalidated or the old order stays put on screens already visited.
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+// ── Home screen: to-do list and calendar ─────────────────────────────────────
+// The whole list is saved at once — it's short, it's one person's, and it
+// means a tick, an add and a delete are all the same small write.
+export async function saveTodos(list: Todo[]): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  const cleaned = parseTodos(list);
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: TODOS_KEY, value: JSON.stringify(cleaned) }, { onConflict: "key" });
+  if (error) return { ok: false, error: "Not saved — couldn't reach the database. Try again." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// Paste the calendar link in, or pass "" to disconnect.
+export async function saveCalendarLink(raw: string): Promise<ActionResult> {
+  const denied = await guardLoggedIn();
+  if (denied) return denied;
+  const c = client();
+  if (!c) return NOT_CONNECTED;
+  let value = "";
+  if (raw.trim()) {
+    const link = cleanCalendarLink(raw);
+    if (!link) {
+      return {
+        ok: false,
+        error: "That doesn't look like a calendar link. It should start with https://calendar.google.com/calendar/ical/",
+      };
+    }
+    const check = await loadCalendar(link);
+    if (check.state === "error") return { ok: false, error: check.message };
+    value = link;
+  }
+  const { error } = await c
+    .from("settings")
+    .upsert({ key: CALENDAR_LINK_KEY, value }, { onConflict: "key" });
+  if (error) return { ok: false, error: "Not saved — couldn't reach the database. Try again." };
+  revalidatePath("/");
+  return { ok: true };
+}
+
+// ── Home Buying: his situation, Claude's read, and real listings ─────────────
+async function writeHomePlan(
+  c: NonNullable<ReturnType<typeof client>>,
+  profile: HomeProfile,
+  analysis: HomeAnalysis | null,
+  analyzedAt: string | null
+): Promise<string | null> {
+  const { error } = await c
+    .from("settings")
+    .upsert(
+      { key: HOME_PLAN_KEY, value: JSON.stringify({ profile, analysis, analyzedAt }) },
+      { onConflict: "key" }
+    );
+  return error ? "Not saved — couldn't reach the database. Try again." : null;
+}
+
+// Save what he wrote, then have Claude read it alongside everything the app
+// already knows. The situation is saved even if Claude can't answer, so the
+// typing is never lost.
+export async function analyzeHomeSituation(
+  input: HomeProfile
+): Promise<{ ok: true; analysis: HomeAnalysis; analyzedAt: string } | { ok: false; error: string }> {
+  const denied = await guardLoggedIn();
+  if (denied) return { ok: false, error: denied.error ?? "Please log in first." };
+  const c = client();
+  if (!c) return { ok: false, error: NOT_CONNECTED.error ?? "Not connected." };
+
+  const profile = cleanProfile(input);
+  const [plan, saved, weekly, bills, debts, divorce, terms, fico] = await Promise.all([
+    readHomePlan(),
+    readHomeBuying(),
+    readWeeklyIncome(),
+    readBills(),
+    readDebts(),
+    readDivorce(),
+    readSettlementTerms(),
+    readFico(),
+  ]);
+  const inputs = saved ?? DEFAULT_HOME_BUYING;
+
+  const savedErr = await writeHomePlan(c, profile, plan.analysis, plan.analyzedAt);
+  if (savedErr) return { ok: false, error: savedErr };
+
+  const result = await analyzeHome({
+    profile,
+    inputs,
+    taxRatePct: taxRateFor(inputs.place, inputs),
+    weeklyIncome: weekly,
+    bills,
+    debts,
+    divorceSupportMonthly: divorce.support.amount,
+    settlementTotal: terms.total,
+    creditScore: profile.creditScore ?? fico?.score ?? null,
+  });
+  revalidatePath("/home-buying");
+  if (!result.ok) return result;
+
+  const analyzedAt = new Date().toISOString();
+  const err = await writeHomePlan(c, profile, result.analysis, analyzedAt);
+  if (err) return { ok: false, error: err };
+  revalidatePath("/home-buying");
+  return { ok: true, analysis: result.analysis, analyzedAt };
+}
+
+export async function findHomes(opts: {
+  zip: string;
+  maxPrice: number;
+  minBeds: number;
+}): Promise<ListingSearch> {
+  if (!(await isLoggedIn())) return { ok: false, error: "Please log in first." };
+  const zip = String(opts.zip ?? "").trim();
+  if (!/^\d{5}$/.test(zip)) return { ok: false, error: "Type a 5-digit ZIP code." };
+  const maxPrice = Math.min(20_000_000, Math.max(50_000, Number(opts.maxPrice) || 0));
+  const minBeds = Math.min(6, Math.max(0, Math.round(Number(opts.minBeds) || 0)));
+  return searchListings({ zip, maxPrice, minBeds });
+}
+
+export async function getHomePhotos(zpid: string): Promise<string[]> {
+  if (!(await isLoggedIn())) return [];
+  return listingPhotos(String(zpid));
 }

@@ -21,6 +21,9 @@ import {
   HandCoins,
   HeartHandshake,
   Home,
+  LayoutGrid,
+  Gavel,
+  Wallet,
   KeyRound,
   Landmark,
   PiggyBank,
@@ -50,7 +53,9 @@ export type PageKey =
   | "divorce"
   | "retirement"
   | "married-vs-divorce"
-  | "projects";
+  | "projects"
+  | "cash"
+  | "legal";
 
 // The three places a link can sit. "history" is the collapsible group inside the
 // menu — still the menu, one level down.
@@ -90,11 +95,21 @@ export const PAGES: AppPage[] = [
   {
     key: "home",
     href: "/",
-    label: "My Cash",
-    Icon: Home,
+    label: "Home",
+    Icon: LayoutGrid,
     slots: ["nav"],
     fixed: true,
-    blurb: "The home screen. Always the first tab.",
+    blurb:
+      "The dashboard: calendar, to-do list, bills, the money picture and a door to everything else. Always the first tab.",
+  },
+  {
+    key: "cash",
+    href: "/cash",
+    label: "My Cash",
+    Icon: Wallet,
+    slots: ["menu"],
+    homeCard: true,
+    blurb: "The cash log: massages in, cash out. Also a tile on the home screen.",
   },
   {
     key: "bills",
@@ -138,6 +153,16 @@ export const PAGES: AppPage[] = [
     slots: ["menu"],
     blurb:
       "Everything Jamie's working on — Career, the divorce, the roaches, the rent help — with the steps, people, money and paperwork for each.",
+  },
+  {
+    key: "legal",
+    href: "/legal",
+    label: "Legal",
+    Icon: Gavel,
+    slots: ["menu"],
+    homeCard: true,
+    blurb:
+      "Every legal matter and law firm in one place: case numbers, lawyers, court dates, what's owed to whom, and a running diary.",
   },
   {
     key: "job-vs-business",
@@ -285,7 +310,9 @@ export const PAGES: AppPage[] = [
 export const SLOT_ORDER: Record<Slot, PageKey[]> = {
   nav: ["home", "bills", "debt", "owes"],
   menu: [
+    "cash",
     "projects",
+    "legal",
     "job-vs-business",
     "career",
     "debt",

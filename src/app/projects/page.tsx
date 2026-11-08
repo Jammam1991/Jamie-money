@@ -21,7 +21,8 @@ export default async function ProjectsPage() {
         going on. 👇
       </p>
       {projects ? (
-        <ProjectsClient initial={projects} today={today} />
+        // Legal matters have their own page; they'd only crowd this list twice.
+        <ProjectsClient initial={projects.filter((p) => p.area !== "legal")} today={today} />
       ) : (
         <Card className="text-[14px] text-muted">
           Your projects couldn&apos;t be loaded just now. Give it a moment and
